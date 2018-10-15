@@ -1,0 +1,52 @@
+{
+  "name": "pdb-database",
+  "description": "PDB Database ============================== Sync of the official PDB database in couchdb. The database is searchable for properties like number of residues, residue percentages, molecular weight etc...",
+  "version": "0.0.1",
+  "main": "rebuild.js",
+  "directories": {
+    "test": "tests"
+  },
+  "devDependencies": {
+    "cheminfo-tools": "^1.21.1",
+    "eslint": "^5.7.0",
+    "eslint-config-cheminfo": "^1.18.0",
+    "eslint-plugin-import": "^2.14.0",
+    "eslint-plugin-jest": "^21.25.0",
+    "jest": "^23.6.0"
+  },
+  "scripts": {
+    "test": "jest && eslint-fix",
+    "update": "node update.js 2>> update-error-log 1>> update-log",
+    "rebuild": "node rebuild.js 2>> rebuild-error-log 1>> rebuild-log",
+    "eslint": "eslint src",
+    "eslint-fix": "npm run eslint -- --fix"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cheminfo/pdb-database.git"
+  },
+  "keywords": [
+    "pdb",
+    "pdb-parser",
+    "couchdb"
+  ],
+  "author": "Daniel Kostro",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/cheminfo/pdb-database/issues"
+  },
+  "homepage": "https://github.com/cheminfo/pdb-database#readme",
+  "dependencies": {
+    "async": "^0.9.0",
+    "debug": "^4.1.0",
+    "ftp": "^0.3.10",
+    "glob": "^5.0.5",
+    "gm": "^1.17.0",
+    "lodash": "^3.7.0",
+    "minimist": "^1.1.1",
+    "nano": "^6.1.2",
+    "request": "^2.55.0",
+    "rsync": "^0.4.0",
+    "underscore": "^1.8.3"
+  }
+}
