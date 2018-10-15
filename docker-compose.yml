@@ -1,0 +1,20 @@
+version: '2'
+services:
+  nginx-proxy:
+    image: docker.io/nginx:1.14-alpine
+    ports:
+      - '12345:80'
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./nginx/www:/data/www/
+#    restart: always
+
+#  node-pdb-import:
+#    build: ./node-pdb
+#    restart: always
+#    privileged: true
+#      - mongo
+#    volumes:
+#      - ./originalData:/git/node-pubchem/originalData
+#    command: npm run cron
+
