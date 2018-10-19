@@ -2,4 +2,4 @@ biounits-data
 pdb-data
 node_modules
 couchdb-data
-config.json
+.env

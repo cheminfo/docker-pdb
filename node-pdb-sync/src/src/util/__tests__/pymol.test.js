@@ -9,6 +9,6 @@ describe('Check pymol generation', function () {
 
   test('should work', async function () {
     let result = await pymol('aaaa', pdb);
-    console.log(result);
+    expect(result.length).toBeGreaterThan(28700);
   });
 });

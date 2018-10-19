@@ -21,7 +21,7 @@ describe('Check pdb parser of 3QK2', function () {
   var pdb = fs.readFileSync(path.join(__dirname, '3QK2.pdb'), 'utf8');
   var result = pdbParser.parse(pdb);
 
-  it('Check result', function () {
+  test('Check result', function () {
     expect(result.nbModifiedResidues).toBe(1);
   });
 });

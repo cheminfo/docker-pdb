@@ -4,16 +4,17 @@
 // Resends attachments
 // Resends values computed by the parser
 
-var config = require('./config.js')();
-var common = require('./common');
+const debug = require('debug')('pdb:rebuild');
+const glob = require('glob');
+const argv = require('minimist')(process.argv.slice(2));
 
-var glob = require('glob');
-var argv = require('minimist')(process.argv.slice(2));
+const path = require('path');
 
-var path = require('path');
+const config = require('./config.js')();
+const common = require('./common');
 
 function errorHandler(err) {
-  console.log('An error occured', err, err.stack);
+  debug('An error occured', err, err.stack);
 }
 
 var help = [
@@ -92,10 +93,8 @@ if (file) {
   pattern = '**/*+(.ent|.pdb1).gz';
 }
 
-console.log(pattern);
-
 function getFiles(pattern) {
-  console.log('pattern', pattern);
+  debug('pattern', pattern);
   return new Promise(function (resolve, reject) {
     glob(pattern, {}, function (err, files) {
       if (err) return reject(err);
@@ -135,14 +134,12 @@ function getFiles(pattern) {
 }
 
 function processPdbFiles(files) {
-  console.log(`Pdb database: about to process ${files.length} files.`);
+  debug(`Pdb database: about to process ${files.length} files.`);
   return common.processPdbs(files);
 }
 
 function processAssemblyFiles(files) {
-  console.log(
-    `Pdb bio assembly database: about to process ${files.length} files.`
-  );
+  debug(`Pdb bio assembly database: about to process ${files.length} files.`);
   return common.processPdbAssemblies(files);
 }
 

@@ -2,10 +2,6 @@
   "name": "pdb-database",
   "description": "PDB Database ============================== Sync of the official PDB database in couchdb. The database is searchable for properties like number of residues, residue percentages, molecular weight etc...",
   "version": "0.0.1",
-  "main": "rebuild.js",
-  "directories": {
-    "test": "tests"
-  },
   "devDependencies": {
     "cheminfo-tools": "^1.21.1",
     "eslint": "^5.7.0",
@@ -16,14 +12,15 @@
   },
   "scripts": {
     "test": "jest && eslint-fix",
-    "update": "node update.js 2>> update-error-log 1>> update-log",
-    "rebuild": "node rebuild.js 2>> rebuild-error-log 1>> rebuild-log",
+    "update": "node update.js",
+    "rebuild": "node rebuild.js",
+    "cron": "node cron.js",
     "eslint": "eslint src",
     "eslint-fix": "npm run eslint -- --fix"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/cheminfo/pdb-database.git"
+    "url": "git+https://github.com/cheminfo/docker-pdb.git"
   },
   "keywords": [
     "pdb",
@@ -39,12 +36,17 @@
   "dependencies": {
     "async": "^0.9.0",
     "debug": "^4.1.0",
-    "ftp": "^0.3.10",
+    "decompress": "^4.2.0",
+    "decompress-gz": "0.0.1",
+    "delay": "^4.1.0",
+    "dotenv": "^6.1.0",
+    "fs-extra": "^7.0.0",
     "glob": "^5.0.5",
     "gm": "^1.17.0",
     "lodash": "^3.7.0",
     "minimist": "^1.1.1",
-    "nano": "^6.1.2",
+    "nano": "^7.0.0",
+    "node-gzip": "^1.1.2",
     "request": "^2.55.0",
     "rsync": "^0.4.0",
     "underscore": "^1.8.3"

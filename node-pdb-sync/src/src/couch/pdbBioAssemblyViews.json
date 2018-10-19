@@ -1,0 +1,11 @@
+{
+  "_id": "_design/query",
+  "views": {
+    "pdbsize": {
+      "map": "function (doc) {var attid = doc._id + '.pdb1'; toEmit = null; if(doc._attachments && doc._attachments[attid]) {toEmit = doc._attachments[attid].length; } emit(toEmit); }"
+    },
+    "attPng": {
+      "map": "function(doc) {\n    var toEmit = [];\n    if(doc._attachments) {\n        for(var key in doc._attachments) {\n            if(key.toLowerCase().substr(key.length-4, 4) === '.png') {\n                toEmit.push(key);\n            }\n        }      \n    }\n    if(toEmit.length === 0) toEmit = null;\n    emit(toEmit);\n}"
+    }
+  }
+}

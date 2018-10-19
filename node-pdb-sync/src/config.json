@@ -1,0 +1,40 @@
+{
+  "couch": {
+    "url": "http://couchdb",
+    "password": "",
+    "user": "admin",
+    "port": 5984
+  },
+  "asymetrical": {
+    "couch": {
+      "database": "pdb"
+    },
+    "rsync": {
+      "source": "rsync.ebi.ac.uk::pub/databases/rcsb/pdb-remediated/data/structures/divided/pdb/",
+      "destination": "/pdb-data"
+    }
+  },
+  "bioAssembly": {
+    "couch": {
+      "database": "pdb-bio-assembly"
+    },
+    "rsync": {
+      "source": "rsync.ebi.ac.uk::pub/databases/rcsb/pdb-remediated/data/biounit/PDB/divided/",
+      "destination": "/pdb-assembly-data"
+    }
+  },
+  "pymol": [
+    {
+      "width": 400,
+      "height": 400
+    },
+    {
+      "width": 200,
+      "height": 200
+    },
+    {
+      "width": 100,
+      "height": 100
+    }
+  ]
+}

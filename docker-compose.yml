@@ -3,18 +3,37 @@ services:
   nginx-proxy:
     image: docker.io/nginx:1.14-alpine
     ports:
-      - '12345:80'
+      - '${NGINX_PORT}:80'
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
       - ./nginx/www:/data/www/
-#    restart: always
+    env_file:
+      - .env
+    restart: always
 
-#  node-pdb-import:
-#    build: ./node-pdb
-#    restart: always
-#    privileged: true
-#      - mongo
-#    volumes:
-#      - ./originalData:/git/node-pubchem/originalData
+  couchdb:
+    image: docker.io/couchdb:2.2
+    ports:
+      - '${COUCHDB_PORT}:5984'
+    environment:
+      # CouchDB admin credentials
+      COUCHDB_USER: admin
+      COUCHDB_PASSWORD: ${COUCHDB_ADMIN_PASSWORD}
+    volumes:
+      - ${COUCHDB_DATA_DIRECTORY}:/opt/couchdb/data
+    env_file:
+      - .env
+    restart: always
+
+  node-pdb-sync:
+    build: ./node-pdb-sync
+    restart: always
+    privileged: true
+    volumes:
+      - ./pdb-assembly-data:/pdb-assembly-data
+      - ./pdb-data:/pdb-data
+      - ./node-pdb-sync/src:/node-pdb
+      - ./.env:/node-pdb/.env
+    tty: true
 #    command: npm run cron
 
