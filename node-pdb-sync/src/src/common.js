@@ -28,12 +28,19 @@ module.exports = {
       content_type: 'chemical/x-pdb',
       data: buffer.toString('Base64')
     };
-    saveToCouchDB(pdbEntry, nano.db.use(config.asymetrical.couch.database));
+    await saveToCouchDB(
+      pdbEntry,
+      nano.db.use(config.asymetrical.couch.database)
+    );
   },
 
   processPdbs: async function (files) {
     for (let file of files) {
-      await this.processPdb(file);
+      try {
+        await this.processPdb(file);
+      } catch (e) {
+        debug('Exception for file:', file, e);
+      }
     }
   },
 
@@ -76,21 +83,17 @@ module.exports = {
   }
 };
 
-function saveToCouchDB(entry, pdb) {
-  return new Promise(function (resolve, reject) {
-    pdb.head(entry._id, function (err, _, header) {
-      if (err && err.statusCode !== 404) return reject(err);
-      if (!err && header && header.etag) {
-        // a revision exists
-        entry._rev = header.etag.replace(/"/g, ''); // strange code ?!!!!
-      }
+async function saveToCouchDB(entry, pdb) {
+  try {
+    let header = await pdb.head(entry._id);
+    entry._rev = header.etag.replace(/"/g, ''); // strange code ?!!!!
+  } catch (err) {
+    debug(err);
+  }
 
-      pdb.insert(entry, function (err, body, header) {
-        if (err) return reject(err);
-        resolve(entry._id);
-      });
-    });
-  });
+  await pdb.insert(entry);
+  debug('Entry saved:', entry._id);
+  return entry._id;
 }
 
 async function doPymol(filename, pdbEntry, options = {}) {

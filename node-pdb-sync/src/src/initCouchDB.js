@@ -16,7 +16,7 @@ async function initDatabase() {
   let databases;
   let waiting = Date.now();
   while (!couch) {
-    await delay(500);
+    await delay(200);
     debug(`Waiting for couchdb: ${Math.floor(Date.now() - waiting) / 1000}s`);
     try {
       couch = Nano(config.couch.fullUrl);
@@ -33,32 +33,41 @@ async function initDatabase() {
   }
   // we succeeded to retrieve the list of databases
 
+  let created = {};
+
   if (!databases.includes('_users')) {
     debug("Creating '_users' database");
     await couch.db.create('_users');
+    created._users = true;
   }
 
   if (!databases.includes('_replicator')) {
     debug("Creating '_replicator' database");
     await couch.db.create('_replicator');
+    created._replicator = true;
   }
 
   if (!databases.includes('_global_changes')) {
     debug("Creating '_global_changes' database");
     await couch.db.create('_global_changes');
+    created._global_changes = true;
   }
 
   if (!databases.includes('pdb')) {
     debug("Creating 'pdb' database");
     await couch.db.create('pdb');
+    created.pdb = true;
   }
   checkViews(couch, 'pdb', 'couch/pdbViews.json');
 
   if (!databases.includes('pdb-bio-assembly')) {
     debug("Creating 'pdb-bio-assembly' database");
     await couch.db.create('pdb-bio-assembly');
+    created.pdbBioAssembly = true;
   }
   checkViews(couch, 'pdb-bio-assembly', 'couch/pdbBioAssemblyViews.json');
+
+  return created;
 }
 
 module.exports = initDatabase;

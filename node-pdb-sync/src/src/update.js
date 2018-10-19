@@ -14,8 +14,6 @@ const config = require('./config.js')();
 
 module.exports = update;
 
-update();
-
 async function update() {
   if (!argv['pdb-asym-unit'] && !argv['pdb-bio-assembly']) {
     argv['pdb-asym-unit'] = argv['pdb-bio-assembly'] = true;

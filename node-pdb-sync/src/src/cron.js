@@ -2,18 +2,28 @@
 
 const delay = require('delay');
 
+const initCouchDB = require('./initCouchDB');
 const rebuild = require('./rebuild');
 const update = require('./update');
+
+const debug = require('debug')('pdb-sync:cron');
 
 let sleepTime = 24; // in hours
 
 cron();
 
 async function cron() {
-  // waiting for mongo
+  let created = await initCouchDB();
 
-  // await delay(30 * 1000); // wating 30s before starting
-  await firstImport();
+  if (true || created.pdb) {
+    debug('Rebuilding pdb');
+    await rebuild.pdb();
+  }
+  if (true || created.pdbBioAssembly) {
+    debug('Rebuilding assembly');
+    await rebuild.assembly();
+  }
+
   while (true) {
     await update();
     for (let i = sleepTime; i > 0; i--) {

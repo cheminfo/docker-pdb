@@ -4,7 +4,7 @@
 // Resends attachments
 // Resends values computed by the parser
 
-const debug = require('debug')('pdb:rebuild');
+const debug = require('debug')('pdb-sync:rebuild');
 const glob = require('glob');
 const argv = require('minimist')(process.argv.slice(2));
 
@@ -12,61 +12,6 @@ const path = require('path');
 
 const config = require('./config.js')();
 const common = require('./common');
-
-function errorHandler(err) {
-  debug('An error occured', err, err.stack);
-}
-
-var help = [
-  'pdb-asym-unit',
-  'do process the pdb asymetrical unit database',
-  'pdb-bio-assembly',
-  'do process the pdb biological assembly database',
-  'limit',
-  'Limit of files to process',
-  'file',
-  'pdb code to process',
-  'fromFile',
-  'pdb code range start',
-  'toFile',
-  'pdb code range stop',
-  'fromDir',
-  'pdb directory range start',
-  'toDir',
-  'pdb directory range stop',
-  'help',
-  'Display this help'
-];
-
-function showHelp() {
-  var helpText = help
-    .map(function (v, i) {
-      if (i % 2 === 1) {
-        var numTab = 4 - Math.floor(help[i - 1].length / 8);
-        var t = '';
-        for (var j = 0; j < numTab; j++) {
-          t += '\t';
-        }
-        return help[i - 1] + t + help[i];
-      }
-    })
-    .filter(function (v) {
-      return v !== undefined;
-    })
-    .reduce(function (prev, curr) {
-      return `${prev}\n${curr}`;
-    });
-  console.log(helpText);
-}
-
-if (!argv['pdb-asym-unit'] && !argv['pdb-bio-assembly']) {
-  argv['pdb-asym-unit'] = argv['pdb-bio-assembly'] = true;
-}
-
-if (argv.help) {
-  showHelp();
-  process.exit(0);
-}
 
 var pattern;
 
@@ -169,14 +114,17 @@ function getAssemblyFiles() {
   return getFiles(config.bioAssembly.rsync.destination + pattern);
 }
 
-var prom = Promise.resolve();
-
-if (argv['pdb-asym-unit']) {
-  prom = prom.then(getPdbFiles).then(processPdbFiles);
+async function rebuildPdb() {
+  let files = await getPdbFiles();
+  await processPdbFiles(files);
 }
 
-if (argv['pdb-bio-assembly']) {
-  prom = prom.then(getAssemblyFiles).then(processAssemblyFiles);
+async function rebuildAssembly() {
+  let files = await getAssemblyFiles();
+  await processAssemblyFiles(files);
 }
 
-prom.catch(errorHandler);
+module.exports = {
+  pdb: rebuildPdb,
+  assembly: rebuildAssembly
+};
