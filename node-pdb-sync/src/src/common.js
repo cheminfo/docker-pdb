@@ -88,7 +88,11 @@ async function saveToCouchDB(entry, pdb) {
     let header = await pdb.head(entry._id);
     entry._rev = header.etag.replace(/"/g, ''); // strange code ?!!!!
   } catch (err) {
-    debug(err);
+    if (err.statusCode === 404) {
+      debug('Entry not found in databasse: ', entry._id);
+    } else {
+      throw new Error(`saveToCouchDB error: ${message}`);
+    }
   }
 
   await pdb.insert(entry);
