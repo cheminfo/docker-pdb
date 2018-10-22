@@ -1,5 +1,7 @@
 biounits-data
 pdb-data
+pdb-assembly-data
 node_modules
 couchdb-data
 .env
+logs

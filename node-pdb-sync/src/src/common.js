@@ -14,73 +14,76 @@ var pdbParser = require('./util/pdbParser');
 
 var nano = require('nano')(config.couch.fullUrl);
 
-module.exports = {
-  processPdb: async function (filename) {
-    debug(`Process: ${filename}`);
-    var id = module.exports.getIdFromFileName(filename).toUpperCase();
-    let data = await fs.readFile(filename);
-    let buffer = await ungzip(data);
+async function processPdb(filename) {
+  debug(`Process: ${filename}`);
+  var id = module.exports.getIdFromFileName(filename).toUpperCase();
+  let data = await fs.readFile(filename);
+  let buffer = await ungzip(data);
 
-    var pdbEntry = pdbParser.parse(buffer.toString());
-    pdbEntry._id = id;
-    pdbEntry._attachments = {};
-    pdbEntry._attachments[`${id}.pdb`] = {
-      content_type: 'chemical/x-pdb',
-      data: buffer.toString('Base64')
-    };
-    await saveToCouchDB(
-      pdbEntry,
-      nano.db.use(config.asymetrical.couch.database)
-    );
-  },
+  var pdbEntry = pdbParser.parse(buffer.toString());
+  pdbEntry._id = id;
+  pdbEntry._attachments = {};
+  pdbEntry._attachments[`${id}.pdb`] = {
+    content_type: 'chemical/x-pdb',
+    data: buffer.toString('Base64')
+  };
+  await saveToCouchDB(pdbEntry, nano.db.use(config.asymetrical.couch.database));
+}
 
-  processPdbs: async function (files) {
-    for (let file of files) {
-      try {
-        await this.processPdb(file);
-      } catch (e) {
-        debug('Exception for file:', file, e);
-      }
-    }
-  },
-
-  processPdbAssemblies: async function (files) {
-    for (let file of files) {
-      await this.processPdbAssembly(file);
-    }
-  },
-
-  processPdbAssembly: async function (filename) {
-    var id = module.exports.getIdFromFileName(filename).toUpperCase();
-    debug('Process pdb assembly: ', id);
-    var idLowerCse = id.toLowerCase();
-    var code = idLowerCse.substr(1, 2);
-
-    var bioFilename = path.join(
-      config.bioAssembly.rsync.destination,
-      code,
-      `${idLowerCse}.pdb1.gz`
-    );
-    var pdbEntry = { _id: id, _attachments: {} };
-    // File does not exist
-    debug('generate pymol subunits', bioFilename);
+async function processPdbs(files) {
+  for (let file of files) {
     try {
-      await doPymol(bioFilename, pdbEntry, {
-        pdb: nano.db.use(config.bioAssembly.couch.database)
-      });
-    } catch (exception) {
-      debug(
-        `An error occured while processing biological assembly ${id}`,
-        exception.toString()
-      );
+      await processPdb(file);
+    } catch (e) {
+      debug('Exception for file:', file, e);
     }
-  },
-
-  getIdFromFileName: function (filename) {
-    return filename
-      .replace(/^.*\/pdb([^.]*)\.ent\.gz/, '$1')
-      .replace(/^.*\/([^.]*)\.pdb1.gz/, '$1');
   }
+}
+
+async function processPdbAssemblies(files) {
+  for (let file of files) {
+    await processPdbAssembly(file);
+  }
+}
+
+async function processPdbAssembly(filename) {
+  var id = module.exports.getIdFromFileName(filename).toUpperCase();
+  debug('Process pdb assembly: ', id);
+  var idLowerCse = id.toLowerCase();
+  var code = idLowerCse.substr(1, 2);
+
+  var bioFilename = path.join(
+    config.bioAssembly.rsync.destination,
+    code,
+    `${idLowerCse}.pdb1.gz`
+  );
+  var pdbEntry = { _id: id, _attachments: {} };
+  // File does not exist
+  debug('generate pymol subunits', bioFilename);
+  try {
+    await doPymol(bioFilename, pdbEntry, {
+      pdb: nano.db.use(config.bioAssembly.couch.database)
+    });
+  } catch (exception) {
+    debug(
+      `An error occured while processing biological assembly ${id}`,
+      exception.toString()
+    );
+  }
+}
+
+function getIdFromFileName(filename) {
+  return filename
+    .replace(/^.*\/pdb([^.]*)\.ent\.gz/, '$1')
+    .replace(/^.*\/([^.]*)\.pdb1.gz/, '$1');
+}
+
+module.exports = {
+  processPdb,
+  processPdbs,
+  processPdbAssemblies,
+  processPdbAssembly,
+  getIdFromFileName
 };
 
 async function saveToCouchDB(entry, pdb) {

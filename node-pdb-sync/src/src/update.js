@@ -2,9 +2,9 @@
 
 // requires rsync
 
-const fs = require('fs');
 const path = require('path');
 
+const fs = require('fs-extra');
 const debug = require('debug')('update');
 const Rsync = require('rsync');
 const argv = require('minimist')(process.argv.slice(2));
@@ -23,7 +23,15 @@ async function update() {
     await doRsync(
       config.asymetrical.rsync.source,
       config.asymetrical.rsync.destination,
-      common.processPdbs
+      config.asymetrical.rsync.port || 873,
+      common.processPdbs,
+      async function (changed) {
+        debug('Writing rsync changes of pdb');
+        var dir = config.asymetrical.rsync.historyDir;
+        if (!dir) return;
+        let targetFile = path.join(dir, `${new Date().toISOString()}.json`);
+        await fs.outputFile(targetFile, JSON.stringify(changed, undefined, 2));
+      }
     );
     debug('Done updating asymmetrical units...');
   }
@@ -33,20 +41,27 @@ async function update() {
     await doRsync(
       config.bioAssembly.rsync.source,
       config.bioAssembly.rsync.destination,
+      config.asymetrical.rsync.port || 873,
       common.processPdbAssemblies,
-      function (changed) {
-        debug('Writing rsync change');
+      async function (changed) {
+        debug('Writing rsync changes of bioAssembly');
         var dir = config.bioAssembly.rsync.historyDir;
         if (!dir) return;
-        dir = path.join(dir, `${Date.now()}.json`);
-        fs.writeFileSync(dir, JSON.stringify(changed));
+        let targetFile = path.join(dir, `${new Date().toISOString()}.json`);
+        await fs.outputFile(targetFile, JSON.stringify(changed, undefined, 2));
       }
     );
     debug('Done updating biological assemblies...');
   }
 }
 
-function doRsync(source, destination, saveCallback, modificationCallback) {
+function doRsync(
+  source,
+  destination,
+  port,
+  saveCallback,
+  modificationCallback
+) {
   return new Promise(function (resolve, reject) {
     var changed = {
       deleted: [],
@@ -59,8 +74,9 @@ function doRsync(source, destination, saveCallback, modificationCallback) {
     rsync.destination(destination);
     rsync.flags('rlptvz');
     rsync.set('delete');
+    rsync.set('port', port);
 
-    debug('rsync ready');
+    debug('Rsync ready');
     debug('Rsync from', source, 'to', destination);
     rsync.output(
       function (data) {
@@ -95,7 +111,7 @@ function doRsync(source, destination, saveCallback, modificationCallback) {
       if (modificationCallback) {
         modificationCallback(changed);
       }
-      debug('rysnc executed, now building database');
+      debug('Rysnc executed, now building database');
       if (error) {
         debug('RSYNC ERROR, did not build database');
         debug(error);

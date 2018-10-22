@@ -15,11 +15,11 @@ cron();
 async function cron() {
   let created = await initCouchDB();
 
-  if (true || created.pdb) {
+  if (created.pdb) {
     debug('Rebuilding pdb');
     await rebuild.pdb();
   }
-  if (true || created.pdbBioAssembly) {
+  if (created.pdbBioAssembly) {
     debug('Rebuilding assembly');
     await rebuild.assembly();
   }

@@ -12,9 +12,9 @@
   },
   "scripts": {
     "test": "jest && eslint-fix",
-    "update": "node update.js",
-    "rebuild": "node rebuild.js",
-    "cron": "node cron.js",
+    "update": "node src/update.js",
+    "rebuild": "node src/rebuild.js",
+    "cron": "node src/cron.js",
     "eslint": "eslint src",
     "eslint-fix": "npm run eslint -- --fix"
   },

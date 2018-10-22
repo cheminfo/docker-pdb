@@ -19,6 +19,8 @@ services:
       # CouchDB admin credentials
       COUCHDB_USER: admin
       COUCHDB_PASSWORD: ${COUCHDB_ADMIN_PASSWORD}
+    depends_on:
+      - 'nginx-proxy'
     volumes:
       - ${COUCHDB_DATA_DIRECTORY}:/opt/couchdb/data
     env_file:
@@ -29,11 +31,15 @@ services:
     build: ./node-pdb-sync
     restart: always
     privileged: true
+    depends_on:
+      - 'couchdb'
     volumes:
       - ./pdb-assembly-data:/pdb-assembly-data
       - ./pdb-data:/pdb-data
-      - ./node-pdb-sync/src:/node-pdb
+      - ./logs:/logs
+      #     - ./node-pdb-sync/src:/node-pdb
       - ./.env:/node-pdb/.env
-    tty: true
-#    command: npm run cron
-
+    #    tty: true
+    environment:
+      - DEBUG=*
+    command: npm run cron

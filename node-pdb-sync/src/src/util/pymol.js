@@ -1,6 +1,7 @@
 'use strict';
 
-const fs = require('fs');
+const fs = require('fs-extra');
+
 const exec = require('child_process').exec;
 
 const debug = require('debug')('pdb-sync:pymol');
@@ -22,40 +23,38 @@ async function pymol(id, pdb, options) {
   };
   options = Object.assign({}, defaultOptions, options);
   debug(`pymol ${options.width} x ${options.height}`);
-  return new Promise(function (resolve, reject) {
+  return new Promise(async function (resolve, reject) {
     var pdbFile = `/tmp/${id}${options.width}x${options.height}.pdb`;
     var pngFile = `/tmp/${id}${options.width}x${options.height}.png`;
     debug(`Write pdbFile: ${pdbFile}`);
-    fs.writeFile(pdbFile, pdb, function (err) {
-      if (err) {
-        debug.error('Error writing pdb file');
-        return reject('could not write file');
+    await fs.writeFile(pdbFile, pdb).catch(() => {
+      debug.log('Error writing pdb file');
+      reject('could not write file');
+    });
+
+    let cmd = `pymol -c ${pdbFile} -d "as ribbon;spectrum count;set seq_view; set all_states; set opaque_background, off;" -g ${pngFile}`;
+
+    debug(cmd);
+
+    exec(cmd, function (error) {
+      debug('Execute pymol command', id);
+      fs.unlinkSync(pdbFile);
+      if (error !== null) {
+        debug('error executing pymol command', error);
+        return reject(error);
       }
+      gm(pngFile)
+        .resize(options.width, options.height)
+        .toBuffer('png', function (err, buffer) {
+          debug('resize image');
+          fs.unlinkSync(pngFile);
+          if (err) {
+            debug(`ERROR for ${id}: ${err.toString()}`);
+            return reject(err);
+          }
 
-      var cmd = `pymol -c ${pdbFile} -d "as ribbon;spectrum count;set seq_view; set all_states; set opaque_background, off;" -g ${pngFile}`;
-
-      debug(cmd);
-
-      exec(cmd, function (error) {
-        debug('Execute pymol command', id);
-        //  fs.unlinkSync(pdbFile);
-        if (error !== null) {
-          debug('error executing pymol command', error);
-          return reject(error);
-        }
-        gm(pngFile)
-          .resize(options.width, options.height)
-          .toBuffer('png', function (err, buffer) {
-            debug('resize image');
-            //      fs.unlinkSync(pngFile);
-            if (err) {
-              debug(`ERROR for ${id}: ${err.toString()}`);
-              return reject(err);
-            }
-
-            return resolve(buffer);
-          });
-      });
+          return resolve(buffer);
+        });
     });
   });
 }

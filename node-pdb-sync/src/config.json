@@ -10,8 +10,10 @@
       "database": "pdb"
     },
     "rsync": {
-      "source": "rsync.ebi.ac.uk::pub/databases/rcsb/pdb-remediated/data/structures/divided/pdb/",
-      "destination": "/pdb-data"
+      "source": "rsync.wwpdb.org::ftp_data/structures/divided/pdb/",
+      "port": 33444,
+      "destination": "/pdb-data",
+      "historyDir": "/logs/pdb"
     }
   },
   "bioAssembly": {
@@ -19,8 +21,10 @@
       "database": "pdb-bio-assembly"
     },
     "rsync": {
-      "source": "rsync.ebi.ac.uk::pub/databases/rcsb/pdb-remediated/data/biounit/PDB/divided/",
-      "destination": "/pdb-assembly-data"
+      "source": "rsync.wwpdb.org::ftp_data/biounit/coordinates/divided/",
+      "port": 33444,
+      "destination": "/pdb-assembly-data",
+      "historyDir": "/logs/bioAssembly"
     }
   },
   "pymol": [
