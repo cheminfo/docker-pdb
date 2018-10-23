@@ -15,6 +15,8 @@ cron();
 async function cron() {
   let created = await initCouchDB();
 
+  debug('Created databases', created);
+
   if (created.pdb) {
     debug('Rebuilding pdb');
     await rebuild.pdb();

@@ -9,14 +9,14 @@ const path = require('path');
 
 const config = require('./config')();
 
-initDatabase();
+git;
 
 async function initDatabase() {
   let couch;
   let databases;
   let waiting = Date.now();
   while (!couch) {
-    await delay(200);
+    await delay(5000);
     debug(`Waiting for couchdb: ${Math.floor(Date.now() - waiting) / 1000}s`);
     try {
       couch = Nano(config.couch.fullUrl);
@@ -31,7 +31,10 @@ async function initDatabase() {
       couch = null;
     }
   }
-  // we succeeded to retrieve the list of databases
+  // we succeeded to retrieve the list of databases we still wait to be sure the starting
+  // databases are created
+  await delay(5000);
+  databases = await couch.db.list();
 
   let created = {};
 
