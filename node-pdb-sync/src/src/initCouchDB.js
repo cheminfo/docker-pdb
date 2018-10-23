@@ -9,8 +9,6 @@ const path = require('path');
 
 const config = require('./config')();
 
-git;
-
 async function initDatabase() {
   let couch;
   let databases;
