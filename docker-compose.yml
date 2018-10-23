@@ -28,7 +28,8 @@ services:
     restart: always
 
   node-pdb-sync:
-    build: ./node-pdb-sync
+    image: cheminfo/docker-pdb
+    #  build: ./node-pdb-sync
     restart: always
     privileged: true
     depends_on:
