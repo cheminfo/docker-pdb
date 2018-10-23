@@ -1,0 +1,44 @@
+{
+  "name": "pdb-map",
+  "version": "1.1.1",
+  "description": "PDB",
+  "keywords": [
+    "pdb"
+  ],
+  "main": "src/index.js",
+  "scripts": {
+    "copy-to-java": "cp fullFP.tsv java/input.tsv",
+    "gen-fp": "node generateTSV.js --use-name --progress --out fullFP.tsv && npm run copy-to-java",
+    "update-fp": "node generateTSV.js --use-name --progress --update --out fullFP.tsv && npm run copy-to-java",
+    "gen-map": "cd java; java -cp PCAmaps.jar pcamaps.runIt ref200.fp input.tsv output.json.gz",
+    "generate": "npm run gen-fp && npm run gen-map && npm run deploy",
+    "update": "npm run update-fp && npm run gen-map && npm run deploy",
+    "deploy": "gunzip -f java/output.json.gz && node checkMap && cp java/output.json /usr/local/www/sites/www.cheminfo.org/site/pdbexplorer/map.json",
+    "build": "gulp build"
+  },
+  "repository": "cheminfo/pdb-map",
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/cheminfo/pdb-map/issues"
+  },
+  "homepage": "https://github.com/cheminfo/pdb-map",
+  "dependencies": {
+    "async": "^0.9.0",
+    "commander": "^2.8.1",
+    "glob": "^5.0.5",
+    "ml-distance": "^1.0.0",
+    "ml-matrix": "0.0.2",
+    "progress": "^1.1.8"
+  },
+  "devDependencies": {
+    "cheminfo-tools": "^1.0.2",
+    "mocha": "^2.2.5",
+    "mocha-better-spec-reporter": "^2.1.1",
+    "should": "^7.0.2"
+  },
+  "directories": {
+    "lib": "src",
+    "test": "test"
+  }
+}

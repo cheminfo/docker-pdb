@@ -1,0 +1,11 @@
+function(newDoc, oldDoc, userCtx, secObj) {
+  if (! user_is("cheminfoUser") && ! user_is("visualizerAdmin")) {
+		throw({forbidden:"You are neither a cheminfoUser or a visualizerAdmin"});
+  }
+
+  return true;
+
+  function user_is(role) {
+    return userCtx.roles.indexOf(role) >= 0;
+  }
+}
