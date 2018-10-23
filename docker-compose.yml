@@ -13,8 +13,8 @@ services:
 
   couchdb:
     image: docker.io/couchdb:2.2
-    ports:
-      - '${COUCHDB_PORT}:5984'
+    expose:
+      - '5984'
     environment:
       # CouchDB admin credentials
       COUCHDB_USER: admin
@@ -28,7 +28,7 @@ services:
     restart: always
 
   node-pdb-sync:
-    image: cheminfo/docker-pdb:0.0.1
+    image: cheminfo/docker-pdb:v0.0.4
     #  build: ./node-pdb-sync
     restart: always
     privileged: true
