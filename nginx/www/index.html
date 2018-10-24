@@ -1,11 +1,37 @@
 <html>
 
-<head></head>
+<head>
+    <style>
+        body {
+            font-family: Helvetica, Arial, Sans-Serif;
+        }
+
+        table {
+            border-collapse: collapse;
+            border-spacing: 0px;
+        }
+
+        tr {
+            background-color: #eee;
+        }
+
+        td,
+        th {
+            border-top: 1px solid #777;
+            border-bottom: 1px solid #777;
+            padding: 2px;
+        }
+    </style>
+</head>
 
 <body>
     <h1>PDB web service</h1>
 
     This project provides the pdb as well as pdb assembly.
+
+    <h2>Stats</h2>
+
+    <div id="stats"></div>
 
     <h2>/pdb/XXXX</h2>
 
@@ -30,12 +56,49 @@
 
     Returns small images of the assembly.<br>
     There are 3 possibilities:
-    * 100x100.png
-    * 200x200.png
-    * 400x400.png
+    <ul>
+        <li>100x100.png</li>
+        <li>200x200.png</li>
+        <li>400x400.png</li>
+    </ul>
 
     Example: <a href='/assembly/1GLK/400x400.png'>/assembly/1GLK/400x400.png</a>
 
+
+    <script>
+        getStats();
+
+        async function getStats() {
+            let pdb = await (await fetch(document.origin + '/pdb/')).json();
+            let assembly = await (await fetch(document.origin + '/assembly/')).json();
+            console.log(pdb);
+            let stats = `
+                <table>
+                    <tr>
+                        <th>Kind</th>
+                        <th>Number of entries</th>
+                        <th>Disk size</th>
+                    </tr>
+                    <tr>
+                        <td>PDB</td>
+                        <td>${pdb.doc_count}</td>
+                        <td>${pdb.disk_size}</td>
+                    </tr>
+                    <tr>
+                        <td>PDB assembly</td>
+                        <td>${assembly.doc_count}</td>
+                        <td>${assembly.disk_size}</td>
+                    </tr>
+                </table>
+            `;
+
+            document.getElementById('stats').innerHTML = stats;
+        }
+
+
+
+
+    </script>
 
 </body>
 
