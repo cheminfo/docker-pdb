@@ -13,8 +13,6 @@ services:
 
   couchdb:
     image: docker.io/couchdb:2.2
-    expose:
-      - '5984'
     environment:
       # CouchDB admin credentials
       COUCHDB_USER: admin
