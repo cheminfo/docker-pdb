@@ -12,7 +12,7 @@ services:
     restart: always
 
   couchdb:
-    image: docker.io/couchdb:2.2
+    image: docker.io/couchdb:2.3
     environment:
       # CouchDB admin credentials
       COUCHDB_USER: admin
