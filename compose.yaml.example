@@ -1,4 +1,3 @@
-version: '3.7'
 services:
   nginx-proxy:
     image: docker.io/nginx:1.17
