@@ -1,0 +1,44 @@
+version: '3.7'
+services:
+  nginx-proxy:
+    image: docker.io/nginx:1.17
+    ports:
+      - '127.0.0.1:${NGINX_PORT}:80'
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./nginx/www:/data/www/
+    env_file:
+      - .env
+    restart: unless-stopped
+
+  couchdb:
+    image: docker.io/couchdb:2.3
+    environment:
+      # CouchDB admin credentials
+      COUCHDB_USER: admin
+      COUCHDB_PASSWORD: ${COUCHDB_ADMIN_PASSWORD}
+    depends_on:
+      - 'nginx-proxy'
+    volumes:
+      - ${COUCHDB_DATA_DIRECTORY}:/opt/couchdb/data
+    env_file:
+      - .env
+    restart: unless-stopped
+
+  node-pdb-sync:
+    image: cheminfo/docker-pdb:v0.0.4
+    #  build: ./node-pdb-sync
+    restart: unless-stopped
+    privileged: true
+    depends_on:
+      - 'couchdb'
+    volumes:
+      - ./pdb-assembly-data:/pdb-assembly-data
+      - ./pdb-data:/pdb-data
+      - ./logs:/logs
+      #     - ./node-pdb-sync/src:/node-pdb
+      - ./.env:/node-pdb/.env
+    #    tty: true
+    environment:
+      - DEBUG=*
+    command: npm run cron
