@@ -34,7 +34,7 @@
   },
   "homepage": "https://github.com/cheminfo/pdb-database#readme",
   "dependencies": {
-    "async": "^0.9.0",
+    "async": "^2.6.4",
     "debug": "^4.1.0",
     "decompress": "^4.2.0",
     "decompress-gz": "0.0.1",
