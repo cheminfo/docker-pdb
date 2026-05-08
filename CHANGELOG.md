@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/cheminfo/docker-pdb/compare/v1.0.0...v1.0.1) (2026-05-08)
+
+
+### Bug Fixes
+
+* **ci:** pass tag-version so latest/major/minor tags get published ([e7bce3f](https://github.com/cheminfo/docker-pdb/commit/e7bce3f5121144a4945513dc492b92869894794d))
+
 ## [1.0.0](https://github.com/cheminfo/docker-pdb/compare/v0.0.2...v1.0.0) (2026-05-08)
 
 
