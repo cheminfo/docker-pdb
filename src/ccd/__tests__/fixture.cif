@@ -1,0 +1,117 @@
+data_HOH
+#
+_chem_comp.id                                    HOH
+_chem_comp.name                                  WATER
+_chem_comp.type                                  NON-POLYMER
+_chem_comp.formula                               "H2 O"
+_chem_comp.formula_weight                        18.015
+#
+loop_
+_chem_comp_atom.comp_id
+_chem_comp_atom.atom_id
+_chem_comp_atom.alt_atom_id
+_chem_comp_atom.type_symbol
+_chem_comp_atom.charge
+_chem_comp_atom.pdbx_aromatic_flag
+_chem_comp_atom.pdbx_model_Cartn_x_ideal
+_chem_comp_atom.pdbx_model_Cartn_y_ideal
+_chem_comp_atom.pdbx_model_Cartn_z_ideal
+_chem_comp_atom.pdbx_ordinal
+HOH O O O 0 N 0.000 0.000 0.000 1
+#
+data_NA
+#
+_chem_comp.id                                    NA
+_chem_comp.name                                  "SODIUM ION"
+_chem_comp.type                                  NON-POLYMER
+_chem_comp.formula                               "Na 1"
+_chem_comp.formula_weight                        22.990
+#
+loop_
+_chem_comp_atom.comp_id
+_chem_comp_atom.atom_id
+_chem_comp_atom.alt_atom_id
+_chem_comp_atom.type_symbol
+_chem_comp_atom.charge
+_chem_comp_atom.pdbx_aromatic_flag
+_chem_comp_atom.pdbx_model_Cartn_x_ideal
+_chem_comp_atom.pdbx_model_Cartn_y_ideal
+_chem_comp_atom.pdbx_model_Cartn_z_ideal
+_chem_comp_atom.pdbx_ordinal
+NA NA NA NA 1 N 0.000 0.000 0.000 1
+#
+data_BNZ
+#
+_chem_comp.id                                    BNZ
+_chem_comp.name                                  BENZENE
+_chem_comp.type                                  NON-POLYMER
+_chem_comp.formula                               "C6 H6"
+_chem_comp.formula_weight                        78.114
+#
+loop_
+_chem_comp_atom.comp_id
+_chem_comp_atom.atom_id
+_chem_comp_atom.alt_atom_id
+_chem_comp_atom.type_symbol
+_chem_comp_atom.charge
+_chem_comp_atom.pdbx_aromatic_flag
+_chem_comp_atom.pdbx_model_Cartn_x_ideal
+_chem_comp_atom.pdbx_model_Cartn_y_ideal
+_chem_comp_atom.pdbx_model_Cartn_z_ideal
+_chem_comp_atom.pdbx_ordinal
+BNZ C1 C1 C 0 Y 1.000 0.000 0.000 1
+BNZ C2 C2 C 0 Y 0.500 0.866 0.000 2
+BNZ C3 C3 C 0 Y -0.500 0.866 0.000 3
+BNZ C4 C4 C 0 Y -1.000 0.000 0.000 4
+BNZ C5 C5 C 0 Y -0.500 -0.866 0.000 5
+BNZ C6 C6 C 0 Y 0.500 -0.866 0.000 6
+#
+loop_
+_chem_comp_bond.comp_id
+_chem_comp_bond.atom_id_1
+_chem_comp_bond.atom_id_2
+_chem_comp_bond.value_order
+_chem_comp_bond.pdbx_aromatic_flag
+_chem_comp_bond.pdbx_ordinal
+BNZ C1 C2 SING Y 1
+BNZ C2 C3 DOUB Y 2
+BNZ C3 C4 SING Y 3
+BNZ C4 C5 DOUB Y 4
+BNZ C5 C6 SING Y 5
+BNZ C6 C1 DOUB Y 6
+#
+data_ETA
+#
+_chem_comp.id                                    ETA
+_chem_comp.name                                  ETHANOLAMINE
+_chem_comp.type                                  NON-POLYMER
+_chem_comp.formula                               "C2 H7 N O"
+_chem_comp.formula_weight                        61.083
+#
+loop_
+_chem_comp_atom.comp_id
+_chem_comp_atom.atom_id
+_chem_comp_atom.alt_atom_id
+_chem_comp_atom.type_symbol
+_chem_comp_atom.charge
+_chem_comp_atom.pdbx_aromatic_flag
+_chem_comp_atom.pdbx_model_Cartn_x_ideal
+_chem_comp_atom.pdbx_model_Cartn_y_ideal
+_chem_comp_atom.pdbx_model_Cartn_z_ideal
+_chem_comp_atom.pdbx_ordinal
+ETA N N N 0 N 0.000 0.000 0.000 1
+ETA C1 C1 C 0 N 1.450 0.000 0.000 2
+ETA C2 C2 C 0 N 1.950 1.450 0.000 3
+ETA O O O 0 N 3.400 1.450 0.000 4
+#
+loop_
+_chem_comp_bond.comp_id
+_chem_comp_bond.atom_id_1
+_chem_comp_bond.atom_id_2
+_chem_comp_bond.value_order
+_chem_comp_bond.pdbx_aromatic_flag
+_chem_comp_bond.pdbx_ordinal
+ETA N C1 SING N 1
+ETA C1 C2 SING N 2
+ETA C2 O SING N 3
+#

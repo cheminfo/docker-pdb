@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
 
+import DualRangeSlider from '../../shared/DualRangeSlider.tsx';
 import type { RangeStats } from '../../shared/api/client.ts';
 
-import DualRangeSlider from './DualRangeSlider.tsx';
 import SearchBox from './SearchBox.tsx';
 import type { FilterBounds, FilterState, RangeFilter } from './filters.ts';
 import { emptyFilterState } from './filters.ts';
@@ -106,19 +106,23 @@ export default function FilterPanel({
     <div className="filter-panel panel">
       <div className="filter-panel-header">
         <h3>Filters</h3>
+        <span className="filter-panel-count">
+          {matchCount} / {totalCount}
+        </span>
         {isActive && (
-          <button type="button" className="filter-reset" onClick={reset}>
-            Reset
+          <button
+            type="button"
+            className="filter-reset"
+            onClick={reset}
+            title="Clear all filters"
+            aria-label="Clear all filters"
+          >
+            ×
           </button>
         )}
       </div>
 
-      <SearchBox
-        value={query}
-        onChange={onQueryChange}
-        matchCount={matchCount}
-        totalCount={totalCount}
-      />
+      <SearchBox value={query} onChange={onQueryChange} />
 
       <div className="filter-group">
         <div className="filter-group-label">Method</div>

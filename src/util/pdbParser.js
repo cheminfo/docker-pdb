@@ -1,4 +1,5 @@
 import { getIEP } from './isoElectricPoint.js';
+import { addOmegaStats } from './omega.js';
 
 let lines;
 let result;
@@ -183,6 +184,7 @@ export function parse(pdb) {
   }
 
   addStats();
+  addOmegaStats(result, lines);
 
   return result;
 }

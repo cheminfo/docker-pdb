@@ -131,7 +131,8 @@ function extent(values: number[]): { min: number; max: number } {
  * `FindParams` object (Mango-friendly). Only fields with active constraints
  * are included so CouchDB can pick the smallest covering index.
  * @param filters - Current filter state.
- * @param query - Free-text search query (matched against `title`).
+ * @param query - Free-text search query (whitespace-split tokens; every
+ *   token is matched against `title` case-insensitively, AND across tokens).
  * @returns Parameters ready to pass to `findDocuments`.
  */
 export function filtersToFindParams(

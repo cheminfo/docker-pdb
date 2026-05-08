@@ -1,5 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 
+import type { FocusSpec, PdbViewerHandle } from '../../shared/PdbViewer.tsx';
+import PdbViewer from '../../shared/PdbViewer.tsx';
 import {
   fetchByExperiment,
   fetchPdbText,
@@ -9,28 +11,26 @@ import {
 import type { PdbDoc } from '../../shared/api/types.ts';
 import { useAsync } from '../../shared/useAsync.ts';
 import { useDebouncedValue } from '../../shared/useDebouncedValue.ts';
+import type {
+  BackgroundName,
+  ColorName,
+  RepresentationName,
+} from '../../shared/viewerOptions.ts';
+import {
+  DEFAULT_BACKGROUND,
+  DEFAULT_COLOR,
+  DEFAULT_REPRESENTATION,
+} from '../../shared/viewerOptions.ts';
 
 import FilterPanel from './FilterPanel.tsx';
 import HelicesTable from './HelicesTable.tsx';
 import LigandsTable from './LigandsTable.tsx';
 import PdbHeader from './PdbHeader.tsx';
 import PdbTable from './PdbTable.tsx';
-import type { PdbViewerHandle } from './PdbViewer.tsx';
-import PdbViewer from './PdbViewer.tsx';
 import SheetsTable from './SheetsTable.tsx';
 import ViewerControls from './ViewerControls.tsx';
 import type { FilterState } from './filters.ts';
 import { emptyFilterState, filtersToFindParams } from './filters.ts';
-import type {
-  BackgroundName,
-  ColorName,
-  RepresentationName,
-} from './viewerOptions.ts';
-import {
-  DEFAULT_BACKGROUND,
-  DEFAULT_COLOR,
-  DEFAULT_REPRESENTATION,
-} from './viewerOptions.ts';
 
 /**
  * Page mounted at `/browse`. Drives every list update from a single
@@ -165,6 +165,25 @@ function SelectedEntry({ doc }: SelectedEntryProps) {
     useState<BackgroundName>(DEFAULT_BACKGROUND);
   const viewerHandleRef = useRef<PdbViewerHandle | null>(null);
 
+  // Side-table → viewer focus selection. The key is opaque ("ligand:HOH:3",
+  // "helix:A:12:24:0", …) and uniquely identifies the active row across all
+  // three tables. Reset during render when the active document changes — the
+  // loci from the previous structure are no longer valid.
+  const [focusKey, setFocusKey] = useState<string | null>(null);
+  const [trackedDocId, setTrackedDocId] = useState(doc._id);
+  if (trackedDocId !== doc._id) {
+    setTrackedDocId(doc._id);
+    setFocusKey(null);
+  }
+
+  const handleFocus = useCallback(
+    (key: string | null, spec: FocusSpec | null) => {
+      setFocusKey(key);
+      viewerHandleRef.current?.focus(spec);
+    },
+    [],
+  );
+
   function copyId() {
     void navigator.clipboard.writeText(doc._id).then(() => {
       setCopied(true);
@@ -258,7 +277,11 @@ function SelectedEntry({ doc }: SelectedEntryProps) {
         </div>
       </div>
       <div className="panel browse-side">
-        <SideTabs doc={doc} />
+        <SideTabs
+          doc={doc}
+          selectedKey={focusKey ?? undefined}
+          onFocus={handleFocus}
+        />
       </div>
     </>
   );
@@ -268,15 +291,19 @@ type SideTab = 'ligands' | 'helices' | 'sheets';
 
 interface SideTabsProps {
   doc: PdbDoc;
+  selectedKey?: string;
+  onFocus: (key: string | null, spec: FocusSpec | null) => void;
 }
 
 /**
  * Tabbed view of the selected entry's ligands, helices, and sheets.
  * @param props - Component props.
  * @param props.doc - The currently-selected PDB document.
+ * @param props.selectedKey - Stable key of the row currently focused in the viewer.
+ * @param props.onFocus - Called when the user toggles a row's focus button.
  * @returns Tab strip + active tab body.
  */
-function SideTabs({ doc }: SideTabsProps) {
+function SideTabs({ doc, selectedKey, onFocus }: SideTabsProps) {
   const [active, setActive] = useState<SideTab>('ligands');
 
   const tabs: Array<{ id: SideTab; label: string; count: number }> = [
@@ -303,9 +330,27 @@ function SideTabs({ doc }: SideTabsProps) {
         ))}
       </div>
       <div className="side-tabpanel" role="tabpanel">
-        {active === 'ligands' && <LigandsTable formula={doc.formula} />}
-        {active === 'helices' && <HelicesTable helices={doc.helices} />}
-        {active === 'sheets' && <SheetsTable sheets={doc.sheets} />}
+        {active === 'ligands' && (
+          <LigandsTable
+            formula={doc.formula}
+            selectedKey={selectedKey}
+            onFocus={onFocus}
+          />
+        )}
+        {active === 'helices' && (
+          <HelicesTable
+            helices={doc.helices}
+            selectedKey={selectedKey}
+            onFocus={onFocus}
+          />
+        )}
+        {active === 'sheets' && (
+          <SheetsTable
+            sheets={doc.sheets}
+            selectedKey={selectedKey}
+            onFocus={onFocus}
+          />
+        )}
       </div>
     </div>
   );

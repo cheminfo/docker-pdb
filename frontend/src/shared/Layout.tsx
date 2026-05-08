@@ -29,8 +29,17 @@ export default function Layout({ children }: LayoutProps) {
             <NavLink to="/browse" className="topnav-link">
               Browse
             </NavLink>
+            <NavLink to="/stats" className="topnav-link">
+              Stats
+            </NavLink>
+            <NavLink to="/omega" className="topnav-link">
+              Omega
+            </NavLink>
             <NavLink to="/api" className="topnav-link">
               API
+            </NavLink>
+            <NavLink to="/about" className="topnav-link">
+              About
             </NavLink>
           </div>
         </div>

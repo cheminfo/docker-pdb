@@ -3,21 +3,28 @@
 // Local files are never deleted, even when removed upstream.
 // Requires `rsync` to be installed.
 
+import { execFile } from 'node:child_process';
 import { appendFileSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import { parseArgs } from 'node:util';
+import { parseArgs, promisify } from 'node:util';
 
 import { watch } from 'chokidar';
 import createDebug from 'debug';
+import Nano from 'nano';
 import Rsync from 'rsync';
 
 import * as common from './common.js';
 import getConfig from './config.js';
 
+const execFileAsync = promisify(execFile);
+
 const debug = createDebug('update');
 const config = getConfig();
+// eslint-disable-next-line new-cap -- nano factory is invoked as Nano(...)
+const nano = Nano(config.couch.fullUrl);
+const rsyncHistoryDb = nano.db.use('rsync-history');
 
 // Time chokidar waits with no size change before considering a file fully
 // written. rsync writes via temp+rename, so 2s is comfortably safe.
@@ -54,6 +61,7 @@ export default async function update() {
       config.asymetrical.rsync.port || 873,
       common.processPdb,
       config.asymetrical.rsync.historyDir,
+      'asymUnit',
     );
     debug('Done updating asymmetrical units...');
   }
@@ -66,6 +74,7 @@ export default async function update() {
       config.asymetrical.rsync.port || 873,
       common.processPdbAssembly,
       config.bioAssembly.rsync.historyDir,
+      'bioAssembly',
     );
     debug('Done updating biological assemblies...');
   }
@@ -81,9 +90,19 @@ export default async function update() {
  * @param {(file: string) => Promise<void>} processFile - Per-file ingestion handler.
  * @param {string | undefined} historyDir - Optional directory to write a JSON
  *   summary of changes (`{deleted, updated}`) for this rsync run.
+ * @param {'asymUnit' | 'bioAssembly'} type - Archive label used when recording
+ *   the run in the `rsync-history` CouchDB database.
  */
-async function doRsync(source, destination, port, processFile, historyDir) {
+async function doRsync(
+  source,
+  destination,
+  port,
+  processFile,
+  historyDir,
+  type,
+) {
   await mkdir(destination, { recursive: true });
+  const startedAt = new Date().toISOString();
 
   const changed = { deleted: [], updated: [] };
   const queue = [];
@@ -196,4 +215,66 @@ async function doRsync(source, destination, port, processFile, historyDir) {
   await workerDone;
   await watcher.close();
   debug('All queued files processed');
+
+  const bytesOnDisk = await getDirectorySize(destination);
+
+  await recordRsyncRun({
+    type,
+    startedAt,
+    finishedAt: new Date().toISOString(),
+    updated: changed.updated,
+    deleted: changed.deleted,
+    bytesOnDisk,
+  });
+}
+
+/**
+ * Total apparent size of every file under `directory`, in bytes. Uses `du -sk`
+ * (cross-platform between BSD/macOS and GNU/Linux) and multiplies by 1024.
+ * Returns `null` if `du` is unavailable or fails — the rsync run is still
+ * recorded without a size in that case.
+ * @param {string} directory - Directory whose recursive size should be measured.
+ * @returns {Promise<number | null>} Total size in bytes, or `null` on failure.
+ */
+async function getDirectorySize(directory) {
+  try {
+    const { stdout } = await execFileAsync('du', ['-sk', directory]);
+    const blocks = Number(stdout.trim().split(/\s+/)[0]);
+    return Number.isFinite(blocks) ? blocks * 1024 : null;
+  } catch (error) {
+    debug('Failed to compute directory size for', directory, error);
+    return null;
+  }
+}
+
+/**
+ * Append one document to the `rsync-history` database describing this rsync
+ * run (timestamps, counts, and the lexicographically-largest updated PDB id
+ * — used by the home page to preview the most recently imported entry).
+ * Failures are logged and swallowed: a CouchDB blip must not abort the cron
+ * loop or break the next rsync cycle.
+ * @param {{type: 'asymUnit' | 'bioAssembly', startedAt: string,
+ *   finishedAt: string, updated: string[], deleted: string[],
+ *   bytesOnDisk: number | null}} run - Run summary.
+ */
+async function recordRsyncRun(run) {
+  const lastEntryId =
+    run.updated.length > 0 ? run.updated.toSorted().at(-1) : null;
+  const doc = {
+    _id: run.finishedAt,
+    type: run.type,
+    startedAt: run.startedAt,
+    finishedAt: run.finishedAt,
+    durationMs: Date.parse(run.finishedAt) - Date.parse(run.startedAt),
+    updatedCount: run.updated.length,
+    deletedCount: run.deleted.length,
+    lastEntryId,
+    bytesOnDisk: run.bytesOnDisk,
+  };
+  try {
+    await rsyncHistoryDb.insert(doc);
+    debug(`Recorded rsync-history doc ${doc._id} (${run.type})`);
+  } catch (error) {
+    debug('Failed to record rsync-history doc', error);
+  }
 }

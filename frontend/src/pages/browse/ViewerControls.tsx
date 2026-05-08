@@ -2,12 +2,12 @@ import type {
   BackgroundName,
   ColorName,
   RepresentationName,
-} from './viewerOptions.ts';
+} from '../../shared/viewerOptions.ts';
 import {
   BACKGROUND_OPTIONS,
   COLOR_OPTIONS,
   REPRESENTATION_OPTIONS,
-} from './viewerOptions.ts';
+} from '../../shared/viewerOptions.ts';
 
 interface ViewerControlsProps {
   representation: RepresentationName;

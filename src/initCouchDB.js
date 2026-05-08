@@ -86,6 +86,14 @@ export default async function initDatabase() {
   await checkViews(couch, 'pdb-bio-assembly', 'couch/pdbBioAssemblyViews.json');
   await ensurePublicReadSecurity(couch, 'pdb-bio-assembly');
 
+  if (!databases.includes('rsync-history')) {
+    debug("Creating 'rsync-history' database");
+    await couch.db.create('rsync-history');
+    created.rsyncHistory = true;
+  }
+  await checkViews(couch, 'rsync-history', 'couch/rsyncHistoryViews.json');
+  await ensurePublicReadSecurity(couch, 'rsync-history');
+
   return created;
 }
 

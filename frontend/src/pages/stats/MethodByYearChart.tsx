@@ -1,0 +1,144 @@
+import { ResponsiveBar } from '@nivo/bar';
+
+import { fetchMethodByYear } from '../../shared/api/client.ts';
+import Panel from '../../shared/charts/Panel.tsx';
+import {
+  chartTheme,
+  formatCompact,
+  pickEveryNth,
+} from '../../shared/charts/theme.ts';
+import { useAsync } from '../../shared/useAsync.ts';
+
+const METHOD_COLORS: Record<string, string> = {
+  'X-RAY DIFFRACTION': '#2563eb',
+  'ELECTRON MICROSCOPY': '#16a34a',
+  'SOLUTION NMR': '#f59e0b',
+  'SOLID-STATE NMR': '#ca8a04',
+  'NEUTRON DIFFRACTION': '#9333ea',
+  'FIBER DIFFRACTION': '#0891b2',
+  'POWDER DIFFRACTION': '#0ea5e9',
+  'ELECTRON CRYSTALLOGRAPHY': '#15803d',
+  'SOLUTION SCATTERING': '#dc2626',
+  Other: '#94a3b8',
+};
+const TOP_METHODS = 5;
+
+interface YearDatum {
+  year: string;
+  [method: string]: string | number;
+}
+
+/**
+ * Render a stacked bar chart of structures deposited per year, broken
+ * down by experimental method. Methods outside the global top
+ * `TOP_METHODS` are folded into a single `Other` series so the legend
+ * stays readable.
+ * @returns Panel React element with the chart.
+ */
+export default function MethodByYearChart() {
+  const state = useAsync(fetchMethodByYear);
+  return (
+    <Panel
+      title="Methods over time"
+      description="Yearly deposition counts split by the top experimental methods."
+      state={state}
+      errorPrefix="Could not load method-by-year breakdown"
+    >
+      {(data) => {
+        const totalsByMethod = new Map<string, number>();
+        for (const row of data.rows) {
+          const method = row.key[1];
+          totalsByMethod.set(
+            method,
+            (totalsByMethod.get(method) ?? 0) + row.value,
+          );
+        }
+        const topMethods = Array.from(totalsByMethod.entries())
+          .toSorted(([, leftTotal], [, rightTotal]) => rightTotal - leftTotal)
+          .slice(0, TOP_METHODS)
+          .map(([name]) => name);
+        const topSet = new Set(topMethods);
+
+        const byYear = new Map<number, YearDatum>();
+        for (const row of data.rows) {
+          const [year, method] = row.key;
+          if (!Number.isFinite(year) || year < 1970) continue;
+          let datum = byYear.get(year);
+          if (!datum) {
+            datum = { year: String(year) };
+            for (const name of topMethods) datum[name] = 0;
+            datum.Other = 0;
+            byYear.set(year, datum);
+          }
+          const bucket = topSet.has(method) ? method : 'Other';
+          datum[bucket] = ((datum[bucket] as number) ?? 0) + row.value;
+        }
+        const chartData = Array.from(byYear.entries())
+          .toSorted(([leftYear], [rightYear]) => leftYear - rightYear)
+          .map(([, datum]) => datum);
+        if (chartData.length === 0) {
+          return <p className="placeholder">No data.</p>;
+        }
+        const keys = [...topMethods, 'Other'];
+        const fallback = METHOD_COLORS.Other ?? '#94a3b8';
+        const colors: string[] = keys.map(
+          (key) => METHOD_COLORS[key] ?? fallback,
+        );
+
+        return (
+          <div style={{ height: 320 }}>
+            <ResponsiveBar
+              data={chartData}
+              keys={keys}
+              indexBy="year"
+              margin={{ top: 8, right: 24, bottom: 80, left: 56 }}
+              padding={0.2}
+              colors={colors}
+              borderRadius={1}
+              enableLabel={false}
+              axisBottom={{
+                tickSize: 4,
+                tickPadding: 6,
+                tickRotation: 0,
+                tickValues: pickEveryNth(
+                  chartData.map((row) => row.year),
+                  8,
+                ),
+              }}
+              axisLeft={{
+                tickSize: 4,
+                tickPadding: 6,
+                format: (value: number) => formatCompact(value),
+              }}
+              gridYValues={4}
+              theme={chartTheme}
+              legends={[
+                {
+                  dataFrom: 'keys',
+                  anchor: 'bottom',
+                  direction: 'row',
+                  translateY: 64,
+                  itemWidth: 130,
+                  itemHeight: 14,
+                  symbolSize: 10,
+                  itemTextColor: '#475569',
+                  itemDirection: 'left-to-right',
+                  toggleSerie: true,
+                },
+              ]}
+              tooltip={({ id, indexValue, value }) => (
+                <div className="chart-tooltip">
+                  <strong>
+                    {indexValue} · {String(id)}
+                  </strong>
+                  : {value.toLocaleString('en-US')}
+                </div>
+              )}
+              animate={false}
+            />
+          </div>
+        );
+      }}
+    </Panel>
+  );
+}

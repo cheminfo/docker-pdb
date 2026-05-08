@@ -4,17 +4,25 @@ import {
   fetchAssemblyInfo,
   fetchByExperiment,
   fetchByYear,
+  fetchLastAsymRsync,
+  fetchLastBioAssemblyRsync,
   fetchPdbInfo,
 } from '../../shared/api/client.ts';
 import type { AsyncState } from '../../shared/useAsync.ts';
 import { useAsync } from '../../shared/useAsync.ts';
 
 import ExperimentChart from './ExperimentChart.tsx';
+import LastEntryPanel from './LastEntryPanel.tsx';
 import StatsOverview from './StatsOverview.tsx';
 import YearChart from './YearChart.tsx';
 
 function fetchOverview() {
-  return Promise.all([fetchPdbInfo(), fetchAssemblyInfo()]);
+  return Promise.all([
+    fetchPdbInfo(),
+    fetchAssemblyInfo(),
+    fetchLastAsymRsync(),
+    fetchLastBioAssemblyRsync(),
+  ]);
 }
 
 interface PanelProps<TData> {
@@ -77,7 +85,19 @@ export default function HomePage() {
           Could not load database stats: {overview.error.message}
         </p>
       ) : (
-        <StatsOverview pdb={overview.data[0]} assembly={overview.data[1]} />
+        <StatsOverview
+          pdb={overview.data[0]}
+          assembly={overview.data[1]}
+          lastAsymRsync={overview.data[2]}
+          lastBioAssemblyRsync={overview.data[3]}
+        />
+      )}
+
+      {overview.status === 'success' && overview.data[2]?.lastEntryId && (
+        <>
+          <h2>Last imported entry</h2>
+          <LastEntryPanel pdbId={overview.data[2].lastEntryId} />
+        </>
       )}
 
       <div className="charts">

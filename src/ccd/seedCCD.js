@@ -1,0 +1,193 @@
+import { createWriteStream, existsSync, mkdirSync } from 'node:fs';
+import { open } from 'node:fs/promises';
+import { join } from 'node:path';
+import { createInterface } from 'node:readline';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import { createGunzip } from 'node:zlib';
+
+import { pino } from 'pino';
+
+import { getLigandsDB } from '../db/getDB.js';
+import { computeSSIndex } from '../util/computeSSIndex.js';
+
+import { buildMoleculeFromCcdBlock } from './buildMolecule.js';
+import { parseCcdMmcif } from './parseCcdMmcif.js';
+
+const logger = pino({ name: 'seed-ccd' });
+
+const CCD_URL =
+  'https://files.wwpdb.org/pub/pdb/data/monomers/components.cif.gz';
+
+const dataDir = join(import.meta.dirname, '..', '..', 'data');
+const ccdDir = join(dataDir, 'ccd');
+const ccdGzPath = join(ccdDir, 'components.cif.gz');
+
+/**
+ * Seed (or refresh) the `ligands` and `ligand_ss_index` tables from the
+ * wwPDB Chemical Component Dictionary.
+ *
+ * Steps:
+ * 1. Download `components.cif.gz` to `data/ccd/` if it does not exist
+ * (or always, when `force = true`).
+ * 2. Stream-gunzip + line-parse the file, yielding one chem_comp block
+ * at a time.
+ * 3. For each block, build an OCL Molecule from the atoms+bonds, derive
+ * idCode + coordinates + MF + MW + SS index, and INSERT-OR-REPLACE
+ * into SQLite.
+ *
+ * Single-atom entries (ions like NA, CL, ZN) and entries OCL cannot
+ * encode (unknown elements, malformed bonds) are skipped — they cannot
+ * be the target of a substructure search anyway.
+ * @param {{ force?: boolean }} [options] - Pass `force: true` to re-download the CCD archive even if a cached copy exists.
+ * @returns {Promise<{ imported: number, skipped: number }>} Counts of successfully imported and skipped CCD entries.
+ */
+export async function seedCCD({ force = false } = {}) {
+  if (force || !existsSync(ccdGzPath)) {
+    await downloadCcd();
+  } else {
+    logger.info({ path: ccdGzPath }, 'Reusing cached CCD archive');
+  }
+
+  const db = await getLigandsDB();
+  const insertLigand = db.statement(
+    `INSERT INTO ligands (code, name, formula, type, id_code, coordinates, mf, mw, nb_atoms, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, cast(unixepoch('subsec') * 1000 as integer))
+     ON CONFLICT(code) DO UPDATE SET
+       name = excluded.name,
+       formula = excluded.formula,
+       type = excluded.type,
+       id_code = excluded.id_code,
+       coordinates = excluded.coordinates,
+       mf = excluded.mf,
+       mw = excluded.mw,
+       nb_atoms = excluded.nb_atoms,
+       updated_at = excluded.updated_at`,
+  );
+  const insertSSIndex = db.statement(
+    `INSERT INTO ligand_ss_index
+       (code, ss_index0, ss_index1, ss_index2, ss_index3, ss_index4, ss_index5, ss_index6, ss_index7)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(code) DO UPDATE SET
+       ss_index0 = excluded.ss_index0,
+       ss_index1 = excluded.ss_index1,
+       ss_index2 = excluded.ss_index2,
+       ss_index3 = excluded.ss_index3,
+       ss_index4 = excluded.ss_index4,
+       ss_index5 = excluded.ss_index5,
+       ss_index6 = excluded.ss_index6,
+       ss_index7 = excluded.ss_index7`,
+  );
+
+  // Wrap the whole import in a single transaction — orders of magnitude
+  // faster than committing per row, and keeps the schema consistent if
+  // the run is interrupted.
+  db.db.exec('BEGIN');
+  let imported = 0;
+  let skipped = 0;
+  try {
+    const fileHandle = await open(ccdGzPath, 'r');
+    const stream = fileHandle.createReadStream().pipe(createGunzip());
+    const lines = createInterface({ input: stream, crlfDelay: Infinity });
+
+    for await (const block of parseCcdMmcif(lines)) {
+      const result = importBlock(block, insertLigand, insertSSIndex);
+      if (result === 'imported') imported++;
+      else skipped++;
+      if ((imported + skipped) % 1000 === 0) {
+        logger.info(
+          { imported, skipped, total: imported + skipped },
+          'CCD import progress',
+        );
+      }
+    }
+
+    db.db.exec('COMMIT');
+  } catch (error) {
+    db.db.exec('ROLLBACK');
+    throw error;
+  }
+
+  logger.info({ imported, skipped }, 'CCD import complete');
+  return { imported, skipped };
+}
+
+/**
+ * Download `components.cif.gz` from the wwPDB to the local cache.
+ * @returns {Promise<void>} Resolves once the file is fully written to disk.
+ */
+async function downloadCcd() {
+  if (!existsSync(ccdDir)) {
+    mkdirSync(ccdDir, { recursive: true });
+  }
+  logger.info({ url: CCD_URL, target: ccdGzPath }, 'Downloading CCD archive');
+  const response = await fetch(CCD_URL);
+  if (!response.ok) {
+    throw new Error(`Failed to download CCD: HTTP ${response.status}`);
+  }
+  await pipeline(Readable.fromWeb(response.body), createWriteStream(ccdGzPath));
+  logger.info('CCD archive downloaded');
+}
+
+/**
+ * Build a molecule from one CCD block and INSERT into SQLite. Returns
+ * `'imported'` on success or `'skipped'` for blocks we cannot handle
+ * (single-atom ions, unknown elements, OCL encoding failure).
+ * @param {object} block - One parsed CCD chem_comp block.
+ * @param {{ run: (...args: unknown[]) => unknown }} insertLigand - Prepared INSERT for the `ligands` table.
+ * @param {{ run: (...args: unknown[]) => unknown }} insertSSIndex - Prepared INSERT for the `ligand_ss_index` table.
+ * @returns {'imported' | 'skipped'} Whether the block produced a row.
+ */
+function importBlock(block, insertLigand, insertSSIndex) {
+  const molecule = buildMoleculeFromCcdBlock(block);
+  if (!molecule) return 'skipped';
+  let idCode;
+  let coordinates;
+  let mf;
+  let mw;
+  try {
+    ({ idCode, coordinates } = molecule.getIDCodeAndCoordinates());
+    const formula = molecule.getMolecularFormula();
+    mf = formula.formula;
+    mw = formula.relativeWeight;
+  } catch {
+    return 'skipped';
+  }
+  if (!idCode) return 'skipped';
+
+  insertLigand.run(
+    block.code,
+    block.name,
+    block.formula,
+    block.type,
+    idCode,
+    coordinates,
+    mf,
+    mw,
+    block.atoms.length,
+  );
+  const ssIndex = computeSSIndex(molecule);
+  insertSSIndex.run(
+    block.code,
+    ssIndex.ss_index0,
+    ssIndex.ss_index1,
+    ssIndex.ss_index2,
+    ssIndex.ss_index3,
+    ssIndex.ss_index4,
+    ssIndex.ss_index5,
+    ssIndex.ss_index6,
+    ssIndex.ss_index7,
+  );
+  return 'imported';
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const force = process.argv.includes('--force');
+  try {
+    await seedCCD({ force });
+  } catch (error) {
+    logger.error({ error }, 'CCD seed failed');
+    // eslint-disable-next-line unicorn/no-process-exit -- CLI entry point.
+    process.exit(1);
+  }
+}

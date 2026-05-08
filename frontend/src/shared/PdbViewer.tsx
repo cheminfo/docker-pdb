@@ -24,8 +24,26 @@ interface PdbViewerProps {
   background: BackgroundName;
 }
 
+/**
+ * Selection target sent from the side tables to the 3D viewer. A `range`
+ * selection covers a contiguous residue range on a single chain (helices and
+ * sheets); a `ligand` selection covers every residue in the structure with
+ * the given 3-letter component label.
+ */
+export type FocusSpec =
+  | { kind: 'ligand'; label: string }
+  | { kind: 'range'; chain: string; from: number; to: number };
+
 export interface PdbViewerHandle {
   resetCamera: () => void;
+  /** Focus the camera on a structural element and persist its highlight, or clear the selection when given `null`. */
+  focus: (spec: FocusSpec | null) => void;
+  /**
+   * Return the Mol* plugin context plus the lazily-loaded MolScript API,
+   * or `null` while the viewer is still initializing. The Animate page uses
+   * this to drive Mol* directly from student-written scripts.
+   */
+  getPlugin: () => { plugin: unknown; molScript: unknown } | null;
 }
 
 interface MolstarViewer {
@@ -47,10 +65,38 @@ interface MolstarViewer {
       };
     };
     canvas3d?: { setProps: (props: Record<string, unknown>) => void };
-    managers: { camera: { reset: () => void } };
+    managers: {
+      camera: {
+        reset: () => void;
+        focusLoci: (loci: unknown) => void;
+      };
+      structure: {
+        hierarchy: {
+          current: {
+            structures: Array<{ cell: { obj?: { data: unknown } } }>;
+          };
+        };
+        selection: {
+          fromLoci: (modifier: 'set' | 'add' | 'remove', loci: unknown) => void;
+          clear: () => void;
+        };
+      };
+    };
     clear: () => Promise<void>;
   };
   dispose: () => void;
+}
+
+interface MolScriptApi {
+  Script: {
+    getStructureSelection: (
+      build: (builder: unknown) => unknown,
+      structure: unknown,
+    ) => unknown;
+  };
+  StructureSelection: {
+    toLociWithSourceUnits: (selection: unknown) => unknown;
+  };
 }
 
 /**
@@ -65,6 +111,7 @@ const PdbViewer = forwardRef<PdbViewerHandle, PdbViewerProps>(
     const { pdb, representation, color, spin, background } = props;
     const containerRef = useRef<HTMLDivElement>(null);
     const viewerRef = useRef<MolstarViewer | null>(null);
+    const molScriptApiRef = useRef<MolScriptApi | null>(null);
     const [viewerReady, setViewerReady] = useState(false);
 
     useImperativeHandle(
@@ -72,6 +119,37 @@ const PdbViewer = forwardRef<PdbViewerHandle, PdbViewerProps>(
       () => ({
         resetCamera: () => {
           viewerRef.current?.plugin.managers.camera.reset();
+        },
+        focus: (spec) => {
+          const viewer = viewerRef.current;
+          const api = molScriptApiRef.current;
+          if (!viewer || !api) return;
+
+          const { plugin } = viewer;
+          if (!spec) {
+            plugin.managers.structure.selection.clear();
+            plugin.managers.camera.reset();
+            return;
+          }
+
+          const structure =
+            plugin.managers.structure.hierarchy.current.structures[0]?.cell.obj
+              ?.data;
+          if (!structure) return;
+
+          const selection = api.Script.getStructureSelection(
+            buildExpression(spec),
+            structure,
+          );
+          const loci = api.StructureSelection.toLociWithSourceUnits(selection);
+          plugin.managers.structure.selection.fromLoci('set', loci);
+          plugin.managers.camera.focusLoci(loci);
+        },
+        getPlugin: () => {
+          const viewer = viewerRef.current;
+          const api = molScriptApiRef.current;
+          if (!viewer || !api) return null;
+          return { plugin: viewer.plugin, molScript: api };
         },
       }),
       [],
@@ -85,10 +163,13 @@ const PdbViewer = forwardRef<PdbViewerHandle, PdbViewerProps>(
 
       async function initViewer() {
         try {
-          const [{ Viewer }, { PluginConfig }] = await Promise.all([
-            import('molstar/lib/apps/viewer/app.js'),
-            import('molstar/lib/mol-plugin/config.js'),
-          ]);
+          const [{ Viewer }, { PluginConfig }, scriptModule, structureModule] =
+            await Promise.all([
+              import('molstar/lib/apps/viewer/app.js'),
+              import('molstar/lib/mol-plugin/config.js'),
+              import('molstar/lib/mol-script/script.js'),
+              import('molstar/lib/mol-model/structure.js'),
+            ]);
           if (disposed || !container) return;
 
           const viewer = (await Viewer.create(container, {
@@ -122,6 +203,11 @@ const PdbViewer = forwardRef<PdbViewerHandle, PdbViewerProps>(
           }
 
           viewerRef.current = viewer;
+          molScriptApiRef.current = {
+            Script: scriptModule.Script as MolScriptApi['Script'],
+            StructureSelection:
+              structureModule.StructureSelection as MolScriptApi['StructureSelection'],
+          };
           setViewerReady(true);
         } catch (error) {
           // eslint-disable-next-line no-console -- surface init failures during dev
@@ -135,6 +221,7 @@ const PdbViewer = forwardRef<PdbViewerHandle, PdbViewerProps>(
         disposed = true;
         viewerRef.current?.dispose();
         viewerRef.current = null;
+        molScriptApiRef.current = null;
       };
     }, []);
 
@@ -215,5 +302,59 @@ const PdbViewer = forwardRef<PdbViewerHandle, PdbViewerProps>(
     return <div ref={containerRef} className="pdb-viewer-canvas" />;
   },
 );
+
+/**
+ * Build the mol-script expression that selects the residues for a focus
+ * spec. The returned function is consumed by `Script.getStructureSelection`,
+ * which passes the live MolScriptBuilder as argument.
+ * @param spec - Side-table selection target.
+ * @returns Builder callback returning a mol-script `atomGroups` expression.
+ */
+function buildExpression(spec: FocusSpec) {
+  return (builder: unknown) => {
+    // The builder is the MolScriptBuilder; treat it as a loose record so we
+    // don't have to import its (large) type here.
+    /* eslint-disable @typescript-eslint/naming-convention -- mmCIF property names mandated by Mol* MolScript */
+    const Q = builder as {
+      struct: {
+        generator: { atomGroups: (params: Record<string, unknown>) => unknown };
+        atomProperty: {
+          macromolecular: {
+            auth_comp_id: () => unknown;
+            auth_asym_id: () => unknown;
+            auth_seq_id: () => unknown;
+          };
+        };
+      };
+      core: {
+        rel: {
+          eq: (args: [unknown, unknown]) => unknown;
+          inRange: (args: [unknown, number, number]) => unknown;
+        };
+      };
+    };
+    /* eslint-enable @typescript-eslint/naming-convention */
+
+    if (spec.kind === 'ligand') {
+      return Q.struct.generator.atomGroups({
+        'residue-test': Q.core.rel.eq([
+          Q.struct.atomProperty.macromolecular.auth_comp_id(),
+          spec.label,
+        ]),
+      });
+    }
+    return Q.struct.generator.atomGroups({
+      'chain-test': Q.core.rel.eq([
+        Q.struct.atomProperty.macromolecular.auth_asym_id(),
+        spec.chain,
+      ]),
+      'residue-test': Q.core.rel.inRange([
+        Q.struct.atomProperty.macromolecular.auth_seq_id(),
+        spec.from,
+        spec.to,
+      ]),
+    });
+  };
+}
 
 export default PdbViewer;

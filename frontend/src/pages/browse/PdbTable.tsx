@@ -15,11 +15,11 @@ interface PdbTableProps {
 const PAGE_STEP = 10;
 
 /**
- * List of PDB entries (ID, title, chains, residues, year). Clicking a row
- * promotes that entry to the active selection. Once the list has keyboard
- * focus, ArrowUp / ArrowDown move the selection one step, PageUp / PageDown
- * move ten steps, and Home / End jump to the first / last entry. The
- * selected row is scrolled into view.
+ * List of PDB entries (ID, title). Clicking a row promotes that entry to
+ * the active selection. Once the list has keyboard focus, ArrowUp /
+ * ArrowDown move the selection one step, PageUp / PageDown move ten steps,
+ * and Home / End jump to the first / last entry. The selected row is
+ * scrolled into view.
  * @param props - Component props.
  * @param props.rows - PDB documents to display.
  * @param props.selectedId - Currently-selected PDB id.
@@ -87,17 +87,11 @@ export default function PdbTable({
         <colgroup>
           <col className="col-id" />
           <col />
-          <col className="col-chains" />
-          <col className="col-residues" />
-          <col className="col-year" />
         </colgroup>
         <thead>
           <tr>
             <th>ID</th>
             <th>Title</th>
-            <th className="num">Chains</th>
-            <th className="num">Residues</th>
-            <th className="num">Year</th>
           </tr>
         </thead>
         <tbody>
@@ -120,9 +114,6 @@ export default function PdbTable({
                 <td className="title-cell" title={row.title}>
                   {row.title}
                 </td>
-                <td className="num">{row.nbChains}</td>
-                <td className="num">{row.nbResidues}</td>
-                <td className="num">{row.year ?? ''}</td>
               </tr>
             );
           })}
