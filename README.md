@@ -48,6 +48,8 @@ chosen hostname).
 ```sh
 cp compose.example.cloudflared.yaml compose.yaml
 docker compose pull && docker compose up -d
+# or, to build the image locally instead of pulling:
+docker compose up -d --build
 ```
 
 ### 3. Public via Traefik — `compose.example.traefik.yaml`
@@ -62,6 +64,8 @@ Adjust the `Host(...)` label in the file to your hostname (default
 ```sh
 cp compose.example.traefik.yaml compose.yaml
 docker compose pull && docker compose up -d
+# or, to build the image locally instead of pulling:
+docker compose up -d --build
 ```
 
 ## Persistent data
