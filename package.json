@@ -38,7 +38,7 @@
   },
   "scripts": {
     "cron": "node src/cron.js",
-    "dev": "docker compose -f compose.dev.yaml up -d couchdb && COUCHDB_HOST=127.0.0.1 DATA_DIR=./data node --watch --env-file-if-exists=.env src/dev.js",
+    "dev": "docker compose -f compose.dev.yaml up -d && COUCHDB_HOST=127.0.0.1 DATA_DIR=./data node --watch --env-file-if-exists=.env src/dev.js",
     "dev:down": "docker compose -f compose.dev.yaml down",
     "eslint": "eslint src",
     "eslint-fix": "eslint src --fix",

@@ -1,10 +1,10 @@
-# Local-development CouchDB for `npm run dev`.
-# Brings up just CouchDB on 127.0.0.1:5984, so the host-side Node process
-# (started by `npm run dev`) can connect to it. The full stack
-# (nginx + cron + couchdb) lives in compose.example*.yaml.
+# Local-development backend for `npm run dev`. Brings up CouchDB and an
+# nginx-proxy that exposes the same HTTP API surface as the production
+# stack (`/pdb`, `/assembly`, `/view`, `/stats`, `/find`) — so the Vite
+# dev server in `frontend/` can talk to it via `PDB_API_URL`.
 #
-# Project name is overridden so this stack is tracked separately from any
-# production stack the developer might also have running on the same host.
+# Project name is overridden so this dev stack is tracked separately
+# from any production stack the developer might also have running.
 name: docker-pdb-dev
 
 services:
@@ -17,6 +17,20 @@ services:
       - '127.0.0.1:5984:5984'
     volumes:
       - couchdb-dev:/opt/couchdb/data
+    restart: unless-stopped
+
+  # Same nginx config as the production stack so /find /view /stats etc.
+  # all resolve identically. Bound to a separate port (12346) to avoid
+  # conflicting with a production stack on 12345.
+  nginx-proxy:
+    image: docker.io/nginx:1.27
+    ports:
+      - '127.0.0.1:12346:80'
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/www:/data/www:ro
+    depends_on:
+      - couchdb
     restart: unless-stopped
 
 volumes:

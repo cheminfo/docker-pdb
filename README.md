@@ -124,16 +124,26 @@ npm run dev        # bring up CouchDB + seed a few local PDBs
 npm run dev:down   # stop the dev CouchDB container
 ```
 
-`npm run dev` brings up a minimal CouchDB on `127.0.0.1:5984` via
-[`compose.dev.yaml`](./compose.dev.yaml), then runs
-[`src/dev.js`](./src/dev.js) under `node --watch`: it initializes the
-databases (`pdb`, `pdb-bio-assembly`, design docs, public-read security)
-and ingests up to `DEV_SEED_LIMIT` (default 20) `.ent.gz` files already
-present under `data/pdb/`, so the API is queryable in seconds:
+`npm run dev` brings up two containers via
+[`compose.dev.yaml`](./compose.dev.yaml):
+
+- **CouchDB** on `127.0.0.1:5984` — the database itself.
+- **nginx-proxy** on `127.0.0.1:12346` — exposes the same HTTP API
+  surface as production (`/pdb`, `/assembly`, `/view`, `/stats`,
+  `/find`), so the Vite dev server below can talk to it transparently.
+
+It then runs [`src/dev.js`](./src/dev.js) under `node --watch`: the
+script initializes both databases (design docs, Mango indexes,
+public-read security) and ingests up to `DEV_SEED_LIMIT` (default 20)
+`.ent.gz` files already present under `data/pdb/`, so the API is
+queryable in seconds:
 
 ```sh
-curl http://127.0.0.1:5984/pdb/_all_docs
-curl http://127.0.0.1:5984/pdb/100D
+curl http://127.0.0.1:12346/pdb/_all_docs
+curl http://127.0.0.1:12346/pdb/100D
+curl -X POST http://127.0.0.1:12346/find \
+  -H 'Content-Type: application/json' \
+  -d '{"selector":{"experiment":"X-RAY DIFFRACTION"},"limit":3}'
 ```
 
 Editing any file under `src/` re-runs the seed (idempotent — existing
@@ -153,7 +163,7 @@ npm run test-only  # vitest with coverage
 ```sh
 cd frontend
 npm install
-npm run dev        # vite dev server, proxies /pdb /assembly /view /stats
+npm run dev        # vite dev server, proxies /pdb /assembly /view /stats /find
                    # to PDB_API_URL (default http://localhost:12345)
 npm run build      # type-check + vite build → ../nginx/www
 npm run test       # check-types + eslint + prettier
@@ -164,7 +174,15 @@ under `frontend/src/`, rebuild and commit both the source change and the
 updated assets so a `git pull && docker compose up -d` on the deploy host
 picks up the new homepage without needing Node installed.
 
-To point the dev server at a remote stack instead of `localhost:12345`:
+To point the Vite dev server at the **dev backend** that `npm run dev`
+(in the project root) brings up — useful when you don't have a full
+production stack on `12345`:
+
+```sh
+PDB_API_URL=http://127.0.0.1:12346 npm run dev
+```
+
+Or at a remote stack:
 
 ```sh
 PDB_API_URL=https://pdb.cheminfo.org npm run dev

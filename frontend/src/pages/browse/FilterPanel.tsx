@@ -122,10 +122,14 @@ export default function FilterPanel({
 
       <div className="filter-group">
         <div className="filter-group-label">Method</div>
-        {methodCounts.length === 0 ? (
-          <p className="placeholder">No method data.</p>
-        ) : (
-          methodCounts.map(([method, count]) => (
+        {(() => {
+          const visibleMethods = methodCounts.filter(
+            ([method, count]) => count >= 100 || filters.methods.has(method),
+          );
+          if (visibleMethods.length === 0) {
+            return <p className="placeholder">No method data.</p>;
+          }
+          return visibleMethods.map(([method, count]) => (
             <label key={method} className="filter-checkbox">
               <input
                 type="checkbox"
@@ -137,8 +141,8 @@ export default function FilterPanel({
               </span>
               <span className="filter-method-count">{count}</span>
             </label>
-          ))
-        )}
+          ));
+        })()}
       </div>
 
       <RangeRow
