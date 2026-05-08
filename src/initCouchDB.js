@@ -65,6 +65,7 @@ export default async function initDatabase() {
     created.pdb = true;
   }
   await checkViews(couch, 'pdb', 'couch/pdbViews.json');
+  await ensurePublicReadSecurity(couch, 'pdb');
 
   if (!databases.includes('pdb-bio-assembly')) {
     debug("Creating 'pdb-bio-assembly' database");
@@ -72,8 +73,42 @@ export default async function initDatabase() {
     created.pdbBioAssembly = true;
   }
   await checkViews(couch, 'pdb-bio-assembly', 'couch/pdbBioAssemblyViews.json');
+  await ensurePublicReadSecurity(couch, 'pdb-bio-assembly');
 
   return created;
+}
+
+const PUBLIC_READ_SECURITY = {
+  admins: { names: [], roles: ['_admin'] },
+  members: { names: [], roles: [] },
+};
+
+/**
+ * Set the database's `_security` document so anyone can read it (writes still
+ * require an admin). Idempotent: skips the PUT if the current document already
+ * grants anonymous reads.
+ * @param {import('nano').ServerScope} couch - Authenticated nano server scope.
+ * @param {string} dbName - Database whose `_security` to update.
+ */
+async function ensurePublicReadSecurity(couch, dbName) {
+  const current = await couch.request({ db: dbName, doc: '_security' });
+  const members = current.members || {};
+  if (
+    Array.isArray(members.names) &&
+    members.names.length === 0 &&
+    Array.isArray(members.roles) &&
+    members.roles.length === 0
+  ) {
+    debug(`Security on '${dbName}' already allows anonymous reads`);
+    return;
+  }
+  debug(`Setting public-read security on '${dbName}'`);
+  await couch.request({
+    db: dbName,
+    doc: '_security',
+    method: 'PUT',
+    body: PUBLIC_READ_SECURITY,
+  });
 }
 
 async function checkViews(couch, dbName, filename) {
