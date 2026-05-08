@@ -9,3 +9,5 @@ on:
 jobs:
   docker-image:
     uses: zakodium/workflows/.github/workflows/docker-image.yml@docker-image-v1
+    with:
+      tag-version: ${{ github.ref_name }}
