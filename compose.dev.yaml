@@ -19,6 +19,19 @@ services:
       - couchdb-dev:/opt/couchdb/data
     restart: unless-stopped
 
+  # Substructure-search API. Built from the local Dockerfile so the
+  # dev nginx upstream `pdb-api:3000` resolves and `/v1/...` works
+  # against the developer's working tree.
+  pdb-api:
+    build: .
+    volumes:
+      - ./data:/app/data
+    environment:
+      DEBUG: '*'
+      PORT: '3000'
+    restart: unless-stopped
+    command: sh -c "npm run seed-ccd; npm run api"
+
   # Same nginx config as the production stack so /find /view /stats etc.
   # all resolve identically. Bound to a separate port (12346) to avoid
   # conflicting with a production stack on 12345.
@@ -31,6 +44,7 @@ services:
       - ./nginx/www:/data/www:ro
     depends_on:
       - couchdb
+      - pdb-api
     restart: unless-stopped
 
 volumes:
