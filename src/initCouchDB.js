@@ -65,6 +65,7 @@ export default async function initDatabase() {
     created.pdb = true;
   }
   await checkViews(couch, 'pdb', 'couch/pdbViews.json');
+  await checkViews(couch, 'pdb', 'couch/pdbStatsViews.json');
   await ensurePublicReadSecurity(couch, 'pdb');
 
   if (!databases.includes('pdb-bio-assembly')) {

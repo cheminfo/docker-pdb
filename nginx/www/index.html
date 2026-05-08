@@ -1,114 +1,408 @@
-<html>
-
-<head>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PDB web service</title>
     <style>
-        body {
-            font-family: Helvetica, Arial, Sans-Serif;
-        }
+      :root {
+        --bg: #f4f6f9;
+        --surface: #ffffff;
+        --border: #e2e8f0;
+        --text: #0f172a;
+        --muted: #64748b;
+        --accent: #2563eb;
+        --accent-soft: #dbeafe;
+        --radius: 12px;
+        --shadow:
+          0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.06);
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+      }
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial,
+          sans-serif;
+        color: var(--text);
+        background: var(--bg);
+        line-height: 1.5;
+      }
+      .container {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 32px 24px 64px;
+      }
+      header {
+        margin-bottom: 32px;
+      }
+      header h1 {
+        font-size: 28px;
+        margin: 0 0 4px;
+        letter-spacing: -0.5px;
+      }
+      header p {
+        margin: 0;
+        color: var(--muted);
+        max-width: 720px;
+      }
+      h2 {
+        font-size: 18px;
+        margin: 32px 0 12px;
+      }
 
-        table {
-            border-collapse: collapse;
-            border-spacing: 0px;
-        }
+      .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 12px;
+      }
+      .stat-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 16px 18px;
+        box-shadow: var(--shadow);
+      }
+      .stat-card .label {
+        font-size: 12px;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .stat-card .value {
+        font-size: 26px;
+        font-weight: 600;
+        margin-top: 6px;
+        font-variant-numeric: tabular-nums;
+      }
+      .stat-card .sub {
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 2px;
+      }
 
-        tr {
-            background-color: #eee;
+      .panel {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 20px;
+        box-shadow: var(--shadow);
+      }
+      .panel h3 {
+        margin: 0 0 12px;
+        font-size: 15px;
+        font-weight: 600;
+      }
+      .charts {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+      @media (max-width: 720px) {
+        .charts {
+          grid-template-columns: 1fr;
         }
+      }
 
-        td,
-        th {
-            border-top: 1px solid #777;
-            border-bottom: 1px solid #777;
-            padding: 2px;
-        }
+      .bar-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 6px;
+        font-size: 13px;
+      }
+      .bar-row .key {
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+        flex-shrink: 0;
+      }
+      .bar-row .key-narrow {
+        width: 48px;
+      }
+      .bar-row .key-wide {
+        width: 180px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .bar-row .bar-track {
+        flex: 1;
+        height: 14px;
+        background: #f1f5f9;
+        border-radius: 4px;
+        overflow: hidden;
+      }
+      .bar-row .bar {
+        height: 100%;
+        background: var(--accent);
+        border-radius: 4px;
+      }
+      .bar-row .count {
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+        flex-shrink: 0;
+        min-width: 56px;
+        text-align: right;
+      }
+
+      .endpoint {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 14px 18px;
+        margin-bottom: 10px;
+        box-shadow: var(--shadow);
+      }
+      .endpoint code.path {
+        background: var(--accent-soft);
+        color: var(--accent);
+        padding: 2px 8px;
+        border-radius: 6px;
+        font-weight: 500;
+      }
+      .endpoint p {
+        margin: 6px 0 4px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .endpoint a.example {
+        color: var(--accent);
+        text-decoration: none;
+        font-size: 13px;
+      }
+      .endpoint a.example:hover {
+        text-decoration: underline;
+      }
+      code {
+        font-family:
+          ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 13px;
+      }
+      .placeholder {
+        color: var(--muted);
+        font-size: 13px;
+        font-style: italic;
+      }
     </style>
-</head>
+  </head>
 
-<body>
-    <h1>PDB web service</h1>
+  <body>
+    <div class="container">
+      <header>
+        <h1>PDB web service</h1>
+        <p>
+          HTTP access to the wwPDB tree — asymmetric units, biological
+          assemblies, parsed properties, and rendered images — backed by
+          CouchDB.
+        </p>
+      </header>
 
-    This project provides the pdb as well as pdb assembly.
+      <h2>Statistics</h2>
+      <div class="stats-grid" id="overview"></div>
 
-    <h2>Stats</h2>
+      <div class="charts" style="margin-top: 16px">
+        <div class="panel">
+          <h3>Structures by year</h3>
+          <div id="byYear" class="placeholder">Loading…</div>
+        </div>
+        <div class="panel">
+          <h3>Experimental method</h3>
+          <div id="byExperiment" class="placeholder">Loading…</div>
+        </div>
+      </div>
 
-    <div id="stats"></div>
+      <h2>API endpoints</h2>
 
-    <h2>/pdb/XXXX</h2>
+      <div class="endpoint">
+        <code class="path">GET /pdb/&lt;PDB-ID&gt;</code>
+        <p>
+          JSON document with parsed properties: residues, chains, helices,
+          sheets, formulas, isoelectric point, amino-acid percentages.
+        </p>
+        <a class="example" href="/pdb/5ABY">/pdb/5ABY</a>
+      </div>
 
-    Returns a JSON containing information about the pdb.<br>
+      <div class="endpoint">
+        <code class="path">GET /pdb/&lt;PDB-ID&gt;/&lt;PDB-ID&gt;.pdb</code>
+        <p>Original asymmetric-unit PDB file (text).</p>
+        <a class="example" href="/pdb/5ABY/5ABY.pdb">/pdb/5ABY/5ABY.pdb</a>
+      </div>
 
-    Example: <a href='/pdb/5ABY'>/pdb/5ABY</a>
+      <div class="endpoint">
+        <code class="path"
+          >GET /assembly/&lt;PDB-ID&gt;/&lt;PDB-ID&gt;.pdb1</code
+        >
+        <p>Biological-assembly PDB file (text).</p>
+        <a class="example" href="/assembly/101D/101D.pdb1"
+          >/assembly/101D/101D.pdb1</a
+        >
+      </div>
 
-    <h2>/pdb/XXXX/XXXX.pdb</h2>
+      <div class="endpoint">
+        <code class="path">GET /assembly/&lt;PDB-ID&gt;/&lt;size&gt;.png</code>
+        <p>
+          Rendered PyMol image of the biological assembly. Available sizes:
+          <code>100x100</code>, <code>200x200</code>, <code>400x400</code>.
+        </p>
+        <a class="example" href="/assembly/101D/400x400.png"
+          >/assembly/101D/400x400.png</a
+        >
+      </div>
 
-    Returns a text file containing the pdb.<br>
+      <div class="endpoint">
+        <code class="path">GET /view/&lt;view-name&gt;</code>
+        <p>
+          Query a CouchDB view in <code>_design/query</code>. The
+          <code>jsmol</code> view returns proteins with one peptidic sequence,
+          ≥1 helix and 1 sheet, and a small ligand.
+        </p>
+        <a class="example" href="/view/jsmol?include_docs=true"
+          >/view/jsmol?include_docs=true</a
+        >
+      </div>
 
-    Example: <a href='/pdb/5ABY/5ABY.pdb'>/pdb/5ABY/5ABY.pdb</a>
-
-    <h2>/assembly/101D/101D.pdb1</h2>
-
-    Returns a text file containing the pdb of the assembly.<br>
-
-    Example: <a href='/assembly/101D/101D.pdb1'>/assembly/101D/101D.pdb1</a>
-
-
-    <h2>/assembly/101D/100x100.png</h2>
-
-    Returns small images of the assembly.<br>
-    There are 3 possibilities:
-    <ul>
-        <li>100x100.png</li>
-        <li>200x200.png</li>
-        <li>400x400.png</li>
-    </ul>
-
-    Example: <a href='/assembly/101D/400x400.png'>/assembly/101D/400x400.png</a>
-
-    <h2>/view/</h2>
-
-    Allows to query a specific couchdb view.
-
-    This view allows to select a list of protein that has only one peptidic sequence,
-    at least one helix and one beta-sheet and a small molecule.
-
-    <a href="/view/jsmol?include_docs=true">/view/jsmol?include_docs=true</a>
-
+      <div class="endpoint">
+        <code class="path">GET /stats/&lt;view-name&gt;</code>
+        <p>
+          Aggregated statistics in <code>_design/stats</code>. Use
+          <code>?group=true</code> to break results down by key. Available
+          views: <code>byYear</code>, <code>byExperiment</code>.
+        </p>
+        <a class="example" href="/stats/byYear?group=true"
+          >/stats/byYear?group=true</a
+        >
+      </div>
+    </div>
 
     <script>
-        getStats();
+      const formatInteger = (n) => new Intl.NumberFormat('en-US').format(n);
 
-        async function getStats() {
-            let pdb = await (await fetch(document.origin + '/pdb/')).json();
-            let assembly = await (await fetch(document.origin + '/assembly/')).json();
-            console.log(pdb);
-            let stats = `
-                <table>
-                    <tr>
-                        <th>Kind</th>
-                        <th>Number of entries</th>
-                        <th>Disk size</th>
-                    </tr>
-                    <tr>
-                        <td>PDB</td>
-                        <td>${pdb.doc_count}</td>
-                        <td>${pdb.disk_size}</td>
-                    </tr>
-                    <tr>
-                        <td>PDB assembly</td>
-                        <td>${assembly.doc_count}</td>
-                        <td>${assembly.disk_size}</td>
-                    </tr>
-                </table>
-            `;
-
-            document.getElementById('stats').innerHTML = stats;
+      function formatBytes(bytes) {
+        if (!Number.isFinite(bytes) || bytes <= 0) return '–';
+        const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        let value = bytes;
+        let unitIndex = 0;
+        while (value >= 1024 && unitIndex < units.length - 1) {
+          value /= 1024;
+          unitIndex += 1;
         }
+        const decimals = value >= 100 ? 0 : 1;
+        return `${value.toFixed(decimals)} ${units[unitIndex]}`;
+      }
 
+      function getDiskSize(info) {
+        return info.disk_size ?? info.sizes?.file ?? 0;
+      }
 
+      function renderOverview(pdb, assembly) {
+        const pdbCount = pdb.doc_count ?? 0;
+        const assemblyCount = assembly.doc_count ?? 0;
+        const pdbDisk = getDiskSize(pdb);
+        const assemblyDisk = getDiskSize(assembly);
+        document.getElementById('overview').innerHTML = `
+          <div class="stat-card">
+            <div class="label">PDB entries</div>
+            <div class="value">${formatInteger(pdbCount)}</div>
+            <div class="sub">${formatBytes(pdbDisk)} on disk</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Bio-assembly entries</div>
+            <div class="value">${formatInteger(assemblyCount)}</div>
+            <div class="sub">${formatBytes(assemblyDisk)} on disk</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Total documents</div>
+            <div class="value">${formatInteger(pdbCount + assemblyCount)}</div>
+            <div class="sub">across both databases</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Total disk</div>
+            <div class="value">${formatBytes(pdbDisk + assemblyDisk)}</div>
+            <div class="sub">attachments + indices</div>
+          </div>
+        `;
+      }
 
+      function renderBars(elementId, rows, options = {}) {
+        const { keyClass = 'key-narrow', formatKey = (key) => key } = options;
+        const target = document.getElementById(elementId);
+        if (rows.length === 0) {
+          target.innerHTML = '<p class="placeholder">No data.</p>';
+          return;
+        }
+        const max = rows.reduce((acc, row) => Math.max(acc, row.value), 0) || 1;
+        target.innerHTML = rows
+          .map((row) => {
+            const widthPercent = (row.value / max) * 100;
+            return `<div class="bar-row">
+              <span class="key ${keyClass}">${formatKey(row.key)}</span>
+              <span class="bar-track"><span class="bar" style="width:${widthPercent}%"></span></span>
+              <span class="count">${formatInteger(row.value)}</span>
+            </div>`;
+          })
+          .join('');
+      }
 
+      async function fetchJson(url) {
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(`${response.status} ${response.statusText}`);
+        }
+        return response.json();
+      }
+
+      function showError(elementId, message) {
+        document.getElementById(elementId).innerHTML =
+          `<p class="placeholder">${message}</p>`;
+      }
+
+      async function loadOverview() {
+        try {
+          const [pdb, assembly] = await Promise.all([
+            fetchJson('/pdb/'),
+            fetchJson('/assembly/'),
+          ]);
+          renderOverview(pdb, assembly);
+        } catch (error) {
+          showError('overview', `Could not load database stats: ${error.message}`);
+        }
+      }
+
+      async function loadByYear() {
+        try {
+          const data = await fetchJson('/stats/byYear?group=true');
+          const rows = (data.rows ?? [])
+            .filter((row) => Number.isFinite(row.key) && row.key >= 1970)
+            .toSorted((left, right) => left.key - right.key);
+          renderBars('byYear', rows);
+        } catch (error) {
+          showError('byYear', `Could not load year breakdown: ${error.message}`);
+        }
+      }
+
+      async function loadByExperiment() {
+        try {
+          const data = await fetchJson('/stats/byExperiment?group=true');
+          const rows = (data.rows ?? [])
+            .filter((row) => row.key)
+            .toSorted((left, right) => right.value - left.value)
+            .slice(0, 8);
+          renderBars('byExperiment', rows, { keyClass: 'key-wide' });
+        } catch (error) {
+          showError(
+            'byExperiment',
+            `Could not load experiment breakdown: ${error.message}`,
+          );
+        }
+      }
+
+      loadOverview();
+      loadByYear();
+      loadByExperiment();
     </script>
-
-</body>
-
+  </body>
 </html>

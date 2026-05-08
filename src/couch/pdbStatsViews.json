@@ -1,0 +1,13 @@
+{
+  "_id": "_design/stats",
+  "views": {
+    "byYear": {
+      "map": "function (doc) { if (typeof doc.year === 'number' && doc.year > 0) emit(doc.year, 1); }",
+      "reduce": "_count"
+    },
+    "byExperiment": {
+      "map": "function (doc) { if (doc.experiment) emit(doc.experiment, 1); }",
+      "reduce": "_count"
+    }
+  }
+}
