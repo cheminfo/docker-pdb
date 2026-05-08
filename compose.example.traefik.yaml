@@ -79,6 +79,33 @@ services:
         max-file: '3'
     command: npm run cron
 
+  pdb-api:
+    # Lightweight Fastify server backing the substructure-search API. Reads
+    # the SQLite ligands database written by node-pdb-sync; on first start
+    # it also seeds the database from the wwPDB Chemical Component
+    # Dictionary if the `ligands` table is empty.
+    # Use the released image by default. To build locally instead, run:
+    #   docker compose up -d --build
+    image: ghcr.io/cheminfo/pdb-quickview:latest
+    build: .
+    volumes:
+      - ./data:/app/data
+    env_file:
+      - .env
+    environment:
+      DEBUG: '*'
+      PORT: '3000'
+    restart: unless-stopped
+    pids_limit: 256
+    ulimits:
+      core: 0
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+    command: sh -c "npm run seed-ccd; npm run api"
+
 networks:
   traefik:
     external: true

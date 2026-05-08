@@ -9,10 +9,14 @@ mkdir -p \
   /app/data/pdb \
   /app/data/pdb-assembly \
   /app/data/logs/pdb \
-  /app/data/logs/bioAssembly
+  /app/data/logs/bioAssembly \
+  /app/data/sqlite3 \
+  /app/data/ccd
 chown -R app:app \
   /app/data/pdb \
   /app/data/pdb-assembly \
-  /app/data/logs
+  /app/data/logs \
+  /app/data/sqlite3 \
+  /app/data/ccd
 
 exec gosu app "$@"
