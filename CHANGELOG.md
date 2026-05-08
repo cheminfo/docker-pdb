@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.1.0](https://github.com/cheminfo/docker-pdb/compare/v1.0.1...v1.1.0) (2026-05-08)
+
+
+### Features
+
+* ingest pdb files into couchdb as soon as they finish downloading ([9ce19cc](https://github.com/cheminfo/docker-pdb/commit/9ce19ccbb04ea5a456ffab7fdc97f840feb852a8))
+
+
+### Bug Fixes
+
+* **compose:** raise couchdb pids_limit to 4096 ([0146598](https://github.com/cheminfo/docker-pdb/commit/01465989045afb914df35a4a5d1ccc1fcd881e24))
+* **docker:** chown bind-mounted /app/data via gosu entrypoint ([fe76c01](https://github.com/cheminfo/docker-pdb/commit/fe76c01778e602b8724a99fb13f3b0fa8555ef3b))
+* keep cron loop alive when an update cycle throws ([67a48bd](https://github.com/cheminfo/docker-pdb/commit/67a48bd1cfb0d19a64f0a37e76c4f3f8f09fc2c5))
+
 ## [1.0.1](https://github.com/cheminfo/docker-pdb/compare/v1.0.0...v1.0.1) (2026-05-08)
 
 
