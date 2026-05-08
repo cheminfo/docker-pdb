@@ -46,7 +46,7 @@ services:
     env_file:
       - .env
     restart: unless-stopped
-    pids_limit: 256
+    pids_limit: 4096
     ulimits:
       core: 0
     logging:
