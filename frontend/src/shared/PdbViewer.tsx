@@ -97,6 +97,7 @@ interface MolScriptApi {
   StructureSelection: {
     toLociWithSourceUnits: (selection: unknown) => unknown;
   };
+  builder: unknown;
 }
 
 /**
@@ -163,13 +164,19 @@ const PdbViewer = forwardRef<PdbViewerHandle, PdbViewerProps>(
 
       async function initViewer() {
         try {
-          const [{ Viewer }, { PluginConfig }, scriptModule, structureModule] =
-            await Promise.all([
-              import('molstar/lib/apps/viewer/app.js'),
-              import('molstar/lib/mol-plugin/config.js'),
-              import('molstar/lib/mol-script/script.js'),
-              import('molstar/lib/mol-model/structure.js'),
-            ]);
+          const [
+            { Viewer },
+            { PluginConfig },
+            scriptModule,
+            structureModule,
+            builderModule,
+          ] = await Promise.all([
+            import('molstar/lib/apps/viewer/app.js'),
+            import('molstar/lib/mol-plugin/config.js'),
+            import('molstar/lib/mol-script/script.js'),
+            import('molstar/lib/mol-model/structure.js'),
+            import('molstar/lib/mol-script/language/builder.js'),
+          ]);
           if (disposed || !container) return;
 
           const viewer = (await Viewer.create(container, {
@@ -207,6 +214,7 @@ const PdbViewer = forwardRef<PdbViewerHandle, PdbViewerProps>(
             Script: scriptModule.Script as MolScriptApi['Script'],
             StructureSelection:
               structureModule.StructureSelection as MolScriptApi['StructureSelection'],
+            builder: builderModule.MolScriptBuilder,
           };
           setViewerReady(true);
         } catch (error) {
