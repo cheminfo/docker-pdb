@@ -42,7 +42,7 @@ services:
   node-pdb-sync:
     # Use the released image by default. To build locally instead, run:
     #   docker compose up -d --build
-    image: ghcr.io/cheminfo/docker-pdb:latest
+    image: ghcr.io/cheminfo/pdb-quickview:latest
     build: .
     depends_on:
       - couchdb

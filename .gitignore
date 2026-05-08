@@ -4,4 +4,6 @@
 compose.yaml
 coverage/
 data/
+frontend/playwright-report/
+frontend/test-results/
 node_modules/

@@ -118,8 +118,15 @@ async function checkViews(couch, dbName, filename) {
   );
   const database = couch.use(dbName);
   try {
-    await database.get(views._id);
-    debug(`Found document: ${views._id}`);
+    const existing = await database.get(views._id);
+    if (
+      JSON.stringify(existing.views ?? {}) === JSON.stringify(views.views ?? {})
+    ) {
+      debug(`Found document: ${views._id} (up to date)`);
+      return;
+    }
+    await database.insert({ ...views, _rev: existing._rev });
+    debug(`Document: ${views._id} updated`);
   } catch {
     await database.insert(views);
     debug(`Document: ${views._id} created`);

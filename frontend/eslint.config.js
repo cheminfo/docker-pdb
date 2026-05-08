@@ -3,7 +3,13 @@ import react from 'eslint-config-cheminfo-react';
 import typescript from 'eslint-config-cheminfo-typescript';
 
 export default defineConfig([
-  globalIgnores(['coverage']),
+  globalIgnores([
+    'coverage',
+    'e2e',
+    'playwright.config.ts',
+    'playwright-report',
+    'test-results',
+  ]),
   typescript,
   react,
 ]);

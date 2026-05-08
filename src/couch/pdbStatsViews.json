@@ -8,6 +8,26 @@
     "byExperiment": {
       "map": "function (doc) { if (doc.experiment) emit(doc.experiment, 1); }",
       "reduce": "_count"
+    },
+    "helicesStats": {
+      "map": "function (doc) { if (Array.isArray(doc.helices)) emit(null, doc.helices.length); }",
+      "reduce": "_stats"
+    },
+    "sheetsStats": {
+      "map": "function (doc) { if (Array.isArray(doc.sheets)) emit(null, doc.sheets.length); }",
+      "reduce": "_stats"
+    },
+    "ligandsStats": {
+      "map": "function (doc) { if (Array.isArray(doc.formula)) { var n = 0; for (var i = 0; i < doc.formula.length; i++) { if (doc.formula[i] && doc.formula[i].label !== 'HOH') n++; } emit(null, n); } }",
+      "reduce": "_stats"
+    },
+    "residuesStats": {
+      "map": "function (doc) { if (typeof doc.nbResidues === 'number') emit(null, doc.nbResidues); }",
+      "reduce": "_stats"
+    },
+    "yearStats": {
+      "map": "function (doc) { if (typeof doc.year === 'number' && doc.year > 0) emit(null, doc.year); }",
+      "reduce": "_stats"
     }
   }
 }

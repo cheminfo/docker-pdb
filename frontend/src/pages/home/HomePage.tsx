@@ -9,7 +9,6 @@ import {
 import type { AsyncState } from '../../shared/useAsync.ts';
 import { useAsync } from '../../shared/useAsync.ts';
 
-import EndpointList from './EndpointList.tsx';
 import ExperimentChart from './ExperimentChart.tsx';
 import StatsOverview from './StatsOverview.tsx';
 import YearChart from './YearChart.tsx';
@@ -48,8 +47,8 @@ function Panel<TData>({
 }
 
 /**
- * Top-level page rendered at `/`: header, statistics grid, charts, and API
- * endpoint reference.
+ * Top-level page rendered at `/`: project headline, statistics grid, and the
+ * year + experimental-method charts.
  * @returns Home page React element.
  */
 export default function HomePage() {
@@ -60,11 +59,13 @@ export default function HomePage() {
   return (
     <div className="container">
       <header>
-        <h1>PDB web service</h1>
+        <h1>
+          PDB <em>quick</em> View
+        </h1>
         <p>
-          HTTP access to the wwPDB tree — asymmetric units, biological
-          assemblies, parsed properties, and rendered images — backed by
-          CouchDB.
+          A self-hosted, fast read-only mirror of the worldwide Protein Data
+          Bank — every entry parsed once into CouchDB and rendered once into
+          PyMol thumbnails so structure metadata loads instantly.
         </p>
       </header>
 
@@ -95,9 +96,6 @@ export default function HomePage() {
           {(data) => <ExperimentChart data={data} />}
         </Panel>
       </div>
-
-      <h2>API endpoints</h2>
-      <EndpointList />
     </div>
   );
 }

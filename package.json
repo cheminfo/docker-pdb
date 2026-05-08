@@ -1,20 +1,22 @@
 {
-  "name": "docker-pdb",
+  "name": "pdb-quickview",
   "version": "1.1.1",
-  "description": "Sync of the official PDB database into CouchDB. The database is searchable for properties like number of residues, residue percentages, molecular weight, etc.",
+  "description": "Searchable mirror of the wwPDB with precomputed PyMol thumbnails, served from CouchDB behind nginx.",
   "type": "module",
   "private": true,
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/cheminfo/docker-pdb.git"
+    "url": "git+https://github.com/cheminfo/pdb-quickview.git"
   },
-  "homepage": "https://github.com/cheminfo/docker-pdb#readme",
+  "homepage": "https://github.com/cheminfo/pdb-quickview#readme",
   "bugs": {
-    "url": "https://github.com/cheminfo/docker-pdb/issues"
+    "url": "https://github.com/cheminfo/pdb-quickview/issues"
   },
   "keywords": [
     "pdb",
     "pdb-parser",
+    "pymol",
+    "thumbnails",
     "couchdb"
   ],
   "author": "Daniel Kostro",

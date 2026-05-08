@@ -1,20 +1,27 @@
 {
-  "name": "docker-pdb-frontend",
+  "name": "pdb-quickview-frontend",
   "version": "0.0.0",
-  "description": "React + Vite homepage and statistics dashboard for the docker-pdb service.",
+  "description": "React + Vite homepage and statistics dashboard for pdb-quickview.",
   "type": "module",
   "private": true,
   "dependencies": {
+    "@codemirror/lang-json": "^6.0.2",
     "@nivo/bar": "^0.99.0",
     "@nivo/core": "^0.99.0",
+    "@uiw/react-codemirror": "^4.25.9",
+    "molstar": "^5.9.0",
     "react": "^19.2.6",
-    "react-dom": "^19.2.6"
+    "react-dom": "^19.2.6",
+    "react-mf": "^3.1.1",
+    "react-router": "^7.15.0",
+    "smart-array-filter": "^5.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
     "@types/node": "^25.6.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^6.0.1",
+    "@vitejs/plugin-react": "^5.2.0",
     "@zakodium/tsconfig": "^1.0.5",
     "eslint": "^9.39.4",
     "eslint-config-cheminfo-react": "^20.0.1",
@@ -22,7 +29,7 @@
     "prettier": "^3.8.3",
     "rimraf": "^6.0.1",
     "typescript": "^5.9.3",
-    "vite": "^8.0.11"
+    "vite": "^7.3.3"
   },
   "scripts": {
     "build": "npm run check-types && vite build",
@@ -34,6 +41,8 @@
     "preview": "vite preview",
     "prettier": "prettier --check src",
     "prettier-write": "prettier --write src",
-    "test": "npm run check-types && npm run eslint && npm run prettier"
+    "test": "npm run check-types && npm run eslint && npm run prettier",
+    "test-e2e": "playwright test",
+    "test-e2e-ui": "playwright test --ui"
   }
 }
