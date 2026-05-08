@@ -7,6 +7,7 @@ import createDebug from 'debug';
 import Nano from 'nano';
 
 import getConfig from './config.js';
+import { replacePdbLigands } from './db/insertPdbLigands.js';
 import { parse as parsePdb } from './util/pdbParser.js';
 import pymol from './util/pymol.js';
 
@@ -40,6 +41,15 @@ export async function processPdb(filename) {
     },
   };
   await saveToCouchDB(pdbEntry, nano.db.use(config.asymetrical.couch.database));
+
+  // Mirror non-water ligand codes into the SQLite link table so the
+  // substructure-search API can resolve a ligand back to its PDBs.
+  // CouchDB remains the source of truth for the PDB itself.
+  try {
+    await replacePdbLigands(id, pdbEntry.formula || []);
+  } catch (error) {
+    debug('Failed to update pdb_ligands for', id, error);
+  }
 }
 
 export async function processPdbs(files) {
