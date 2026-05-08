@@ -1,0 +1,39 @@
+{
+  "name": "docker-pdb-frontend",
+  "version": "0.0.0",
+  "description": "React + Vite homepage and statistics dashboard for the docker-pdb service.",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "@nivo/bar": "^0.99.0",
+    "@nivo/core": "^0.99.0",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.2",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "@zakodium/tsconfig": "^1.0.5",
+    "eslint": "^9.39.4",
+    "eslint-config-cheminfo-react": "^20.0.1",
+    "eslint-config-cheminfo-typescript": "^22.0.0",
+    "prettier": "^3.8.3",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.9.3",
+    "vite": "^8.0.11"
+  },
+  "scripts": {
+    "build": "npm run check-types && vite build",
+    "check-types": "tsc --noEmit",
+    "clean": "rimraf ../nginx/www/assets ../nginx/www/index.html",
+    "dev": "vite",
+    "eslint": "eslint src",
+    "eslint-fix": "eslint src --fix",
+    "preview": "vite preview",
+    "prettier": "prettier --check src",
+    "prettier-write": "prettier --write src",
+    "test": "npm run check-types && npm run eslint && npm run prettier"
+  }
+}

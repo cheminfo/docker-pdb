@@ -5,10 +5,15 @@ properties like number of residues, residue percentages, molecular weight, etc.
 
 The stack is three containers wired together by `docker compose`:
 
-- **nginx-proxy** — public read-only entry point (`/pdb`, `/assembly`, `/view`)
+- **nginx-proxy** — public read-only entry point (`/pdb`, `/assembly`, `/view`,
+  `/stats`) and serves the homepage SPA from `nginx/www/`
 - **couchdb** — stores the parsed PDB documents and rendered images
 - **node-pdb-sync** — periodically `rsync`s the wwPDB tree, parses each file,
   generates PyMol images, and writes everything to CouchDB
+
+The homepage is a small React + Vite + nivo dashboard built from
+[`frontend/`](./frontend) into [`nginx/www/`](./nginx/www) (bind-mounted into
+`nginx-proxy`).
 
 ## Deployment
 
@@ -84,6 +89,8 @@ The first sync downloads the entire wwPDB tree and can take **days**.
 
 ## Local development
 
+### Backend (`src/`)
+
 ```sh
 npm install
 npm run dev    # node --watch src/cron.js, with .env auto-loaded
@@ -96,6 +103,28 @@ the full pipeline. Tests that depend on `pymol` are skipped unless
 ```sh
 npm run test       # tests + lint + format
 npm run test-only  # vitest with coverage
+```
+
+### Frontend (`frontend/`)
+
+```sh
+cd frontend
+npm install
+npm run dev        # vite dev server, proxies /pdb /assembly /view /stats
+                   # to PDB_API_URL (default http://localhost:12345)
+npm run build      # type-check + vite build → ../nginx/www
+npm run test       # check-types + eslint + prettier
+```
+
+`npm run build` writes to `nginx/www/` (committed to git). After any change
+under `frontend/src/`, rebuild and commit both the source change and the
+updated assets so a `git pull && docker compose up -d` on the deploy host
+picks up the new homepage without needing Node installed.
+
+To point the dev server at a remote stack instead of `localhost:12345`:
+
+```sh
+PDB_API_URL=https://pdb.cheminfo.org npm run dev
 ```
 
 ## SELinux
