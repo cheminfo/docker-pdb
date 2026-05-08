@@ -1,13 +1,14 @@
-import { useMemo, useRef, useState } from 'react';
-import { filter as smartFilter } from 'smart-array-filter';
+import { useCallback, useMemo, useRef, useState } from 'react';
 
 import {
-  fetchJsmolList,
+  fetchByExperiment,
   fetchPdbText,
   fetchRangeStats,
+  findDocuments,
 } from '../../shared/api/client.ts';
 import type { PdbDoc } from '../../shared/api/types.ts';
 import { useAsync } from '../../shared/useAsync.ts';
+import { useDebouncedValue } from '../../shared/useDebouncedValue.ts';
 
 import FilterPanel from './FilterPanel.tsx';
 import HelicesTable from './HelicesTable.tsx';
@@ -16,11 +17,10 @@ import PdbHeader from './PdbHeader.tsx';
 import PdbTable from './PdbTable.tsx';
 import type { PdbViewerHandle } from './PdbViewer.tsx';
 import PdbViewer from './PdbViewer.tsx';
-import SearchBox from './SearchBox.tsx';
 import SheetsTable from './SheetsTable.tsx';
 import ViewerControls from './ViewerControls.tsx';
 import type { FilterState } from './filters.ts';
-import { applyFilters, emptyFilterState } from './filters.ts';
+import { emptyFilterState, filtersToFindParams } from './filters.ts';
 import type {
   BackgroundName,
   ColorName,
@@ -33,90 +33,109 @@ import {
 } from './viewerOptions.ts';
 
 /**
- * Page mounted at `/browse`. Loads the curated `_view/jsmol` set, lets the
- * user filter it client-side with smart-array-filter, and shows the active
- * entry's 3D structure (Mol*), header, ligands, helices, and sheets.
+ * Page mounted at `/browse`. Drives every list update from a single
+ * server-side Mango (`/find`) query: filter sidebar + free-text query →
+ * `findDocuments`. Stats and method counts come from CouchDB reduce views,
+ * so the page never has to load the whole database into memory.
  * @returns Browse page React element.
  */
 export default function BrowsePage() {
-  const list = useAsync(fetchJsmolList);
   const stats = useAsync(fetchRangeStats);
+  const methodView = useAsync(fetchByExperiment);
+
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState<FilterState>(emptyFilterState);
   const [pickedId, setPickedId] = useState<string | undefined>(undefined);
 
-  const docs: PdbDoc[] = useMemo(
-    () => list.data?.rows.map((row) => row.doc) ?? [],
-    [list.data],
+  // Debounce the inputs so the keyword box doesn't fire one Mango query per
+  // keystroke and slider drags are smooth.
+  const debouncedQuery = useDebouncedValue(query, 250);
+  const debouncedFilters = useDebouncedValue(filters, 250);
+
+  const findParams = useMemo(
+    () => filtersToFindParams(debouncedFilters, debouncedQuery),
+    [debouncedFilters, debouncedQuery],
   );
 
-  const structurallyFiltered = useMemo(
-    () => applyFilters(docs, filters),
-    [docs, filters],
+  const findTask = useCallback(
+    () => findDocuments<PdbDoc>(findParams),
+    [findParams],
+  );
+  const findResult = useAsync(findTask);
+
+  const docs = findResult.status === 'success' ? findResult.data.docs : [];
+  const totalCount = useMemo(
+    () =>
+      methodView.status === 'success'
+        ? methodView.data.rows.reduce((sum, row) => sum + row.value, 0)
+        : 0,
+    [methodView],
   );
 
-  const filteredDocs = useMemo(() => {
-    if (!query.trim()) return structurallyFiltered;
-    return smartFilter(structurallyFiltered, { keywords: query });
-  }, [structurallyFiltered, query]);
+  const methodCounts = useMemo<Array<[string, number]>>(
+    () =>
+      methodView.status === 'success'
+        ? methodView.data.rows
+            .map((row) => [row.key, row.value] as [string, number])
+            .toSorted(([, a], [, b]) => b - a)
+        : [],
+    [methodView],
+  );
 
-  // Resolve the effective selection during render: prefer the user's last
-  // manual pick when it's still in the filtered set, otherwise fall back to
-  // the first match. Storing only the manual pick avoids `useEffect` dances
-  // to keep the selection in sync with the filter result.
-  const selectedDoc =
-    filteredDocs.find((doc) => doc._id === pickedId) ?? filteredDocs[0];
+  // Resolve the active selection during render so we never need a `useEffect`
+  // to keep `pickedId` in sync with the filtered list.
+  const selectedDoc = docs.find((doc) => doc._id === pickedId) ?? docs[0];
   const selectedId = selectedDoc?._id;
 
   return (
     <div className="browse-container">
-      {list.status === 'loading' && (
-        <p className="placeholder">Loading curated PDB list…</p>
-      )}
-      {list.status === 'error' && (
-        <p className="placeholder">
-          Could not load PDB list: {list.error.message}
-        </p>
-      )}
-      {list.status === 'success' && (
-        <div className="browse-grid">
-          <FilterPanel
-            docs={docs}
-            stats={stats.status === 'success' ? stats.data : undefined}
-            filters={filters}
-            onChange={setFilters}
-          />
-          <div className="browse-list-col">
-            <SearchBox
-              value={query}
-              onChange={setQuery}
-              matchCount={filteredDocs.length}
-              totalCount={docs.length}
-            />
-            <div className="browse-list panel">
+      <div className="browse-grid">
+        <FilterPanel
+          query={query}
+          onQueryChange={setQuery}
+          matchCount={docs.length}
+          totalCount={totalCount}
+          methodCounts={methodCounts}
+          stats={stats.status === 'success' ? stats.data : undefined}
+          filters={filters}
+          onChange={setFilters}
+        />
+        <div className="browse-list-col">
+          <div className="browse-list panel">
+            {findResult.status === 'loading' && (
+              <p className="placeholder pdb-table-empty">Searching…</p>
+            )}
+            {findResult.status === 'error' && (
+              <p className="placeholder pdb-table-empty">
+                Search failed: {findResult.error.message}
+              </p>
+            )}
+            {findResult.status === 'success' && (
               <PdbTable
-                rows={filteredDocs}
+                rows={docs}
                 selectedId={selectedId}
                 onSelect={setPickedId}
               />
-            </div>
+            )}
           </div>
-          {selectedDoc ? (
-            <SelectedEntry doc={selectedDoc} />
-          ) : (
-            <>
-              <div className="browse-main">
-                <div className="panel browse-entry-header">
-                  <p className="placeholder">
-                    Select an entry on the left to load its 3D structure.
-                  </p>
-                </div>
-              </div>
-              <div className="panel browse-side" />
-            </>
-          )}
         </div>
-      )}
+        {selectedDoc ? (
+          <SelectedEntry doc={selectedDoc} />
+        ) : (
+          <>
+            <div className="browse-main">
+              <div className="panel browse-entry-header">
+                <p className="placeholder">
+                  {findResult.status === 'success'
+                    ? 'No entries match the current filter.'
+                    : 'Loading…'}
+                </p>
+              </div>
+            </div>
+            <div className="panel browse-side" />
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -126,15 +145,15 @@ interface SelectedEntryProps {
 }
 
 /**
- * Centre column (entry header + viewer + PDB header) and right column (side
- * tables) of the currently-selected entry, rendered as siblings of the list
- * inside `.browse-grid`.
+ * Centre column (entry header + viewer + PDB header) and right column
+ * (side tables) of the currently-selected entry, rendered as siblings of
+ * the list inside `.browse-grid`.
  * @param props - Component props.
  * @param props.doc - The currently-selected PDB document.
  * @returns Fragment with the main column and the side column.
  */
 function SelectedEntry({ doc }: SelectedEntryProps) {
-  const fetchTextForId = useMemo(() => () => fetchPdbText(doc._id), [doc._id]);
+  const fetchTextForId = useCallback(() => fetchPdbText(doc._id), [doc._id]);
   const pdbText = useAsync(fetchTextForId);
   const [copied, setCopied] = useState(false);
   const [representation, setRepresentation] = useState<RepresentationName>(

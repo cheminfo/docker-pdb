@@ -1,51 +1,57 @@
 import { useMemo } from 'react';
 
 import type { RangeStats } from '../../shared/api/client.ts';
-import type { PdbDoc } from '../../shared/api/types.ts';
 
 import DualRangeSlider from './DualRangeSlider.tsx';
+import SearchBox from './SearchBox.tsx';
 import type { FilterBounds, FilterState, RangeFilter } from './filters.ts';
-import { computeBounds, emptyFilterState, methodCounts } from './filters.ts';
+import { emptyFilterState } from './filters.ts';
 
 interface FilterPanelProps {
-  /** All documents (used to compute available methods and counts). */
-  docs: PdbDoc[];
-  /**
-   * DB-wide min/max statistics fetched from CouchDB `_stats` views. When
-   * present, these define the slider bounds; otherwise the component falls
-   * back to extents computed from `docs`.
-   */
+  /** Free-text query (controlled by the parent). */
+  query: string;
+  /** Called when the user types into the search box. */
+  onQueryChange: (value: string) => void;
+  /** Total number of results matching the current filter+query. */
+  matchCount: number;
+  /** Total number of documents in the database (for the "N / total" hint). */
+  totalCount: number;
+  /** Methods present in the database, with the doc count for each. */
+  methodCounts: Array<[string, number]>;
+  /** DB-wide stats from CouchDB used to size the slider tracks. */
   stats?: RangeStats;
   /** Current filter state. */
   filters: FilterState;
-  /** Called with a new filter state when the user changes any control. */
+  /** Called whenever the user changes any filter control. */
   onChange: (filters: FilterState) => void;
 }
 
 /**
- * Filter sidebar (leftmost browse column). Lets the user narrow the PDB
- * list by experimental method (multi-select) and by numeric ranges on
- * helices, sheets, ligands, residues, and year.
+ * Filter sidebar (leftmost browse column). Hosts the keyword search input,
+ * a multi-select on experimental method, and dual-range sliders for the
+ * numeric filters. The state lives in the parent so all controls drive a
+ * single Mango query.
  * @param props - Component props.
- * @param props.docs - All documents — used to derive method counts.
- * @param props.stats - DB-wide min/max statistics from CouchDB; defines slider bounds when present.
+ * @param props.query - Current free-text query.
+ * @param props.onQueryChange - Called when the search input changes.
+ * @param props.matchCount - Number of results currently matching.
+ * @param props.totalCount - Total entries in the database.
+ * @param props.methodCounts - DB-wide tally of `experiment` values.
+ * @param props.stats - DB-wide numeric stats; defines slider bounds.
  * @param props.filters - Current filter state.
- * @param props.onChange - Called whenever the user changes any control.
+ * @param props.onChange - Called whenever a filter control changes.
  * @returns Filter panel React element.
  */
 export default function FilterPanel({
-  docs,
+  query,
+  onQueryChange,
+  matchCount,
+  totalCount,
+  methodCounts,
   stats,
   filters,
   onChange,
 }: FilterPanelProps) {
-  const methods = useMemo(() => {
-    const counts = methodCounts(docs);
-    return [...counts.entries()].toSorted(
-      ([, leftCount], [, rightCount]) => rightCount - leftCount,
-    );
-  }, [docs]);
-
   const bounds = useMemo<FilterBounds>(() => {
     if (stats) {
       return {
@@ -56,8 +62,14 @@ export default function FilterPanel({
         year: { min: stats.year.min, max: stats.year.max },
       };
     }
-    return computeBounds(docs);
-  }, [docs, stats]);
+    return {
+      helices: { min: 0, max: 0 },
+      sheets: { min: 0, max: 0 },
+      ligands: { min: 0, max: 0 },
+      residues: { min: 0, max: 0 },
+      year: { min: 1970, max: new Date().getFullYear() },
+    };
+  }, [stats]);
 
   function toggleMethod(method: string) {
     const next = new Set(filters.methods);
@@ -77,6 +89,7 @@ export default function FilterPanel({
   }
 
   const isActive =
+    query.trim() !== '' ||
     filters.methods.size > 0 ||
     hasRange(filters.helices) ||
     hasRange(filters.sheets) ||
@@ -84,27 +97,35 @@ export default function FilterPanel({
     hasRange(filters.residues) ||
     hasRange(filters.year);
 
+  function reset() {
+    onQueryChange('');
+    onChange(emptyFilterState);
+  }
+
   return (
     <div className="filter-panel panel">
       <div className="filter-panel-header">
         <h3>Filters</h3>
         {isActive && (
-          <button
-            type="button"
-            className="filter-reset"
-            onClick={() => onChange(emptyFilterState)}
-          >
+          <button type="button" className="filter-reset" onClick={reset}>
             Reset
           </button>
         )}
       </div>
 
+      <SearchBox
+        value={query}
+        onChange={onQueryChange}
+        matchCount={matchCount}
+        totalCount={totalCount}
+      />
+
       <div className="filter-group">
         <div className="filter-group-label">Method</div>
-        {methods.length === 0 ? (
+        {methodCounts.length === 0 ? (
           <p className="placeholder">No method data.</p>
         ) : (
-          methods.map(([method, count]) => (
+          methodCounts.map(([method, count]) => (
             <label key={method} className="filter-checkbox">
               <input
                 type="checkbox"
@@ -162,9 +183,7 @@ interface RangeRowProps {
 }
 
 /**
- * A range filter row: dual-thumb slider on top, displaying the current
- * selected min/max values, plus a pair of numeric inputs underneath for
- * exact entry. The slider track spans the data-derived `bounds`.
+ * A range filter row: dual-thumb slider + numeric inputs for exact entry.
  * @param props - Component props.
  * @param props.label - Label shown above the controls.
  * @param props.range - Current selected range.

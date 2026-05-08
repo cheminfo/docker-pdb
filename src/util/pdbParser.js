@@ -344,6 +344,13 @@ function addStats() {
   result.percentageAA = percentageAA;
   result.nbResidues = totalResidues;
   result.nbChains = totalChains;
+  result.nbHelices = helices.length;
+  result.nbSheets = sheets.length;
+  let nbLigands = 0;
+  for (const entry of result.formula) {
+    if (entry.label !== 'HOH') nbLigands++;
+  }
+  result.nbLigands = nbLigands;
 }
 
 export default { parse };

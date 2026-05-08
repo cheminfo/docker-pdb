@@ -120,12 +120,28 @@ The first sync downloads the entire wwPDB tree and renders every thumbnail
 
 ```sh
 npm install
-npm run dev    # node --watch src/cron.js, with .env auto-loaded
+npm run dev        # bring up CouchDB + seed a few local PDBs
+npm run dev:down   # stop the dev CouchDB container
 ```
 
-You will need `pymol`, `graphicsmagick`, and `rsync` installed locally to
-run the full pipeline. Tests that depend on `pymol` are skipped unless
-`HAS_PYMOL=1` is set.
+`npm run dev` brings up a minimal CouchDB on `127.0.0.1:5984` via
+[`compose.dev.yaml`](./compose.dev.yaml), then runs
+[`src/dev.js`](./src/dev.js) under `node --watch`: it initializes the
+databases (`pdb`, `pdb-bio-assembly`, design docs, public-read security)
+and ingests up to `DEV_SEED_LIMIT` (default 20) `.ent.gz` files already
+present under `data/pdb/`, so the API is queryable in seconds:
+
+```sh
+curl http://127.0.0.1:5984/pdb/_all_docs
+curl http://127.0.0.1:5984/pdb/100D
+```
+
+Editing any file under `src/` re-runs the seed (idempotent — existing
+documents are revved). The full rsync pipeline and pymol-rendered
+biological assemblies are skipped; if you need them locally you will need
+`pymol`, `graphicsmagick`, and `rsync`, and should run `npm run cron` (or
+`npm run rebuild` / `npm run update`) instead. Tests that depend on
+`pymol` are skipped unless `HAS_PYMOL=1` is set.
 
 ```sh
 npm run test       # tests + lint + format

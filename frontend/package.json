@@ -13,8 +13,7 @@
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "react-mf": "^3.1.1",
-    "react-router": "^7.15.0",
-    "smart-array-filter": "^5.0.0"
+    "react-router": "^7.15.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",

@@ -1,3 +1,4 @@
+import type { FindParams } from '../../shared/api/client.ts';
 import type { PdbDoc } from '../../shared/api/types.ts';
 
 /** Numeric range filter with optional lower / upper bounds. */
@@ -123,4 +124,31 @@ export function computeBounds(docs: PdbDoc[]): FilterBounds {
 function extent(values: number[]): { min: number; max: number } {
   if (values.length === 0) return { min: 0, max: 0 };
   return { min: Math.min(...values), max: Math.max(...values) };
+}
+
+/**
+ * Convert a `FilterState` (UI-friendly) plus a free-text query into a
+ * `FindParams` object (Mango-friendly). Only fields with active constraints
+ * are included so CouchDB can pick the smallest covering index.
+ * @param filters - Current filter state.
+ * @param query - Free-text search query (matched against `title`).
+ * @returns Parameters ready to pass to `findDocuments`.
+ */
+export function filtersToFindParams(
+  filters: FilterState,
+  query: string,
+): FindParams {
+  return {
+    methods: filters.methods.size > 0 ? [...filters.methods] : undefined,
+    helices: hasRange(filters.helices) ? filters.helices : undefined,
+    sheets: hasRange(filters.sheets) ? filters.sheets : undefined,
+    ligands: hasRange(filters.ligands) ? filters.ligands : undefined,
+    residues: hasRange(filters.residues) ? filters.residues : undefined,
+    year: hasRange(filters.year) ? filters.year : undefined,
+    query: query.trim() || undefined,
+  };
+}
+
+function hasRange(range: RangeFilter): boolean {
+  return range.min !== null || range.max !== null;
 }

@@ -1,5 +1,5 @@
-import type {ReactNode} from 'react';
-import {  useState } from 'react';
+import type { ReactNode } from 'react';
+import { useState } from 'react';
 
 import EndpointPreview from './EndpointPreview.tsx';
 
@@ -126,7 +126,10 @@ export default function EndpointList() {
             </div>
             {isOpen && (
               <div className="endpoint-preview">
-                <EndpointPreview url={endpoint.example} />
+                <EndpointPreview
+                  key={endpoint.example}
+                  url={endpoint.example}
+                />
               </div>
             )}
           </div>

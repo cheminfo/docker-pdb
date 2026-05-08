@@ -16,8 +16,6 @@ export default async function initDatabase() {
   const waiting = Date.now();
   /* eslint-disable no-await-in-loop -- retry loop while CouchDB starts up */
   while (!couch) {
-    await delay(5000);
-    debug(`Waiting for couchdb: ${Math.floor(Date.now() - waiting) / 1000}s`);
     try {
       // eslint-disable-next-line new-cap -- nano factory is invoked as Nano(...)
       couch = Nano(config.couch.fullUrl);
@@ -25,18 +23,29 @@ export default async function initDatabase() {
       if (databases.error) {
         debug(`Connection problem: ${databases.error} ${databases.reason}`);
         couch = null;
+      } else {
+        debug('Existing databases:', databases);
       }
-      debug('Existing databases:', databases);
     } catch (error) {
       debug(`Connection problem: ${error.toString()}`);
       couch = null;
     }
+    if (!couch) {
+      debug(`Waiting for couchdb: ${Math.floor(Date.now() - waiting) / 1000}s`);
+      await delay(5000);
+    }
   }
   /* eslint-enable no-await-in-loop */
-  // We succeeded to retrieve the list of databases. Wait a bit longer to be sure
-  // the starting databases are created.
-  await delay(5000);
-  databases = await couch.db.list();
+  // First-boot: CouchDB hasn't created its system DBs yet. Give it a few
+  // seconds. Skip on subsequent boots when the system DBs are already there.
+  if (
+    !databases.includes('_users') ||
+    !databases.includes('_replicator') ||
+    !databases.includes('_global_changes')
+  ) {
+    await delay(5000);
+    databases = await couch.db.list();
+  }
 
   const created = {};
 
@@ -66,6 +75,7 @@ export default async function initDatabase() {
   }
   await checkViews(couch, 'pdb', 'couch/pdbViews.json');
   await checkViews(couch, 'pdb', 'couch/pdbStatsViews.json');
+  await ensureMangoIndexes(couch, 'pdb', 'couch/pdbMangoIndexes.json');
   await ensurePublicReadSecurity(couch, 'pdb');
 
   if (!databases.includes('pdb-bio-assembly')) {
@@ -110,6 +120,32 @@ async function ensurePublicReadSecurity(couch, dbName) {
     method: 'PUT',
     body: PUBLIC_READ_SECURITY,
   });
+}
+
+/**
+ * Install Mango indexes from a JSON array of index definitions. Each entry
+ * is POSTed to `_index`; CouchDB makes the call idempotent — re-posting an
+ * index with the same ddoc/name/fields returns `result: "exists"` without
+ * re-building.
+ * @param {import('nano').ServerScope} couch - Authenticated nano server scope.
+ * @param {string} dbName - Target database (e.g. `pdb`).
+ * @param {string} filename - Path to the JSON file relative to this module.
+ */
+async function ensureMangoIndexes(couch, dbName, filename) {
+  const indexes = JSON.parse(
+    readFileSync(join(import.meta.dirname, filename), 'utf8'),
+  );
+  /* eslint-disable no-await-in-loop -- sequential install keeps logs readable */
+  for (const index of indexes) {
+    const response = await couch.request({
+      db: dbName,
+      path: '_index',
+      method: 'POST',
+      body: index,
+    });
+    debug(`Mango index ${index.name}: ${response.result}`);
+  }
+  /* eslint-enable no-await-in-loop */
 }
 
 async function checkViews(couch, dbName, filename) {

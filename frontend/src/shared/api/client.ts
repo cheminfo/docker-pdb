@@ -110,3 +110,107 @@ export async function fetchPdbText(pdbId: string): Promise<string> {
   }
   return response.text();
 }
+
+/* ------------------------------------------------------------------------ *
+ * Mango / `_find` query layer
+ * ------------------------------------------------------------------------ */
+
+/** A simple optional [min, max] range used to build Mango selectors. */
+export interface NumericRange {
+  min: number | null;
+  max: number | null;
+}
+
+/** Filters accepted by `findDocuments`. */
+export interface FindParams {
+  /** Allowed `experiment` values (any of). Empty / undefined = no filter. */
+  methods?: string[];
+  helices?: NumericRange;
+  sheets?: NumericRange;
+  ligands?: NumericRange;
+  residues?: NumericRange;
+  year?: NumericRange;
+  /** Free-text query matched against `title` via case-insensitive regex. */
+  query?: string;
+}
+
+/** Response of a `_find` query. */
+export interface FindResponse<TDoc> {
+  docs: TDoc[];
+  bookmark?: string;
+  warning?: string;
+}
+
+const PAGE_LIMIT = 200;
+
+/**
+ * Build a Mango selector from a `FindParams` object. Only fields with
+ * actual constraints are included so CouchDB can pick the best index.
+ * @param params - Filter parameters.
+ * @returns Mango selector object suitable for `_find`.
+ */
+function buildSelector(params: FindParams): Record<string, unknown> {
+  const selector: Record<string, unknown> = {};
+  if (params.methods && params.methods.length > 0) {
+    selector.experiment = { $in: params.methods };
+  }
+  addRange(selector, 'nbHelices', params.helices);
+  addRange(selector, 'nbSheets', params.sheets);
+  addRange(selector, 'nbLigands', params.ligands);
+  addRange(selector, 'nbResidues', params.residues);
+  addRange(selector, 'year', params.year);
+  if (params.query?.trim()) {
+    selector.title = { $regex: `(?i)${escapeRegex(params.query.trim())}` };
+  }
+  // Mango requires *some* selector. When nothing else is set, force a
+  // wildcard so the query still runs.
+  if (Object.keys(selector).length === 0) {
+    selector._id = { $gt: null };
+  }
+  return selector;
+}
+
+function addRange(
+  selector: Record<string, unknown>,
+  field: string,
+  range: NumericRange | undefined,
+) {
+  if (!range) return;
+  const constraints: Record<string, number> = {};
+  if (typeof range.min === 'number') constraints.$gte = range.min;
+  if (typeof range.max === 'number') constraints.$lte = range.max;
+  if (Object.keys(constraints).length > 0) selector[field] = constraints;
+}
+
+function escapeRegex(value: string): string {
+  return value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+}
+
+/**
+ * Run a Mango `_find` query against the `pdb` database. Returns up to
+ * `PAGE_LIMIT` docs and the bookmark needed to fetch the next page.
+ * @param params - Filter parameters.
+ * @param bookmark - Optional bookmark from a previous `findDocuments` call.
+ * @returns Promise resolving to the matching docs and a paging bookmark.
+ */
+export async function findDocuments<TDoc>(
+  params: FindParams,
+  bookmark?: string,
+): Promise<FindResponse<TDoc>> {
+  const body = {
+    selector: buildSelector(params),
+    limit: PAGE_LIMIT,
+    bookmark,
+    // Sort by `_id` so pages are stable; CouchDB skips this if no matching
+    // index covers it, which is fine — the bookmark handles ordering.
+  };
+  const response = await fetch('/find', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    throw new Error(`${response.status} ${response.statusText}`);
+  }
+  return response.json() as Promise<FindResponse<TDoc>>;
+}

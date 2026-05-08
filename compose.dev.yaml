@@ -1,0 +1,23 @@
+# Local-development CouchDB for `npm run dev`.
+# Brings up just CouchDB on 127.0.0.1:5984, so the host-side Node process
+# (started by `npm run dev`) can connect to it. The full stack
+# (nginx + cron + couchdb) lives in compose.example*.yaml.
+#
+# Project name is overridden so this stack is tracked separately from any
+# production stack the developer might also have running on the same host.
+name: docker-pdb-dev
+
+services:
+  couchdb:
+    image: docker.io/couchdb:3.4
+    environment:
+      COUCHDB_USER: admin
+      COUCHDB_PASSWORD: ${COUCHDB_ADMIN_PASSWORD:-changeme}
+    ports:
+      - '127.0.0.1:5984:5984'
+    volumes:
+      - couchdb-dev:/opt/couchdb/data
+    restart: unless-stopped
+
+volumes:
+  couchdb-dev:
