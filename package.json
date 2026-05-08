@@ -1,6 +1,6 @@
 {
   "name": "docker-pdb",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "description": "Sync of the official PDB database into CouchDB. The database is searchable for properties like number of residues, residue percentages, molecular weight, etc.",
   "type": "module",
   "private": true,
@@ -12,7 +12,11 @@
   "bugs": {
     "url": "https://github.com/cheminfo/docker-pdb/issues"
   },
-  "keywords": ["pdb", "pdb-parser", "couchdb"],
+  "keywords": [
+    "pdb",
+    "pdb-parser",
+    "couchdb"
+  ],
   "author": "Daniel Kostro",
   "license": "MIT",
   "dependencies": {
