@@ -1,11 +1,15 @@
-// Synchronizes the rsynced PDB directory tree, then rebuilds the database
-// for the changed entries. Requires `rsync` to be installed.
+// Synchronizes the rsynced PDB directory tree and ingests each file into
+// CouchDB as soon as it lands on disk (rather than at the end of rsync).
+// Local files are never deleted, even when removed upstream.
+// Requires `rsync` to be installed.
 
 import { appendFileSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import { parseArgs } from 'node:util';
 
+import { watch } from 'chokidar';
 import createDebug from 'debug';
 import Rsync from 'rsync';
 
@@ -15,6 +19,13 @@ import getConfig from './config.js';
 const debug = createDebug('update');
 const config = getConfig();
 
+// Time chokidar waits with no size change before considering a file fully
+// written. rsync writes via temp+rename, so 2s is comfortably safe.
+const STABILITY_THRESHOLD_MS = 2000;
+// Extra grace period after rsync exits before closing the watcher, so the
+// last file's `awaitWriteFinish` event can fire.
+const POST_RSYNC_GRACE_MS = STABILITY_THRESHOLD_MS + 1000;
+
 const { values: argv } = parseArgs({
   options: {
     'pdb-asym-unit': { type: 'boolean' },
@@ -23,6 +34,11 @@ const { values: argv } = parseArgs({
   strict: false,
 });
 
+/**
+ * Run an rsync pass against the wwPDB asymmetrical-unit and/or
+ * biological-assembly archives, ingesting each file into CouchDB as soon as
+ * it has been fully written. Without CLI flags both archives are synced.
+ */
 export default async function update() {
   let asymUnit = argv['pdb-asym-unit'];
   let bioAssembly = argv['pdb-bio-assembly'];
@@ -36,15 +52,8 @@ export default async function update() {
       config.asymetrical.rsync.source,
       config.asymetrical.rsync.destination,
       config.asymetrical.rsync.port || 873,
-      common.processPdbs,
-      async (changed) => {
-        debug('Writing rsync changes of pdb');
-        const dir = config.asymetrical.rsync.historyDir;
-        if (!dir) return;
-        const targetFile = join(dir, `${new Date().toISOString()}.json`);
-        await mkdir(dirname(targetFile), { recursive: true });
-        await writeFile(targetFile, JSON.stringify(changed, undefined, 2));
-      },
+      common.processPdb,
+      config.asymetrical.rsync.historyDir,
     );
     debug('Done updating asymmetrical units...');
   }
@@ -55,60 +64,103 @@ export default async function update() {
       config.bioAssembly.rsync.source,
       config.bioAssembly.rsync.destination,
       config.asymetrical.rsync.port || 873,
-      common.processPdbAssemblies,
-      async (changed) => {
-        debug('Writing rsync changes of bioAssembly');
-        const dir = config.bioAssembly.rsync.historyDir;
-        if (!dir) return;
-        const targetFile = join(dir, `${new Date().toISOString()}.json`);
-        await mkdir(dirname(targetFile), { recursive: true });
-        await writeFile(targetFile, JSON.stringify(changed, undefined, 2));
-      },
+      common.processPdbAssembly,
+      config.bioAssembly.rsync.historyDir,
     );
     debug('Done updating biological assemblies...');
   }
 }
 
-function doRsync(
-  source,
-  destination,
-  port,
-  saveCallback,
-  modificationCallback,
-) {
-  return new Promise((resolve, reject) => {
-    const changed = { deleted: [], updated: [] };
-    const newFiles = [];
+/**
+ * Run rsync against `source -> destination` and ingest each `.gz` file into
+ * CouchDB as soon as it has finished being written. Files removed upstream
+ * are left untouched on disk (we do not pass `--delete` to rsync).
+ * @param {string} source - rsync source spec (e.g. `host::module/path/`).
+ * @param {string} destination - Local directory to sync into.
+ * @param {number} port - rsync daemon port.
+ * @param {(file: string) => Promise<void>} processFile - Per-file ingestion handler.
+ * @param {string | undefined} historyDir - Optional directory to write a JSON
+ *   summary of changes (`{deleted, updated}`) for this rsync run.
+ */
+async function doRsync(source, destination, port, processFile, historyDir) {
+  await mkdir(destination, { recursive: true });
 
+  const changed = { deleted: [], updated: [] };
+  const queue = [];
+  let wakeWorker = null;
+  let inputClosed = false;
+  const waitForSignal = () =>
+    new Promise((resolve) => {
+      wakeWorker = resolve;
+    });
+
+  const watcher = watch(destination, {
+    persistent: true,
+    ignoreInitial: true,
+    awaitWriteFinish: {
+      stabilityThreshold: STABILITY_THRESHOLD_MS,
+      pollInterval: 200,
+    },
+  });
+
+  watcher.on('add', (file) => {
+    if (!file.endsWith('.gz')) return;
+    queue.push(file);
+    if (wakeWorker) {
+      wakeWorker();
+      wakeWorker = null;
+    }
+  });
+
+  /* eslint-disable no-await-in-loop -- intentional sequential CouchDB writes */
+  const workerDone = (async () => {
+    while (true) {
+      if (queue.length === 0) {
+        if (inputClosed) return;
+        await waitForSignal();
+        continue;
+      }
+      const file = queue.shift();
+      try {
+        await processFile(file);
+      } catch (error) {
+        debug('Process error', file, error);
+      }
+    }
+  })();
+  /* eslint-enable no-await-in-loop */
+
+  debug('Rsync from', source, 'to', destination);
+  await new Promise((resolve, reject) => {
     const rsync = new Rsync();
     rsync.source(source);
     rsync.destination(destination);
+    // `--delete` is intentionally NOT set: we keep local files even when
+    // they are removed upstream.
     rsync.flags('rlptvz');
-    rsync.set('delete');
     rsync.set('port', port);
 
-    debug('Rsync ready');
-    debug('Rsync from', source, 'to', destination);
     rsync.output(
       (data) => {
-        const line = data.toString().replaceAll(/[\r\n].*/g, '');
-        debug(`Processing: ${line}`);
-        if (line.startsWith('deleting ')) {
-          const pdbId = common.getIdFromFileName(line).toUpperCase();
-          if (pdbId.length === 4) {
-            changed.deleted.push(pdbId);
+        const lines = data
+          .toString()
+          .split(/[\r\n]+/)
+          .filter(Boolean);
+        for (const line of lines) {
+          debug(`Processing: ${line}`);
+          if (line.startsWith('deleting ')) {
+            const pdbId = common.getIdFromFileName(line).toUpperCase();
+            if (pdbId.length === 4) {
+              changed.deleted.push(pdbId);
+            }
+            continue;
           }
-          return;
-        }
-        if (line.match(/\.gz$/)) {
-          appendFileSync(
-            './rsyncChanges',
-            `${config.asymetrical.rsync.destination + line}\n`,
-          );
-          const pdbId = common.getIdFromFileName(line).toUpperCase();
-          if (pdbId.length === 4) {
-            changed.updated.push(pdbId);
-            newFiles.push(config.asymetrical.rsync.destination + line);
+          if (line.match(/\.gz$/)) {
+            appendFileSync('./rsyncChanges', `${destination + line}\n`);
+            const pdbId = common.getIdFromFileName(line).toUpperCase();
+            if (pdbId.length === 4) {
+              changed.updated.push(pdbId);
+            }
           }
         }
       },
@@ -118,20 +170,30 @@ function doRsync(
     );
 
     rsync.execute((error, code, cmd) => {
-      if (modificationCallback) {
-        modificationCallback(changed);
-      }
-      debug('Rsync executed, now building database');
       if (error) {
-        debug('RSYNC ERROR, did not build database');
-        debug(error);
-        debug(code);
-        debug(cmd);
+        debug('RSYNC ERROR', error, code, cmd);
         reject(error);
         return;
       }
-      debug('update new files: ', newFiles);
-      saveCallback(newFiles).then(resolve, reject);
+      resolve();
     });
   });
+
+  if (historyDir) {
+    debug('Writing rsync change summary');
+    const targetFile = join(historyDir, `${new Date().toISOString()}.json`);
+    await mkdir(dirname(targetFile), { recursive: true });
+    await writeFile(targetFile, JSON.stringify(changed, undefined, 2));
+  }
+
+  // Let chokidar's awaitWriteFinish settle on the last few files.
+  await delay(POST_RSYNC_GRACE_MS);
+  inputClosed = true;
+  if (wakeWorker) {
+    wakeWorker();
+    wakeWorker = null;
+  }
+  await workerDone;
+  await watcher.close();
+  debug('All queued files processed');
 }
