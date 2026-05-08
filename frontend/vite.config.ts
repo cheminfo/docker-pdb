@@ -9,6 +9,7 @@ const apiPaths = [
   '/stats',
   '/find',
   '/rsync-history',
+  '/v1',
 ];
 
 export default defineConfig({
