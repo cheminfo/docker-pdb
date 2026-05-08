@@ -1,5 +1,5 @@
 import { createWriteStream, existsSync, mkdirSync } from 'node:fs';
-import { open } from 'node:fs/promises';
+import { open, rename } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { Readable } from 'node:stream';
@@ -21,7 +21,9 @@ const CCD_URL =
 
 const dataDir = join(import.meta.dirname, '..', '..', 'data');
 const ccdDir = join(dataDir, 'ccd');
-const ccdGzPath = join(ccdDir, 'components.cif.gz');
+
+/** Path to the cached compressed CCD archive on the data volume. */
+export const ccdGzPath = join(ccdDir, 'components.cif.gz');
 
 /**
  * Seed (or refresh) the `ligands` and `ligand_ss_index` tables from the
@@ -121,19 +123,25 @@ export async function seedCCD({ force = false } = {}) {
 }
 
 /**
- * Download `components.cif.gz` from the wwPDB to the local cache.
+ * Download `components.cif.gz` from the wwPDB to the local cache. The
+ * archive is streamed to a process-private temp file and only renamed
+ * over the canonical path when the download completes — so a concurrent
+ * reader (or the periodic refresh container racing with `pdb-api`'s
+ * initial seed) never sees a half-written file.
  * @returns {Promise<void>} Resolves once the file is fully written to disk.
  */
 async function downloadCcd() {
   if (!existsSync(ccdDir)) {
     mkdirSync(ccdDir, { recursive: true });
   }
+  const tempPath = `${ccdGzPath}.tmp.${process.pid}`;
   logger.info({ url: CCD_URL, target: ccdGzPath }, 'Downloading CCD archive');
   const response = await fetch(CCD_URL);
   if (!response.ok) {
     throw new Error(`Failed to download CCD: HTTP ${response.status}`);
   }
-  await pipeline(Readable.fromWeb(response.body), createWriteStream(ccdGzPath));
+  await pipeline(Readable.fromWeb(response.body), createWriteStream(tempPath));
+  await rename(tempPath, ccdGzPath);
   logger.info('CCD archive downloaded');
 }
 

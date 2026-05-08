@@ -47,6 +47,7 @@
     "api": "node src/api/server.js",
     "backfill-pdb-ligands": "node src/backfillPdbLigands.js",
     "cron": "node src/cron.js",
+    "cron-ccd": "node src/ccd/cron.js",
     "dev": "docker compose -f compose.dev.yaml up -d && concurrently --names backend,frontend --prefix-colors blue,magenta \"npm:dev:backend\" \"npm:dev:frontend\"",
     "dev:backend": "COUCHDB_HOST=127.0.0.1 DATA_DIR=./data node --watch --env-file-if-exists=.env src/dev.js",
     "dev:frontend": "npm --prefix frontend run dev",

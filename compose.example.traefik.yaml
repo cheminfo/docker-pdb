@@ -106,6 +106,30 @@ services:
         max-file: '3'
     command: sh -c "npm run seed-ccd; npm run api"
 
+  pdb-api-cron:
+    # Periodically refreshes data/sqlite3/ligands.db from the wwPDB
+    # Chemical Component Dictionary (weekly upstream cadence). Idle most
+    # of the time. Independent of pdb-api: on a fresh deploy pdb-api
+    # writes the initial copy and this cron sleeps until next week.
+    image: ghcr.io/cheminfo/pdb-quickview:latest
+    build: .
+    volumes:
+      - ./data:/app/data
+    env_file:
+      - .env
+    environment:
+      DEBUG: '*'
+    restart: unless-stopped
+    pids_limit: 256
+    ulimits:
+      core: 0
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+    command: npm run cron-ccd
+
 networks:
   traefik:
     external: true
