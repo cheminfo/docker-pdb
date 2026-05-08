@@ -1,7 +1,6 @@
-biounits-data
-pdb-data
-pdb-assembly-data
-node_modules
-couchdb-data
+.claude
 .env
-logs
+compose.yaml
+coverage/
+data/
+node_modules/
