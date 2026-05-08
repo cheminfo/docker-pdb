@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { MF } from 'react-mf';
-import { IdcodeSvgRenderer } from 'react-ocl';
 
+import LigandStructure from '../../shared/LigandStructure.tsx';
 import type { FocusSpec } from '../../shared/PdbViewer.tsx';
 import { fetchLigandsByCodes } from '../../shared/api/client.ts';
 import type { LigandSummary, PdbFormula } from '../../shared/api/types.ts';
@@ -80,9 +80,8 @@ export default function LigandsTable({
               </td>
               <td className="ligand-structure-cell">
                 {structure ? (
-                  <IdcodeSvgRenderer
-                    idcode={structure.idCode}
-                    coordinates={structure.coordinates}
+                  <LigandStructure
+                    idCode={structure.idCode}
                     width={70}
                     height={50}
                   />

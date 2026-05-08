@@ -117,16 +117,23 @@ export default function MoleculesPage() {
 
       <div className="molecules-layout">
         <section className="panel molecules-editor-panel">
-          <h2>Query</h2>
-          <CanvasMoleculeEditor
-            width="100%"
-            height={400}
-            onChange={handleEditorChange}
-          />
-          <div className="molecules-editor-actions">
-            <button type="button" onClick={handleClear} disabled={!queryIdCode}>
-              Clear query
+          <div className="molecules-editor-header">
+            <h2>Query</h2>
+            <button
+              type="button"
+              className="molecules-clear-button"
+              onClick={handleClear}
+              disabled={!queryIdCode}
+              title="Clear query"
+              aria-label="Clear query"
+            >
+              ×
             </button>
+          </div>
+          <div className="molecules-editor-canvas">
+            <CanvasMoleculeEditor onChange={handleEditorChange} />
+          </div>
+          <div className="molecules-editor-actions">
             <span className="molecules-status">
               {searching
                 ? 'Searching…'
@@ -153,12 +160,14 @@ export default function MoleculesPage() {
 
         <section className="panel molecules-pdbs-panel">
           <h2>PDBs</h2>
-          <LigandPdbsPanel
-            ligandCode={selectedCode}
-            total={pdbsTotal}
-            pdbs={pdbs}
-            error={pdbsError}
-          />
+          <div className="molecules-pdbs-panel-body">
+            <LigandPdbsPanel
+              ligandCode={selectedCode}
+              total={pdbsTotal}
+              pdbs={pdbs}
+              error={pdbsError}
+            />
+          </div>
         </section>
       </div>
     </div>

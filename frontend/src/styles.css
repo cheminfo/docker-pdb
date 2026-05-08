@@ -1574,10 +1574,44 @@ code {
   margin-bottom: 16px;
 }
 
+.container.molecules-page {
+  max-width: 1600px;
+  padding: 12px 24px 12px;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.molecules-page header {
+  margin-bottom: 8px;
+}
+
+.molecules-page header h1 {
+  font-size: 20px;
+  margin-bottom: 2px;
+}
+
+.molecules-page header p {
+  font-size: 13px;
+  line-height: 1.35;
+}
+
 .molecules-layout {
   display: grid;
-  grid-template-columns: 360px minmax(0, 1fr) 280px;
+  grid-template-columns: 320px minmax(0, 1fr) 320px;
   gap: 16px;
+  flex: 1;
+  min-height: 0;
+}
+
+.molecules-page .panel {
+  padding: 12px 16px;
+}
+
+.molecules-page .panel h2 {
+  margin: 0 0 8px;
+  font-size: 15px;
 }
 
 .molecules-editor-panel,
@@ -1585,7 +1619,81 @@ code {
 .molecules-pdbs-panel {
   display: flex;
   flex-direction: column;
+  min-width: 0;
   min-height: 0;
+  overflow: hidden;
+}
+
+.molecules-editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.molecules-editor-canvas {
+  flex: 1;
+  min-height: 200px;
+  position: relative;
+  overflow: hidden;
+}
+
+.molecules-editor-canvas > div {
+  width: 100%;
+  height: 100%;
+}
+
+.molecules-clear-button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.molecules-clear-button:hover:not(:disabled) {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.molecules-clear-button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.molecules-results-table-wrapper {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0 -16px -12px;
+  padding: 0 16px 12px;
+}
+
+.molecules-pdbs-panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+@media (min-width: 1101px) {
+  .app-main:has(.molecules-page) {
+    overflow: hidden;
+  }
+}
+
+.ligand-name {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .molecules-editor-actions {

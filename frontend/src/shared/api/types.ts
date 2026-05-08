@@ -203,10 +203,8 @@ export interface LigandSummary {
   mf: string;
   /** Molecular weight in g/mol. */
   mw: number;
-  /** OpenChemLib canonical idCode used by `IdcodeSvgRenderer`. */
+  /** OpenChemLib canonical idCode. 2D coordinates are invented client-side. */
   idCode: string;
-  /** OpenChemLib coordinate string paired with `idCode`. */
-  coordinates: string;
   /** Number of distinct PDBs that reference this ligand code. */
   nbPdbs: number;
 }
