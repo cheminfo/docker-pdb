@@ -143,4 +143,37 @@ export async function mockApi(page: Page): Promise<void> {
       body: samplePdbText,
     }),
   );
+  await page.route(/\/v1\/ligands/, (route) =>
+    fulfillJson(route, ligandSearchResponse),
+  );
 }
+
+const ligandSearchResponse = {
+  ligands: [
+    {
+      code: 'ATP',
+      name: 'ADENOSINE TRIPHOSPHATE',
+      mf: 'C10H16N5O13P3',
+      mw: 507.18,
+      idCode: 'gFp@DiTt@@@', // benzene placeholder, valid OCL idcode
+      coordinates: '!B@k\\Bb@C~@OxBb@',
+      nbPdbs: 1842,
+    },
+    {
+      code: 'HEM',
+      name: 'PROTOPORPHYRIN IX CONTAINING FE',
+      mf: 'C34H32FeN4O4',
+      mw: 616.49,
+      idCode: 'gFp@DiTt@@@',
+      coordinates: '!B@k\\Bb@C~@OxBb@',
+      nbPdbs: 967,
+    },
+  ],
+  stats: {
+    screened: 2,
+    verified: 2,
+    screeningMs: 1,
+    verificationMs: 1,
+    overLimit: false,
+  },
+};

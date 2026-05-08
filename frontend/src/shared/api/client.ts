@@ -3,6 +3,9 @@ import type {
   CouchStatsValue,
   DatabaseInfo,
   GroupedStatsResponse,
+  LigandDetailResponse,
+  LigandPdbsResponse,
+  LigandSearchResponse,
   OmegaByYearResponse,
   OmegaSummaryResponse,
   PairFrequencyResponse,
@@ -536,4 +539,78 @@ async function fetchAndCollapsePairsByYear(
     return { key: [residue1, residue2] as [string, string], value };
   });
   return { rows };
+}
+
+/**
+ * Run a substructure search against the canonical CCD ligand database.
+ * @param idCode - OpenChemLib idCode of the query fragment, or `null` to
+ *   request the default ranking (most-used ligands by descending PDB count).
+ * @param limit - Maximum number of results.
+ * @returns Matching ligands and search statistics.
+ */
+export function fetchLigandSearch(
+  idCode: string | null,
+  limit = 200,
+): Promise<LigandSearchResponse> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (idCode) params.set('substructure', idCode);
+  return fetchJson<LigandSearchResponse>(`/v1/ligands?${params.toString()}`);
+}
+
+/**
+ * Fetch the canonical structure rows for a specific list of ligand codes.
+ * Used by the browse-page ligand table to render a 2D structure column
+ * with a single round-trip per PDB.
+ * @param codes - 3-letter chemical-component codes.
+ * @returns Matching ligands (order is not guaranteed).
+ */
+export function fetchLigandsByCodes(
+  codes: string[],
+): Promise<LigandSearchResponse> {
+  if (codes.length === 0) {
+    return Promise.resolve({
+      ligands: [],
+      stats: {
+        screened: 0,
+        verified: 0,
+        screeningMs: 0,
+        verificationMs: 0,
+        overLimit: false,
+      },
+    });
+  }
+  const params = new URLSearchParams({ codes: codes.join(',') });
+  return fetchJson<LigandSearchResponse>(`/v1/ligands?${params.toString()}`);
+}
+
+/**
+ * Fetch the canonical record for a single ligand code.
+ * @param code - 3-letter chemical-component code.
+ * @returns Ligand detail wrapper.
+ */
+export function fetchLigandDetail(code: string): Promise<LigandDetailResponse> {
+  return fetchJson<LigandDetailResponse>(
+    `/v1/ligands/${encodeURIComponent(code)}`,
+  );
+}
+
+/**
+ * Fetch a paginated list of PDBs containing a given ligand code.
+ * @param code - 3-letter chemical-component code.
+ * @param limit - Page size (max 1000).
+ * @param offset - Number of rows to skip.
+ * @returns Paginated PDB references for the ligand.
+ */
+export function fetchLigandPdbs(
+  code: string,
+  limit = 100,
+  offset = 0,
+): Promise<LigandPdbsResponse> {
+  const params = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+  });
+  return fetchJson<LigandPdbsResponse>(
+    `/v1/ligands/${encodeURIComponent(code)}/pdbs?${params.toString()}`,
+  );
 }

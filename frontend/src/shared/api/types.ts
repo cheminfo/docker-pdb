@@ -192,3 +192,72 @@ export interface RsyncHistoryViewResponse {
   offset: number;
   rows: RsyncHistoryRow[];
 }
+
+/** One ligand row returned by the substructure-search API. */
+export interface LigandSummary {
+  /** 3-letter wwPDB chemical-component code (e.g. `ATP`). */
+  code: string;
+  /** Human-readable chemical name (HETNAM). */
+  name: string;
+  /** Molecular formula. */
+  mf: string;
+  /** Molecular weight in g/mol. */
+  mw: number;
+  /** OpenChemLib canonical idCode used by `IdcodeSvgRenderer`. */
+  idCode: string;
+  /** OpenChemLib coordinate string paired with `idCode`. */
+  coordinates: string;
+  /** Number of distinct PDBs that reference this ligand code. */
+  nbPdbs: number;
+}
+
+/** Statistics returned alongside a substructure-search response. */
+export interface LigandSearchStats {
+  /** Number of candidates surviving the bitwise fingerprint screen. */
+  screened: number;
+  /** Number of candidates verified against the OCL substructure searcher. */
+  verified: number;
+  /** Wall-clock time spent in phase 1 (screening), in ms. */
+  screeningMs: number;
+  /** Wall-clock time spent in phase 2 (verification), in ms. */
+  verificationMs: number;
+  /** True when the result list was truncated to `limit`. */
+  overLimit: boolean;
+}
+
+/** Response of `GET /v1/ligands?substructure=...`. */
+export interface LigandSearchResponse {
+  ligands: LigandSummary[];
+  stats: LigandSearchStats;
+}
+
+/** Detailed ligand row returned by `GET /v1/ligands/:code`. */
+export interface LigandDetail extends LigandSummary {
+  /** Original CCD formula string (with element separators). */
+  formula: string;
+  /** CCD chemical-component type (`NON-POLYMER`, `L-PEPTIDE LINKING`, …). */
+  type: string;
+  /** Number of heavy atoms in the canonical structure. */
+  nbAtoms: number;
+}
+
+/** Response of `GET /v1/ligands/:code`. */
+export interface LigandDetailResponse {
+  ligand: LigandDetail;
+}
+
+/** One PDB referenced by a given ligand. */
+export interface LigandPdbReference {
+  /** 4-character PDB id. */
+  pdbId: string;
+  /** Number of copies of the ligand in this PDB. */
+  count: number;
+}
+
+/** Response of `GET /v1/ligands/:code/pdbs`. */
+export interface LigandPdbsResponse {
+  total: number;
+  limit: number;
+  offset: number;
+  pdbs: LigandPdbReference[];
+}
