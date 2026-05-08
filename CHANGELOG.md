@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.2.0](https://github.com/cheminfo/docker-pdb/compare/v1.1.1...v1.2.0) (2026-05-08)
+
+
+### Features
+
+* **frontend:** migrate homepage to React + Vite + nivo ([513465f](https://github.com/cheminfo/docker-pdb/commit/513465f40ac0694985d0f084e625aa7f8e30c782))
+* **home:** redesign home page and add database statistics ([d1337f2](https://github.com/cheminfo/docker-pdb/commit/d1337f2f3e65d73567ad4f06ea1750bfe1037699))
+
+
+### Bug Fixes
+
+* make `npm run rebuild` actually run ([d7cb803](https://github.com/cheminfo/docker-pdb/commit/d7cb803ca132cde91be0975d123f0c1ec5cda335))
+
 ## [1.1.1](https://github.com/cheminfo/docker-pdb/compare/v1.1.0...v1.1.1) (2026-05-08)
 
 
