@@ -28,7 +28,11 @@ async function cron() {
 
   /* eslint-disable no-await-in-loop, no-console -- intentional sequential cron loop */
   while (true) {
-    await update();
+    try {
+      await update();
+    } catch (error) {
+      debug('update failed, will retry next cycle:', error);
+    }
     for (let i = SLEEP_HOURS; i > 0; i--) {
       console.log(`${new Date().toISOString()} - Still waiting ${i}h`);
       await delay(3600 * 1000);
