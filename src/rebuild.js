@@ -2,6 +2,7 @@
 // Resends attachments and values computed by the parser.
 
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
 import createDebug from 'debug';
@@ -21,6 +22,8 @@ const { values: argv } = parseArgs({
     toFile: { type: 'string' },
     fromDir: { type: 'string' },
     toDir: { type: 'string' },
+    'pdb-asym-unit': { type: 'boolean' },
+    'pdb-bio-assembly': { type: 'boolean' },
   },
   strict: false,
 });
@@ -92,4 +95,15 @@ export async function assembly() {
   const files = await getAssemblyFiles();
   debug(`Pdb bio assembly database: about to process ${files.length} files.`);
   await common.processPdbAssemblies(files);
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  let asymUnit = argv['pdb-asym-unit'];
+  let bioAssembly = argv['pdb-bio-assembly'];
+  if (!asymUnit && !bioAssembly) {
+    asymUnit = true;
+    bioAssembly = true;
+  }
+  if (asymUnit) await pdb();
+  if (bioAssembly) await assembly();
 }
