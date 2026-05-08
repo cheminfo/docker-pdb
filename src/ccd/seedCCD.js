@@ -79,12 +79,16 @@ export async function seedCCD({ force = false } = {}) {
        ss_index7 = excluded.ss_index7`,
   );
 
-  // Wrap the whole import in a single transaction — orders of magnitude
-  // faster than committing per row, and keeps the schema consistent if
-  // the run is interrupted.
-  db.db.exec('BEGIN');
+  // Insert in small transactions (1000 rows each). One big transaction
+  // gave better raw throughput, but it holds an exclusive write lock for
+  // the full 5–30 min run, blocking the cron container's writes to
+  // `pdb_ligands` for `busy_timeout` (5 s) per PDB. Batching keeps each
+  // lock window under ~50 ms so concurrent writers slip through cleanly.
+  const BATCH_SIZE = 1000;
   let imported = 0;
   let skipped = 0;
+  let inBatch = 0;
+  db.db.exec('BEGIN');
   try {
     const fileHandle = await open(ccdGzPath, 'r');
     const stream = fileHandle.createReadStream().pipe(createGunzip());
@@ -94,11 +98,15 @@ export async function seedCCD({ force = false } = {}) {
       const result = importBlock(block, insertLigand, insertSSIndex);
       if (result === 'imported') imported++;
       else skipped++;
-      if ((imported + skipped) % 1000 === 0) {
+      inBatch++;
+      if (inBatch >= BATCH_SIZE) {
+        db.db.exec('COMMIT');
         logger.info(
           { imported, skipped, total: imported + skipped },
           'CCD import progress',
         );
+        db.db.exec('BEGIN');
+        inBatch = 0;
       }
     }
 
