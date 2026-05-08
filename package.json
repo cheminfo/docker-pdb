@@ -22,8 +22,10 @@
   "author": "Daniel Kostro",
   "license": "MIT",
   "dependencies": {
+    "@fastify/cors": "^11.2.0",
     "chokidar": "^5.0.0",
     "debug": "^4.4.0",
+    "fastify": "^5.8.5",
     "glob": "^11.0.0",
     "gm": "^1.25.1",
     "nano": "^10.1.4",
@@ -35,14 +37,19 @@
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^3.2.4",
+    "concurrently": "^9.2.1",
     "eslint": "^9.39.0",
     "eslint-config-cheminfo": "^14.0.0",
     "prettier": "^3.6.2",
     "vitest": "^3.2.4"
   },
   "scripts": {
+    "api": "node src/api/server.js",
+    "backfill-pdb-ligands": "node src/backfillPdbLigands.js",
     "cron": "node src/cron.js",
-    "dev": "docker compose -f compose.dev.yaml up -d && COUCHDB_HOST=127.0.0.1 DATA_DIR=./data node --watch --env-file-if-exists=.env src/dev.js",
+    "dev": "docker compose -f compose.dev.yaml up -d && concurrently --names backend,frontend --prefix-colors blue,magenta \"npm:dev:backend\" \"npm:dev:frontend\"",
+    "dev:backend": "COUCHDB_HOST=127.0.0.1 DATA_DIR=./data node --watch --env-file-if-exists=.env src/dev.js",
+    "dev:frontend": "npm --prefix frontend run dev",
     "dev:down": "docker compose -f compose.dev.yaml down",
     "eslint": "eslint src",
     "eslint-fix": "eslint src --fix",
