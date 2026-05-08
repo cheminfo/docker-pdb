@@ -84,6 +84,13 @@ export default function PdbTable({
       onKeyDown={handleKeyDown}
     >
       <table className="pdb-table">
+        <colgroup>
+          <col className="col-id" />
+          <col />
+          <col className="col-chains" />
+          <col className="col-residues" />
+          <col className="col-year" />
+        </colgroup>
         <thead>
           <tr>
             <th>ID</th>

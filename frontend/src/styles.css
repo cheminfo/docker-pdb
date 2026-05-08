@@ -1025,19 +1025,20 @@ code {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 8px 12px;
+  padding: 4px 8px;
   box-shadow: var(--shadow);
 }
 
 .searchbox-input {
   flex: 1;
+  min-width: 0;
   border: 0;
   outline: none;
-  font-size: 14px;
+  font-size: 12px;
   background: transparent;
   color: var(--text);
   font-family: inherit;
@@ -1048,21 +1049,23 @@ code {
 }
 
 .searchbox-count {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
 .searchbox-help-button {
-  width: 24px;
-  height: 24px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--muted);
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 600;
+  line-height: 1;
+  padding: 0;
   cursor: pointer;
   flex-shrink: 0;
 }
@@ -1123,13 +1126,28 @@ code {
 .pdb-table-wrapper {
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .pdb-table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
   font-size: 13px;
+}
+
+.pdb-table col.col-id {
+  width: 56px;
+}
+.pdb-table col.col-chains {
+  width: 72px;
+}
+.pdb-table col.col-residues {
+  width: 84px;
+}
+.pdb-table col.col-year {
+  width: 64px;
 }
 
 .pdb-table thead th {
@@ -1176,7 +1194,6 @@ code {
 }
 
 .pdb-table .title-cell {
-  max-width: 360px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
