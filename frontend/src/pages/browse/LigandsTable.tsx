@@ -1,7 +1,10 @@
+import { useEffect, useState } from 'react';
 import { MF } from 'react-mf';
+import { IdcodeSvgRenderer } from 'react-ocl';
 
 import type { FocusSpec } from '../../shared/PdbViewer.tsx';
-import type { PdbFormula } from '../../shared/api/types.ts';
+import { fetchLigandsByCodes } from '../../shared/api/client.ts';
+import type { LigandSummary, PdbFormula } from '../../shared/api/types.ts';
 
 import FocusButton from './FocusButton.tsx';
 
@@ -35,11 +38,22 @@ export default function LigandsTable({
     if (right.label === 'HOH') return -1;
     return left.label.localeCompare(right.label);
   });
+
+  // Fetch the canonical CCD structure for each ligand label so we can
+  // render a 2D thumbnail. Skips water (no value as a structure) and
+  // gracefully degrades when the ligand API is unavailable: the column
+  // simply stays empty.
+  const codes = sorted
+    .map((entry) => entry.label)
+    .filter((label) => label && label !== 'HOH');
+  const structures = useStructuresByCode(codes);
+
   return (
     <table className="info-table">
       <thead>
         <tr>
           <th className="focus-col" aria-label="Show in viewer" />
+          <th aria-label="2D structure" />
           <th>Label</th>
           <th>MF</th>
           <th>Name</th>
@@ -50,6 +64,7 @@ export default function LigandsTable({
         {sorted.map((entry, index) => {
           const key = `ligand:${entry.label}:${String(index)}`;
           const isActive = key === selectedKey;
+          const structure = structures.get(entry.label);
           return (
             <tr key={key} className={isActive ? 'is-focused' : undefined}>
               <td className="focus-col">
@@ -62,6 +77,16 @@ export default function LigandsTable({
                       : onFocus(key, { kind: 'ligand', label: entry.label })
                   }
                 />
+              </td>
+              <td className="ligand-structure-cell">
+                {structure ? (
+                  <IdcodeSvgRenderer
+                    idcode={structure.idCode}
+                    coordinates={structure.coordinates}
+                    width={70}
+                    height={50}
+                  />
+                ) : null}
               </td>
               <td className="mono">{entry.label}</td>
               <td className="mf-cell">
@@ -76,7 +101,7 @@ export default function LigandsTable({
         })}
         {sorted.length === 0 && (
           <tr>
-            <td colSpan={5} className="placeholder">
+            <td colSpan={6} className="placeholder">
               No ligand records.
             </td>
           </tr>
@@ -84,4 +109,42 @@ export default function LigandsTable({
       </tbody>
     </table>
   );
+}
+
+/**
+ * Resolve each ligand code to a `{ idCode, coordinates }` pair via the
+ * batched `/v1/ligands?codes=...` endpoint. Returns an empty map until the
+ * fetch completes; failures degrade silently (the structure column stays
+ * blank rather than blocking the page).
+ * @param codes - Ligand 3-letter codes to resolve.
+ * @returns Map of code → ligand summary (with idCode + coordinates).
+ */
+function useStructuresByCode(codes: string[]): Map<string, LigandSummary> {
+  const cacheKey = codes.toSorted().join(',');
+  const [structures, setStructures] = useState<Map<string, LigandSummary>>(
+    () => new Map(),
+  );
+  useEffect(() => {
+    let cancelled = false;
+    if (cacheKey === '') {
+      // No codes to resolve — fire-and-forget cleanup.
+      return () => {
+        cancelled = true;
+      };
+    }
+    fetchLigandsByCodes(cacheKey.split(','))
+      .then((response) => {
+        if (cancelled) return;
+        const map = new Map<string, LigandSummary>();
+        for (const ligand of response.ligands) map.set(ligand.code, ligand);
+        setStructures(map);
+      })
+      .catch(() => {
+        // Silent: the ligand API is optional for the browse page.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [cacheKey]);
+  return structures;
 }
