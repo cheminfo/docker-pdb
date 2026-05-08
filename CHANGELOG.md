@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/cheminfo/docker-pdb/compare/v1.1.0...v1.1.1) (2026-05-08)
+
+
+### Bug Fixes
+
+* grant public read access on the pdb databases at init ([a6023d0](https://github.com/cheminfo/docker-pdb/commit/a6023d04c959ee2a7f1269d874ff9e2dceb10c34))
+
 ## [1.1.0](https://github.com/cheminfo/docker-pdb/compare/v1.0.1...v1.1.0) (2026-05-08)
 
 

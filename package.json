@@ -1,6 +1,6 @@
 {
   "name": "docker-pdb",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Sync of the official PDB database into CouchDB. The database is searchable for properties like number of residues, residue percentages, molecular weight, etc.",
   "type": "module",
   "private": true,
