@@ -50,8 +50,9 @@ function formatStorageBreakdown(
 }
 
 /**
- * Render the overview cards (counts, per-archive storage breakdown, total
- * disk usage, and the timestamp of the latest asym-unit rsync run).
+ * Render the overview cards (counts, per-archive storage breakdown, separate
+ * CouchDB and raw-archive disk totals, and the timestamp of the latest
+ * asym-unit rsync run).
  * @param props - Component props.
  * @param props.pdb - CouchDB info for the `pdb` database.
  * @param props.assembly - CouchDB info for the `pdb-bio-assembly` database.
@@ -71,8 +72,8 @@ export default function StatsOverview({
   const assemblyCouch = getDiskSize(assembly);
   const pdbRaw = lastAsymRsync?.bytesOnDisk ?? null;
   const assemblyRaw = lastBioAssemblyRsync?.bytesOnDisk ?? null;
-  const totalDisk =
-    pdbCouch + assemblyCouch + (pdbRaw ?? 0) + (assemblyRaw ?? 0);
+  const totalCouch = pdbCouch + assemblyCouch;
+  const totalRaw = (pdbRaw ?? 0) + (assemblyRaw ?? 0);
 
   return (
     <div className="stats-grid">
@@ -87,9 +88,14 @@ export default function StatsOverview({
         sub={formatStorageBreakdown(assemblyCouch, assemblyRaw)}
       />
       <StatCard
-        label="Total on disk"
-        value={formatBytes(totalDisk)}
-        sub="CouchDB + raw archives"
+        label="CouchDB on disk"
+        value={formatBytes(totalCouch)}
+        sub="pdb + pdb-bio-assembly"
+      />
+      <StatCard
+        label="Raw archives on disk"
+        value={formatBytes(totalRaw)}
+        sub="asym-unit + bio-assembly .gz"
       />
       <StatCard
         label="Last rsync"
