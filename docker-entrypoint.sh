@@ -19,7 +19,7 @@ mkdir -p \
   /app/data/pymol \
   /app/data/logs/pdb \
   /app/data/logs/bioAssembly \
-  /app/data/sqlite3 \
+  /app/data/sqlite \
   /app/data/ccd
 chown app:app \
   /app/data \
@@ -29,7 +29,7 @@ chown app:app \
   /app/data/logs \
   /app/data/logs/pdb \
   /app/data/logs/bioAssembly \
-  /app/data/sqlite3 \
+  /app/data/sqlite \
   /app/data/ccd
 
 exec gosu app "$@"

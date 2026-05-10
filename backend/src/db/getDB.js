@@ -11,7 +11,7 @@ const logger = pino({ name: 'ligands-db' });
 const SLOW_QUERY_THRESHOLD_MS = 10;
 
 const dataDir = join(import.meta.dirname, '..', '..', 'data');
-const sqliteDir = join(dataDir, 'sqlite3');
+const sqliteDir = join(dataDir, 'sqlite');
 const dbPath = join(sqliteDir, 'ligands.db');
 const slowQueryLogPath = join(sqliteDir, 'slow-queries.log');
 

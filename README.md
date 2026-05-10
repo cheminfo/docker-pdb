@@ -36,9 +36,9 @@ Three core containers, plus a CCD-refresh sidecar, wired together by
 | `nginx-proxy`   | Public read-only entry point (proxies `/v1/...` to `pdb-api`) + serves the homepage SPA           |
 | `node-pdb-sync` | Daily cron: `rsync` the wwPDB tree, parse new files, render PyMol images, write to sqlite        |
 | `pdb-api`       | Fastify server: parsed metadata, stats aggregates, raw file streaming, substructure search        |
-| `pdb-api-cron`  | Weekly cron: refreshes `data/sqlite3/ligands.db` from the wwPDB Chemical Component Dictionary     |
+| `pdb-api-cron`  | Weekly cron: refreshes `data/sqlite/ligands.db` from the wwPDB Chemical Component Dictionary     |
 
-All persistent state lives in `data/sqlite3/ligands.db` (parsed metadata,
+All persistent state lives in `data/sqlite/ligands.db` (parsed metadata,
 ligand fingerprints, rsync history) plus the rsynced `.gz` archives.
 
 ## Deployment
@@ -124,7 +124,7 @@ data/
   pdb/                  # rsynced PDB asymmetric units (*.ent.gz)
   pdb-assembly/         # rsynced biological assemblies (*.pdb1.gz)
   pymol/<sub>/<id>/     # PyMol-rendered thumbnails (mirrors RCSB layout)
-  sqlite3/              # ligands.db (parsed metadata, fingerprints, rsync history)
+  sqlite/               # ligands.db (parsed metadata, fingerprints, rsync history)
   ccd/                  # cached components.cif.gz from wwPDB
   logs/                 # rsync change logs
 ```
@@ -135,7 +135,7 @@ The first sync downloads the entire wwPDB tree and renders every thumbnail
 ### Rebuild the database from local files
 
 If the sqlite index ever needs to be regenerated (corruption, schema
-upgrade, restoring from a partial backup), wipe `data/sqlite3/ligands.db`
+upgrade, restoring from a partial backup), wipe `data/sqlite/ligands.db`
 and run:
 
 ```sh
@@ -171,7 +171,7 @@ npm run dev:down   # stop the dev backend
   talk to it transparently.
 
 It then runs [`backend/src/dev.js`](./backend/src/dev.js) under `node --watch`: the
-script applies migrations on `data/sqlite3/ligands.db` and ingests up to
+script applies migrations on `data/sqlite/ligands.db` and ingests up to
 `DEV_SEED_LIMIT` (default 20) `.ent.gz` files already present under
 `data/pdb/`, so the API is queryable in seconds:
 

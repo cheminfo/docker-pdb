@@ -52,7 +52,7 @@ services:
   pdb-api:
     # Fastify server backing the entire HTTP API (substructure search,
     # parsed PDB metadata, stats aggregates, raw file streaming). On first
-    # start it seeds data/sqlite3/ligands.db from the wwPDB Chemical
+    # start it seeds data/sqlite/ligands.db from the wwPDB Chemical
     # Component Dictionary if the `ligands` table is empty.
     # Use the released image by default. To build locally instead, run:
     #   docker compose up -d --build
@@ -77,7 +77,7 @@ services:
     command: sh -c "npm run seed-ccd; npm run api"
 
   pdb-api-cron:
-    # Periodically refreshes data/sqlite3/ligands.db from the wwPDB
+    # Periodically refreshes data/sqlite/ligands.db from the wwPDB
     # Chemical Component Dictionary (weekly upstream cadence). Idle most
     # of the time. Independent of pdb-api: on a fresh deploy pdb-api
     # writes the initial copy and this cron sleeps until next week.
