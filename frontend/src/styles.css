@@ -1941,6 +1941,14 @@ code {
   font-weight: 600;
 }
 
+.animate-viewer-stack {
+  transition: opacity 110ms ease-in-out;
+}
+
+.animate-viewer-stack--swapping {
+  opacity: 0.35;
+}
+
 .ramachandran-overlay {
   position: absolute;
   pointer-events: none;

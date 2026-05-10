@@ -42,6 +42,17 @@ interface EchoOptions {
   color?: string;
 }
 
+interface LabelOptions {
+  /** Size factor (multiplier on the default 3D text size). */
+  size?: number;
+  /** Render text in bold. */
+  bold?: boolean;
+  /** Render text in italic. */
+  italic?: boolean;
+  /** Uniform CSS color for the text (name or \`#rrggbb\` / \`#rgb\`). */
+  color?: string;
+}
+
 interface RamachandranOptions {
   position?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
   highlight?: string[];
@@ -61,39 +72,75 @@ interface SizeOptions {
   value: number;
 }
 
-interface VisibilityToggle {
-  show(): void;
-  hide(): void;
+interface VisibilityToggle<T> {
+  show(): T;
+  hide(): T;
 }
 
 /** Sphere channel — covers each atom of the selection. */
-interface AtomsChannel extends VisibilityToggle {
+interface AtomsChannel extends VisibilityToggle<AtomsChannel> {
   /** Recolor (creates the spheres on first call). */
-  color(spec: ColorSpec): void;
+  color(spec: ColorSpec): AtomsChannel;
   /** Set sphere size factor. */
-  radius(options: SizeOptions): void;
+  radius(options: SizeOptions): AtomsChannel;
 }
 
 /** Bond cylinder channel. */
-interface BondsChannel extends VisibilityToggle {
+interface BondsChannel extends VisibilityToggle<BondsChannel> {
   /** Recolor (creates the cylinders on first call). */
-  color(spec: ColorSpec): void;
+  color(spec: ColorSpec): BondsChannel;
   /** Set bond cylinder size factor. */
-  diameter(value: number): void;
+  diameter(value: number): BondsChannel;
 }
 
 /** Cartoon / ribbon channel for protein backbone. */
-interface RibbonChannel extends VisibilityToggle {
+interface RibbonChannel extends VisibilityToggle<RibbonChannel> {
   /** Recolor (creates the ribbon on first call). */
-  color(spec: ColorSpec): void;
+  color(spec: ColorSpec): RibbonChannel;
 }
 
 /** Solvent-accessible surface channel. */
-interface SurfaceChannel extends VisibilityToggle {
+interface SurfaceChannel extends VisibilityToggle<SurfaceChannel> {
   /** Recolor (creates a solid surface unless \`dots()\` ran first). */
-  color(spec: ColorSpec): void;
+  color(spec: ColorSpec): SurfaceChannel;
   /** Switch to a dotted Gaussian surface (subsequent \`color()\` keeps it). */
-  dots(): void;
+  dots(): SurfaceChannel;
+}
+
+/**
+ * Hydrogen-bond channel. Computes backbone N…O hydrogen bonds within the
+ * selection (distance 2.5–3.5 Å, |Δresidue| > 1) and renders them as
+ * Mol*-managed dashed lines. Default style: yellow, diameter 0.3.
+ */
+interface HbondsChannel extends VisibilityToggle<HbondsChannel> {
+  /** Recolor (creates the lines on first call). Default \`{ value: 'yellow' }\`. */
+  color(spec: ColorSpec): HbondsChannel;
+  /** Set the line size factor. Default \`0.3\`. */
+  diameter(value: number): HbondsChannel;
+}
+
+/** Per-line options for \`distances.to(other, options?)\`. */
+interface DistanceToOptions {
+  /** Color for this line — falls back to the channel default. */
+  color?: ColorSpec;
+  /** Line size factor for this line — falls back to the channel default. */
+  diameter?: number;
+  /** Override the auto-generated distance text. Pass \`''\` to hide it. */
+  customText?: string;
+}
+
+/**
+ * Distances channel. Each \`to(other, options?)\` adds one labeled distance
+ * line. \`color\` / \`diameter\` set the default for subsequent \`.to(...)\`
+ * calls; existing lines keep their original style.
+ */
+interface DistancesChannel extends VisibilityToggle<DistancesChannel> {
+  /** Default color for subsequent \`to(...)\` lines. */
+  color(spec: ColorSpec): DistancesChannel;
+  /** Default size factor for subsequent \`to(...)\` lines. */
+  diameter(value: number): DistancesChannel;
+  /** Add one labeled distance line to \`other\`. */
+  to(other: Selection, options?: DistanceToOptions): DistancesChannel;
 }
 
 interface MolStarAtom {
@@ -120,18 +167,23 @@ interface MolStarResidue {
  * representation incrementally; chained methods cover camera, labels and
  * measurements.
  */
-interface Selection extends VisibilityToggle {
+interface Selection extends VisibilityToggle<Selection> {
   readonly atoms: AtomsChannel;
   readonly bonds: BondsChannel;
   readonly ribbon: RibbonChannel;
   readonly surface: SurfaceChannel;
+  readonly hbonds: HbondsChannel;
+  readonly distances: DistancesChannel;
   /** Sub-select within this selection (intersection with \`expression\`). */
   select(expression: string): Selection;
   /**
    * Add a residue/element/chain label overlay. The template can reference
-   * \`\${atom.*}\`, \`\${residue.*}\` or \`\${chain.*}\` paths.
+   * \`\${atom.*}\`, \`\${residue.*}\` or \`\${chain.*}\` paths. \`options\`
+   * mirror \`ms.echo(...)\`'s font preferences (\`size\`, \`bold\`,
+   * \`italic\`, \`color\`); \`size\` is a Mol* size-factor multiplier on the
+   * default 3D text size.
    */
-  label(template: string): void;
+  label(template: string, options?: LabelOptions): void;
   /** Zoom + center the camera on this selection's bounding sphere. */
   focus(): void;
   /**
@@ -159,14 +211,36 @@ interface PDB {
    * Parse a JSmol-style selection expression. Supports atomic forms such as
    * \`"PLP"\`, \`"[CYS]"\`, \`"[CYS].CA"\` (or \`"CYS.CA"\`),
    * \`".CA"\`, \`"_C"\` (element symbol), \`":A"\` (whole chain),
-   * \`"108-122:A"\`, \`"119:A"\`, plus operators \`and\` / \`or\` / \`not\`,
-   * \`within X of …\`, and parentheses.
+   * \`"108-122:A"\`, \`"119:A"\`, plus the keyword groups
+   * \`protein\` / \`ligand\` / \`water\` / \`nucleic\` / \`polymer\` /
+   * \`hetero\` / \`helix\` / \`sheet\` / \`backbone\` / \`sidechain\`,
+   * the operators \`and\` / \`or\` / \`not\`, \`within X of …\`, and
+   * parentheses.
    */
   select(expression: string): Selection;
   /** Show a Ramachandran (φ × ψ) plot plus an ω plot overlay. */
   ramachandran(options?: RamachandranOptions): void;
   /** Remove the Ramachandran overlay. */
   clearRamachandran(): void;
+  /**
+   * Create a named view of the structure. Clones the active model's PDB and
+   * op log; pass \`{ pdb }\` to load a synthetic structure instead. The new
+   * model becomes active and \`pdb\` follows it — channel calls now record
+   * into this model. Returns the same \`pdb\` handle.
+   */
+  createModel(name: string, options?: { pdb?: string }): PDB;
+  /**
+   * Activate a previously-created model. Tears down current \`animate\`
+   * representations, reloads Mol* when the target's PDB differs, then
+   * replays the target's op log. Returns the same \`pdb\` handle.
+   */
+  switchModel(name: string): PDB;
+  /** Active model name (defaults to \`'initial'\`). */
+  currentModel(): string;
+  /** Delete a model. \`'initial'\` cannot be deleted. */
+  deleteModel(name: string): void;
+  /** List every registered model name in creation order. */
+  listModels(): readonly string[];
 }
 
 /**

@@ -6,6 +6,9 @@
 
 export interface PluginContext {
   builders: {
+    data: {
+      rawData: (params: { data: string }) => Promise<unknown>;
+    };
     structure: {
       tryCreateComponentFromExpression: (
         structureCell: unknown,
@@ -13,6 +16,14 @@ export interface PluginContext {
         key: string,
         params?: { label?: string; tags?: string[] },
       ) => Promise<ComponentRef | undefined>;
+      parseTrajectory: (data: unknown, format: 'pdb') => Promise<unknown>;
+      hierarchy: {
+        applyPreset: (
+          trajectory: unknown,
+          preset: 'default',
+          params: Record<string, unknown>,
+        ) => Promise<unknown>;
+      };
       representation: {
         addRepresentation: (
           component: ComponentRef,
@@ -21,7 +32,20 @@ export interface PluginContext {
       };
     };
   };
+  /** Reset Mol*'s plugin state — drops every loaded structure/representation. */
+  clear: () => Promise<void>;
   canvas3d?: { setProps: (props: Record<string, unknown>) => void };
+  /**
+   * State data tree handle — used by `measurements.ts` to delete or hide
+   * measurement cells that the channel system doesn't manage.
+   */
+  state: {
+    data: {
+      cells: { has: (ref: string) => boolean };
+      build: () => StateBuilder;
+      updateCellState: (ref: string, partial: { isHidden?: boolean }) => void;
+    };
+  };
   managers: {
     camera: {
       reset: () => void;
@@ -48,11 +72,31 @@ export interface PluginContext {
         clear: () => void;
       };
       measurement: {
-        addDistance: (a: unknown, b: unknown) => Promise<void>;
+        addDistance: (
+          a: unknown,
+          b: unknown,
+          options?: {
+            customText?: string;
+            reprTags?: string | string[];
+            visualParams?: Record<string, unknown>;
+          },
+        ) => Promise<
+          | {
+              representation?: { ref: string };
+              selection?: { ref: string };
+            }
+          | undefined
+        >;
         clear?: () => Promise<void>;
       };
     };
   };
+}
+
+/** Subset of Mol*'s `StateBuilder` we lean on for measurement removal. */
+export interface StateBuilder {
+  delete: (ref: string) => StateBuilder;
+  commit: () => Promise<void>;
 }
 
 export interface StructureRef {
@@ -69,6 +113,17 @@ export interface LociHelpers {
   getBoundingSphere: (
     loci: unknown,
   ) => { radius: number; center: [number, number, number] } | undefined;
+}
+
+/**
+ * Subset of `molstar/lib/mol-model/structure` `StructureElement` we lean on
+ * to validate that a generated atom selection actually matched anything
+ * before handing the loci to `measurement.addDistance`.
+ */
+export interface StructureElementApi {
+  Loci: {
+    isEmpty: (loci: unknown) => boolean;
+  };
 }
 
 export interface MolScriptApi {

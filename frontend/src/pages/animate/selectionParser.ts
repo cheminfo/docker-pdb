@@ -15,6 +15,7 @@
  *         | <residue>:<chain>              e.g. 119:A
  *         | "all" | "none"
  *         | "protein" | "ligand" | "water" | "nucleic" | "polymer" | "hetero"
+ *         | "helix" | "sheet" | "backbone" | "sidechain"
  *         | "within" <number> "of" sel
  *
  * Precedence: `not` binds tighter than `and`, which binds tighter than `or`.
@@ -29,7 +30,11 @@ export type KeywordGroup =
   | 'water'
   | 'nucleic'
   | 'polymer'
-  | 'hetero';
+  | 'hetero'
+  | 'helix'
+  | 'sheet'
+  | 'backbone'
+  | 'sidechain';
 
 /** Parsed selection AST. Compiled to MolScript by `compileSelection`. */
 export type Selection =
@@ -55,6 +60,10 @@ const KEYWORD_GROUPS = new Set<string>([
   'nucleic',
   'polymer',
   'hetero',
+  'helix',
+  'sheet',
+  'backbone',
+  'sidechain',
 ]);
 
 type Token =

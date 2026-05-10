@@ -25,19 +25,23 @@
  * idempotent) for power users.
  */
 
+import { buildRamachandranPdb } from './buildRamachandranPdb.ts';
 import type { ColorSpec } from './colorTheme.ts';
 import type {
   EchoOptions,
-  RamachandranOptions,
+  LabelOptions,
   RotateOptions,
   ScriptApi,
   SelectionToken,
 } from './helpers.ts';
+import type { DistanceToOptions } from './measurements.ts';
 import type { MolStarAtom, MolStarResidue } from './parsePdb.ts';
 import { parsePdb } from './parsePdb.ts';
 import {
   makeAtomsChannel,
   makeBondsChannel,
+  makeDistancesChannel,
+  makeHbondsChannel,
   makeRibbonChannel,
   makeSurfaceChannel,
 } from './scriptChannels.ts';
@@ -127,6 +131,35 @@ export interface SurfaceChannel
 }
 
 /**
+ * Hydrogen-bond channel. Computes backbone N…O hydrogen bonds within the
+ * selection's residues (distance window 2.5–3.5 Å, excluding peptide-bond
+ * neighbours) and renders them as Mol*-managed dashed lines. Default
+ * style is yellow with `diameter` 0.3.
+ */
+export interface HbondsChannel
+  extends VisibilityToggle<HbondsChannel>, PromiseLike<void> {
+  /** Recolor (creates the lines on first call). Default `{ value: 'yellow' }`. */
+  color: (spec: ColorSpec) => HbondsChannel;
+  /** Set the line size factor (Mol* `linesSize`). Default `0.3`. */
+  diameter: (value: number) => HbondsChannel;
+}
+
+/**
+ * Distances channel. Each `to(other, options?)` adds one labeled distance
+ * line between this selection and `other`. `color` / `diameter` set the
+ * default style for *subsequent* `to(...)` calls.
+ */
+export interface DistancesChannel
+  extends VisibilityToggle<DistancesChannel>, PromiseLike<void> {
+  /** Default color for subsequent `to(...)` lines. */
+  color: (spec: ColorSpec) => DistancesChannel;
+  /** Default line size factor for subsequent `to(...)` lines. */
+  diameter: (value: number) => DistancesChannel;
+  /** Add one labeled distance line to `other`. */
+  to: (other: Selection, options?: DistanceToOptions) => DistancesChannel;
+}
+
+/**
  * Selection object returned by `pdb.select(...)` (and recursive sub-selects).
  * Channel objects let you build a representation incrementally; chained
  * methods on the selection itself cover camera/measurement/labels.
@@ -139,14 +172,18 @@ export interface Selection extends SelectionToken, VisibilityToggle<Selection> {
   readonly bonds: BondsChannel;
   readonly ribbon: RibbonChannel;
   readonly surface: SurfaceChannel;
+  readonly hbonds: HbondsChannel;
+  readonly distances: DistancesChannel;
   /**
    * Add a residue/element/chain label overlay. The template can reference
    * `${atom.*}`, `${residue.*}`, or `${chain.*}` paths; today the renderer
    * picks Mol*'s built-in label level from the references and draws the
    * level's default text (residue name+number, atom id, or chain id).
-   * Custom-text labels are not yet supported.
+   * Custom-text labels are not yet supported. `options` mirror the `echo`
+   * font preferences (`size`, `bold`, `italic`, `color`); `size` is a Mol*
+   * size-factor multiplier on the default 3D text size.
    */
-  label: (template: string) => Promise<void>;
+  label: (template: string, options?: LabelOptions) => Promise<void>;
   /** Sub-select within this selection (intersection with `expression`). */
   select: (expression: string) => Selection;
   /** Zoom + center the camera on this selection's bounding sphere. */
@@ -157,7 +194,10 @@ export interface Selection extends SelectionToken, VisibilityToggle<Selection> {
    * (default 0.75). Rotation-invariant, so framing survives `ms.spin(...)`.
    */
   zoom: (factor?: number) => Promise<void>;
-  /** Draw a labeled distance line to the centroid of `other`. */
+  /**
+   * Draw a labeled distance line to the centroid of `other`. Kept as a
+   * shorthand for `selection.distances.to(other)`.
+   */
   distance: (other: Selection) => Promise<void>;
 }
 
@@ -176,6 +216,27 @@ export interface PDB {
 
   ramachandran: (options?: RamachandranOptions) => void;
   clearRamachandran: () => void;
+
+  /**
+   * Create a named view of the structure. Clones the active model's PDB text
+   * and op log; pass `{ pdb }` to load a synthetic structure (e.g. moved
+   * coordinates) instead. The new model becomes active and `pdb` now follows
+   * it — channel calls record into this model until `switchModel` is called.
+   * Returns the same `pdb` handle so the call can be chained.
+   */
+  createModel: (name: string, options?: { pdb?: string }) => Promise<PDB>;
+  /**
+   * Activate a previously-created model. Tears down the current `animate`
+   * representations, reloads the Mol* structure when the target's PDB
+   * differs, then replays the target's op log. Returns the same `pdb` handle.
+   */
+  switchModel: (name: string) => Promise<PDB>;
+  /** Name of the currently active model (defaults to `'initial'`). */
+  currentModel: () => string;
+  /** Delete a model by name. The `'initial'` model cannot be deleted. */
+  deleteModel: (name: string) => void;
+  /** List every registered model name in creation order. */
+  listModels: () => readonly string[];
 }
 
 /** The viewer instance returned by `new MolStar()`. */
@@ -219,6 +280,7 @@ export type ScriptingDelay = (seconds: number) => void;
 export function createMolStarClass(api: ScriptApi): MolStarConstructor {
   class MolStar implements MolStarInstance {
     loadPDB(text: string): PDB {
+      api.ensureInitialModel(text);
       return buildPdb(api, text);
     }
     spin(axis: 'x' | 'y' | 'z' | 'off', speedDegreesPerSecond?: number) {
@@ -258,7 +320,7 @@ export const delay: Delay = (seconds) =>
 
 function buildPdb(api: ScriptApi, text: string): PDB {
   const parsed = parsePdb(text);
-  return {
+  const pdb: PDB = {
     text,
     atoms: parsed.atoms,
     residues: parsed.residues,
@@ -273,7 +335,19 @@ function buildPdb(api: ScriptApi, text: string): PDB {
     select: (expression) => wrap(api, api.select(expression)),
     ramachandran: (options) => api.ramachandran(options),
     clearRamachandran: () => api.clearRamachandran(),
+    createModel: async (name, options) => {
+      await api.createModel(name, options);
+      return pdb;
+    },
+    switchModel: async (name) => {
+      await api.switchModel(name);
+      return pdb;
+    },
+    currentModel: () => api.currentModel(),
+    deleteModel: (name) => api.deleteModel(name),
+    listModels: () => api.listModels(),
   };
+  return pdb;
 }
 
 function wrap(api: ScriptApi, token: SelectionToken): Selection {
@@ -285,7 +359,10 @@ function wrap(api: ScriptApi, token: SelectionToken): Selection {
     bonds: makeBondsChannel(api, selection),
     ribbon: makeRibbonChannel(api, selection),
     surface: makeSurfaceChannel(api, selection),
-    label: (template: string) => api.label(selection, template),
+    hbonds: makeHbondsChannel(api, selection),
+    distances: makeDistancesChannel(api, selection),
+    label: (template: string, options?: LabelOptions) =>
+      api.label(selection, template, options),
     select: (expression: string) =>
       wrap(api, api.intersect(selection, api.select(expression))),
     show: () => {

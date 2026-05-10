@@ -15,7 +15,7 @@ import { createMolStarClass, delay } from './MolStar.ts';
 import type { RamachandranEntry } from './RamachandranOverlay.tsx';
 import RamachandranOverlay from './RamachandranOverlay.tsx';
 import { createScriptApi } from './helpers.ts';
-import type { LociHelpers } from './molstarTypes.ts';
+import type { LociHelpers, StructureElementApi } from './molstarTypes.ts';
 import { runScript } from './runScript.ts';
 import { DEFAULT_SCENE_CODE, SCENES } from './scenes.ts';
 
@@ -40,14 +40,33 @@ export default function AnimatePage() {
     useState<RamachandranEntry | null>(null);
   const [scriptError, setScriptError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
+  const [swapping, setSwapping] = useState(false);
   const [colorModule, setColorModule] = useState<ColorModule | null>(null);
   const [lociHelpers, setLociHelpers] = useState<LociHelpers | null>(null);
+  const [structureElement, setStructureElement] =
+    useState<StructureElementApi | null>(null);
   const [showHelp, setShowHelp] = useState(false);
 
   const viewerHandleRef = useRef<PdbViewerHandle | null>(null);
+  // Tracks the PDB text Mol* currently has loaded. Persists across script
+  // Runs so `api.clear()` can detect that a previous run left a swapped
+  // structure and restore the original.
+  const loadedPdbRef = useRef<string>('');
 
   const fetchTask = useCallback(() => fetchPdbText(loadedId), [loadedId]);
   const pdbText = useAsync(fetchTask);
+
+  useEffect(() => {
+    // Mirror Mol*'s currently-loaded structure into a ref so the next script
+    // Run can detect (and undo) any swap a previous Run left behind. PdbViewer
+    // owns the actual reload; we only track the source of truth from outside,
+    // not handle a click event.
+    /* eslint-disable react-you-might-not-need-an-effect/no-event-handler */
+    if (pdbText.status === 'success') {
+      loadedPdbRef.current = pdbText.data;
+    }
+    /* eslint-enable react-you-might-not-need-an-effect/no-event-handler */
+  }, [pdbText]);
 
   useEffect(() => {
     let cancelled = false;
@@ -64,6 +83,15 @@ export default function AnimatePage() {
             | undefined,
       });
     });
+    void import('molstar/lib/mol-model/structure.js').then((module_) => {
+      if (cancelled) return;
+      setStructureElement({
+        Loci: {
+          isEmpty: (loci) =>
+            module_.StructureElement.Loci.isEmpty(loci as never),
+        },
+      });
+    });
     return () => {
       cancelled = true;
     };
@@ -76,6 +104,7 @@ export default function AnimatePage() {
       !handle ||
       !colorModule ||
       !lociHelpers ||
+      !structureElement ||
       pdbText.status !== 'success'
     ) {
       setScriptError('Viewer is still initializing.');
@@ -86,9 +115,12 @@ export default function AnimatePage() {
       molScript: handle.molScript,
       colorModule,
       lociHelpers,
+      structureElement,
       setEchoEntry,
       setRamachandranEntry,
       pdbText: pdbText.data,
+      loadedPdbRef,
+      setSwapping,
     });
     const MolStar = createMolStarClass(api);
     setRunning(true);
@@ -101,7 +133,7 @@ export default function AnimatePage() {
     });
     setRunning(false);
     if (error) setScriptError(error.message);
-  }, [code, colorModule, lociHelpers, pdbText]);
+  }, [code, colorModule, lociHelpers, structureElement, pdbText]);
 
   const handleReset = useCallback(async () => {
     setScriptError(null);
@@ -112,6 +144,7 @@ export default function AnimatePage() {
       !handle ||
       !colorModule ||
       !lociHelpers ||
+      !structureElement ||
       pdbText.status !== 'success'
     ) {
       return;
@@ -121,13 +154,16 @@ export default function AnimatePage() {
       molScript: handle.molScript,
       colorModule,
       lociHelpers,
+      structureElement,
       setEchoEntry,
       setRamachandranEntry,
       pdbText: pdbText.data,
+      loadedPdbRef,
+      setSwapping,
     });
     await api.clear();
     await api.resetCamera();
-  }, [colorModule, lociHelpers, pdbText]);
+  }, [colorModule, lociHelpers, structureElement, pdbText]);
 
   function handleLoadPdb() {
     const trimmed = pdbId.trim().toUpperCase();
@@ -148,7 +184,8 @@ export default function AnimatePage() {
   const viewerReady =
     pdbText.status === 'success' &&
     colorModule !== null &&
-    lociHelpers !== null;
+    lociHelpers !== null &&
+    structureElement !== null;
 
   const viewerPane = (
     <div className="panel animate-viewer-panel">
@@ -161,7 +198,13 @@ export default function AnimatePage() {
         </p>
       )}
       {pdbText.status === 'success' && (
-        <div className="animate-viewer-stack">
+        <div
+          className={
+            swapping
+              ? 'animate-viewer-stack animate-viewer-stack--swapping'
+              : 'animate-viewer-stack'
+          }
+        >
           <PdbViewer
             ref={viewerHandleRef}
             pdb={pdbText.data}

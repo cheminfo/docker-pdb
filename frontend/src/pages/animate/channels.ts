@@ -11,8 +11,8 @@
  */
 
 import type { ColorSpec } from './colorTheme.ts';
-import { buildColorParams } from './colorTheme.ts';
-import type { SelectionToken } from './helpers.ts';
+import { buildColorParams, parseCssColorToHex } from './colorTheme.ts';
+import type { LabelOptions, SelectionToken } from './helpers.ts';
 import type {
   ComponentRef,
   MolScriptApi,
@@ -64,7 +64,11 @@ export interface Channels {
   setBonds: (selection: SelectionToken, patch: BondsPatch) => Promise<void>;
   setRibbon: (selection: SelectionToken, patch: RibbonPatch) => Promise<void>;
   setSurface: (selection: SelectionToken, patch: SurfacePatch) => Promise<void>;
-  label: (selection: SelectionToken, template: string) => Promise<void>;
+  label: (
+    selection: SelectionToken,
+    template: string,
+    options?: LabelOptions,
+  ) => Promise<void>;
   /**
    * Toggle visibility of a single channel for `selection`. No-op if the
    * channel hasn't been created yet (call `.color()` / `.radius()` / etc.
@@ -120,6 +124,7 @@ export function createChannels(context: ChannelContext): Channels {
   async function applyLabel(
     selection: SelectionToken,
     template: string,
+    options?: LabelOptions,
   ): Promise<void> {
     const key = `${selection.source}::label`;
     const previous = states.get(key);
@@ -133,10 +138,25 @@ export function createChannels(context: ChannelContext): Channels {
       states.delete(key);
       return;
     }
-    const params = {
-      type: 'label',
-      typeParams: { level: detectLabelLevel(template) },
+    const typeParams: Record<string, unknown> = {
+      level: detectLabelLevel(template),
     };
+    if (options?.size !== undefined) typeParams.sizeFactor = options.size;
+    if (options?.bold !== undefined) {
+      typeParams.fontWeight = options.bold ? 'bold' : 'normal';
+    }
+    if (options?.italic !== undefined) {
+      typeParams.fontStyle = options.italic ? 'italic' : 'normal';
+    }
+    const params: Record<string, unknown> = { type: 'label', typeParams };
+    if (options?.color !== undefined) {
+      const hex = parseCssColorToHex(options.color);
+      if (hex !== null) {
+        params.color = 'uniform';
+        // eslint-disable-next-line new-cap -- Mol* exports `Color` as a callable factory
+        params.colorParams = { value: context.colorModule.Color(hex) };
+      }
+    }
     await context.plugin.builders.structure.representation.addRepresentation(
       component,
       params,

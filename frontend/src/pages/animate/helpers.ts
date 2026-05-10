@@ -9,10 +9,20 @@ import type {
 } from './channels.ts';
 import { createChannels } from './channels.ts';
 import type {
+  DistanceToOptions,
+  DistancesPatch,
+  HbondsPatch,
+} from './measurements.ts';
+import { createMeasurements } from './measurements.ts';
+import { createModelRegistry } from './models.ts';
+import type {
   LociHelpers,
   MolScriptApi,
   PluginContext,
+  StructureElementApi,
 } from './molstarTypes.ts';
+import type { ParsedPdb } from './parsePdb.ts';
+import { parsePdb } from './parsePdb.ts';
 import { computeRamachandran } from './ramachandran.ts';
 import { compileSelection } from './selectionCompiler.ts';
 import type { Selection as SelectionAst } from './selectionParser.ts';
@@ -34,6 +44,22 @@ export interface EchoOptions {
   size?: number;
   bold?: boolean;
   italic?: boolean;
+  color?: string;
+}
+
+/**
+ * Font options for `selection.label(...)`. Mirrors {@link EchoOptions} minus
+ * `position` — 3D labels are anchored to atoms, not screen edges. `size` is
+ * a Mol* size-factor multiplier on the default text size (`1` = default).
+ */
+export interface LabelOptions {
+  /** Size factor (multiplier on the default 3D text size). */
+  size?: number;
+  /** Render text in bold. */
+  bold?: boolean;
+  /** Render text in italic. */
+  italic?: boolean;
+  /** Uniform CSS color for the text (name or `#rrggbb` / `#rgb`). */
   color?: string;
 }
 
@@ -88,7 +114,28 @@ export interface ScriptApi {
   setBonds: (selection: SelectionToken, patch: BondsPatch) => Promise<void>;
   setRibbon: (selection: SelectionToken, patch: RibbonPatch) => Promise<void>;
   setSurface: (selection: SelectionToken, patch: SurfacePatch) => Promise<void>;
-  label: (selection: SelectionToken, template: string) => Promise<void>;
+  setHbonds: (selection: SelectionToken, patch: HbondsPatch) => Promise<void>;
+  setDistances: (
+    selection: SelectionToken,
+    patch: DistancesPatch,
+  ) => Promise<void>;
+  /** Add one distance line from `selection` to `other`. */
+  addDistanceTo: (
+    selection: SelectionToken,
+    other: SelectionToken,
+    options?: DistanceToOptions,
+  ) => Promise<void>;
+  /** Toggle visibility of a measurement-style channel for `selection`. */
+  setMeasurementVisibility: (
+    selection: SelectionToken,
+    channel: 'distances' | 'hbonds',
+    visible: boolean,
+  ) => void;
+  label: (
+    selection: SelectionToken,
+    template: string,
+    options?: LabelOptions,
+  ) => Promise<void>;
 
   /** Toggle visibility of a single channel of `selection`. */
   setChannelVisibility: (
@@ -138,11 +185,29 @@ export interface ScriptApi {
 
   delay: (seconds: number) => Promise<void>;
 
-  /** Draw a labeled distance line between the centroids of two selections. */
+  /**
+   * Draw a labeled distance line between the centroids of two selections.
+   * Kept for backward compatibility — the canonical surface is now
+   * `selection.distances.to(other, options?)`.
+   */
   distance: (
     selection1: SelectionToken,
     selection2: SelectionToken,
   ) => Promise<void>;
+
+  /**
+   * Register the implicit `'initial'` model on first `ms.loadPDB(text)`.
+   * Subsequent calls with the same text are a no-op; calls with different
+   * text are silently ignored (use `createModel` to add another model).
+   */
+  ensureInitialModel: (text: string) => void;
+  /** Create a named model cloning the active model's PDB and op log. */
+  createModel: (name: string, options?: { pdb?: string }) => Promise<void>;
+  /** Make a previously-created model active (re-runs its op log). */
+  switchModel: (name: string) => Promise<void>;
+  currentModel: () => string;
+  deleteModel: (name: string) => void;
+  listModels: () => string[];
 }
 
 /** Resources passed to `createScriptApi` from the page-level wiring. */
@@ -157,6 +222,23 @@ export interface ScriptApiContext {
   colorModule: { Color: (hex: number) => unknown };
   /** Lazily-imported Mol* `Loci` helpers, used by `selection.zoom(...)`. */
   lociHelpers: LociHelpers;
+  /**
+   * Lazily-imported Mol* `StructureElement` helpers used by the measurements
+   * module to validate atom-loci before passing them to `addDistance`.
+   */
+  structureElement: StructureElementApi;
+  /**
+   * Mutable handle to the PDB text currently loaded inside Mol*. Persists
+   * across script Runs (held by the page) so `clearAll` can detect when a
+   * previous run left a swapped structure and restore the original.
+   */
+  loadedPdbRef: { current: string };
+  /**
+   * Toggle a CSS class on the viewer container so the Mol* canvas briefly
+   * dims while a model swap is in flight. Lets the user see the transition
+   * even when the swap completes in milliseconds.
+   */
+  setSwapping: (swapping: boolean) => void;
 }
 
 /**
@@ -173,6 +255,22 @@ export function createScriptApi(context: ScriptApiContext): ScriptApi {
     molScript,
     colorModule: context.colorModule,
   });
+  const measurements = createMeasurements({
+    plugin,
+    molScript,
+    colorModule: context.colorModule,
+    structureElement: context.structureElement,
+  });
+  let parsedPdbCache: { text: string; parsed: ParsedPdb } | null = null;
+  function getParsedPdb(): ParsedPdb {
+    if (parsedPdbCache?.text !== context.pdbText) {
+      parsedPdbCache = {
+        text: context.pdbText,
+        parsed: parsePdb(context.pdbText),
+      };
+    }
+    return parsedPdbCache.parsed;
+  }
 
   async function selectionToLoci(selection: SelectionToken): Promise<unknown> {
     const structure =
@@ -185,21 +283,40 @@ export function createScriptApi(context: ScriptApiContext): ScriptApi {
     return molScript.StructureSelection.toLociWithSourceUnits(queryResult);
   }
 
-  async function clearAll(): Promise<void> {
-    const structureRef =
-      plugin.managers.structure.hierarchy.current.structures[0];
-    if (!structureRef) return;
-    const components = structureRef.components.filter((component) =>
-      component.cell.transform.tags?.includes('animate'),
-    );
-    if (components.length > 0) {
-      await plugin.managers.structure.hierarchy.remove(components);
-    }
+  async function rawDistance(
+    selection1: SelectionToken,
+    selection2: SelectionToken,
+  ): Promise<void> {
+    const loci1 = await selectionToLoci(selection1);
+    const loci2 = await selectionToLoci(selection2);
+    if (!loci1 || !loci2) return;
+    await plugin.managers.structure.measurement.addDistance(loci1, loci2);
+  }
+
+  async function resetTransients(): Promise<void> {
     await plugin.managers.structure.measurement.clear?.();
     plugin.managers.structure.selection.clear();
-    channels.resetState();
+    plugin.canvas3d?.setProps({ renderer: { selectStrength: 0 } });
     context.setEchoEntry(null);
     context.setRamachandranEntry(null);
+  }
+
+  const models = createModelRegistry({
+    plugin,
+    channels,
+    loadedPdbRef: context.loadedPdbRef,
+    setSwapping: context.setSwapping,
+    resetTransients,
+    rawDistance,
+  });
+
+  async function clearAll(): Promise<void> {
+    // Restore the original structure if a previous Run swapped it out, then
+    // strip every `animate`-tagged representation and reset transient state.
+    await models.resetToOriginal(context.pdbText);
+    await models.clearActive();
+    await measurements.clearAll();
+    await resetTransients();
   }
 
   return {
@@ -213,13 +330,51 @@ export function createScriptApi(context: ScriptApiContext): ScriptApi {
 
     clear: clearAll,
 
-    setAtoms: channels.setAtoms,
-    setBonds: channels.setBonds,
-    setRibbon: channels.setRibbon,
-    setSurface: channels.setSurface,
-    label: channels.label,
-    setChannelVisibility: channels.setChannelVisibility,
-    setSelectionVisibility: channels.setSelectionVisibility,
+    setAtoms: (selection, patch) => {
+      models.recordOp({ kind: 'setAtoms', selection, patch });
+      return channels.setAtoms(selection, patch);
+    },
+    setBonds: (selection, patch) => {
+      models.recordOp({ kind: 'setBonds', selection, patch });
+      return channels.setBonds(selection, patch);
+    },
+    setRibbon: (selection, patch) => {
+      models.recordOp({ kind: 'setRibbon', selection, patch });
+      return channels.setRibbon(selection, patch);
+    },
+    setSurface: (selection, patch) => {
+      models.recordOp({ kind: 'setSurface', selection, patch });
+      return channels.setSurface(selection, patch);
+    },
+    // Measurement-style channels (hbonds, distances) are not yet recorded
+    // into the model op log — switching models drops their state. Acceptable
+    // for now: the only consumers are scenes that don't use createModel.
+    setHbonds: (selection, patch) =>
+      measurements.setHbonds(selection, getParsedPdb(), patch),
+    setDistances: (selection, patch) =>
+      measurements.setDistances(selection, patch),
+    addDistanceTo: (selection, other, options) =>
+      measurements.addDistanceTo(selection, other, options),
+    setMeasurementVisibility: (selection, channel, visible) => {
+      measurements.setVisibility(selection, channel, visible);
+    },
+    label: (selection, template) => {
+      models.recordOp({ kind: 'label', selection, template });
+      return channels.label(selection, template);
+    },
+    setChannelVisibility: (selection, channel, visible) => {
+      models.recordOp({
+        kind: 'channelVisibility',
+        selection,
+        channel,
+        visible,
+      });
+      channels.setChannelVisibility(selection, channel, visible);
+    },
+    setSelectionVisibility: (selection, visible) => {
+      models.recordOp({ kind: 'selectionVisibility', selection, visible });
+      channels.setSelectionVisibility(selection, visible);
+    },
 
     selectionHalos: async (on) => {
       plugin.canvas3d?.setProps({ renderer: { selectStrength: on ? 0.3 : 0 } });
@@ -291,11 +446,16 @@ export function createScriptApi(context: ScriptApiContext): ScriptApi {
       }),
 
     distance: async (selection1, selection2) => {
-      const loci1 = await selectionToLoci(selection1);
-      const loci2 = await selectionToLoci(selection2);
-      if (!loci1 || !loci2) return;
-      await plugin.managers.structure.measurement.addDistance(loci1, loci2);
+      models.recordOp({ kind: 'distance', selection1, selection2 });
+      await rawDistance(selection1, selection2);
     },
+
+    ensureInitialModel: (text) => models.ensureInitial(text),
+    createModel: (name, options) => models.createModel(name, options),
+    switchModel: (name) => models.switchModel(name),
+    currentModel: () => models.currentModel(),
+    deleteModel: (name) => models.deleteModel(name),
+    listModels: () => models.listModels(),
   };
 }
 

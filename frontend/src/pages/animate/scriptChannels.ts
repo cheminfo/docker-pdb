@@ -28,12 +28,16 @@
 import type {
   AtomsChannel,
   BondsChannel,
+  DistancesChannel,
+  HbondsChannel,
   RibbonChannel,
+  Selection,
   SizeOptions,
   SurfaceChannel,
 } from './MolStar.ts';
 import type { ColorSpec } from './colorTheme.ts';
 import type { ScriptApi, SelectionToken } from './helpers.ts';
+import type { DistanceToOptions } from './measurements.ts';
 
 /**
  * Build the `atoms` channel for `selection`. See file header for the
@@ -139,6 +143,86 @@ export function makeRibbonChannel(
     },
     hide: () => {
       api.setChannelVisibility(selection, 'ribbon', false);
+      return channel;
+    },
+    // eslint-disable-next-line unicorn/no-thenable -- chainable thenable channel; await drains the queue
+    then: (
+      onfulfilled?: ((value: void) => unknown) | null,
+      onrejected?: ((reason: unknown) => unknown) | null,
+    ) => queue.then(() => onfulfilled?.(), onrejected),
+  });
+  return channel;
+}
+
+/**
+ * Build the `hbonds` channel for `selection`. Computes backbone H-bonds
+ * within the selection's residues on the first setter call (or on `show()`)
+ * and renders them as Mol*-managed dashed lines (yellow by default).
+ * @param api - Internal renderer.
+ * @param selection - Selection this channel belongs to.
+ * @returns A fresh chainable `HbondsChannel`.
+ */
+export function makeHbondsChannel(
+  api: ScriptApi,
+  selection: SelectionToken,
+): HbondsChannel {
+  let queue: Promise<void> = Promise.resolve();
+  const channel = {} as HbondsChannel;
+  const enqueue = (task: () => Promise<void>): HbondsChannel => {
+    queue = queue.then(task);
+    return channel;
+  };
+  Object.assign(channel, {
+    color: (spec: ColorSpec) =>
+      enqueue(() => api.setHbonds(selection, { color: spec })),
+    diameter: (value: number) =>
+      enqueue(() => api.setHbonds(selection, { diameter: value })),
+    show: () => enqueue(() => api.setHbonds(selection, {})),
+    hide: () => {
+      api.setMeasurementVisibility(selection, 'hbonds', false);
+      return channel;
+    },
+    // eslint-disable-next-line unicorn/no-thenable -- chainable thenable channel; await drains the queue
+    then: (
+      onfulfilled?: ((value: void) => unknown) | null,
+      onrejected?: ((reason: unknown) => unknown) | null,
+    ) => queue.then(() => onfulfilled?.(), onrejected),
+  });
+  return channel;
+}
+
+/**
+ * Build the `distances` channel for `selection`. Distances are added one at
+ * a time via `.to(other, options?)` — color/diameter setters mutate the
+ * default style for subsequent `.to(...)` calls (existing lines keep their
+ * original style). See file header for the chainable-thenable contract.
+ * @param api - Internal renderer.
+ * @param selection - Selection this channel belongs to.
+ * @returns A fresh chainable `DistancesChannel`.
+ */
+export function makeDistancesChannel(
+  api: ScriptApi,
+  selection: SelectionToken,
+): DistancesChannel {
+  let queue: Promise<void> = Promise.resolve();
+  const channel = {} as DistancesChannel;
+  const enqueue = (task: () => Promise<void>): DistancesChannel => {
+    queue = queue.then(task);
+    return channel;
+  };
+  Object.assign(channel, {
+    color: (spec: ColorSpec) =>
+      enqueue(() => api.setDistances(selection, { color: spec })),
+    diameter: (value: number) =>
+      enqueue(() => api.setDistances(selection, { diameter: value })),
+    to: (other: Selection, options?: DistanceToOptions) =>
+      enqueue(() => api.addDistanceTo(selection, other, options)),
+    show: () => {
+      api.setMeasurementVisibility(selection, 'distances', true);
+      return channel;
+    },
+    hide: () => {
+      api.setMeasurementVisibility(selection, 'distances', false);
       return channel;
     },
     // eslint-disable-next-line unicorn/no-thenable -- chainable thenable channel; await drains the queue

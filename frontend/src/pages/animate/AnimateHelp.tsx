@@ -15,6 +15,10 @@ const SELECTION_EXAMPLES: Array<[string, string]> = [
   ['polymer', 'protein + nucleic acid (any polymer)'],
   ['nucleic', 'DNA + RNA residues'],
   ['hetero', 'everything that is not a polymer'],
+  ['helix', 'every residue covered by a HELIX record'],
+  ['sheet', 'every residue covered by a SHEET record'],
+  ['backbone', 'protein backbone atoms (N, CA, C, O, OXT, H, HA)'],
+  ['sidechain', 'protein non-backbone atoms'],
   ['PLP', 'every residue whose 3-letter code is PLP'],
   ['[CYS]', 'bracketed residue label (same as `CYS`)'],
   ['[H2O]', 'all waters by name'],
@@ -82,18 +86,32 @@ const SELECTION_METHODS: MethodEntry[] = [
     example: "pdb.select('PLP').surface.dots();",
   },
   {
+    signature: 'selection.hbonds.show() / .color(spec) / .diameter(value)',
+    description:
+      'Compute backbone N…O hydrogen bonds within the selection (distance window 2.5–3.5 Å, peptide-bond neighbours excluded) and render them as Mol*-managed dashed lines. Defaults: yellow, `diameter` 0.3. `.hide()` toggles visibility.',
+    example: "pdb.select('108-122:A').hbonds.show();",
+  },
+  {
+    signature:
+      'selection.distances.to(other, options?) / .color(spec) / .diameter(value)',
+    description:
+      "Add labeled distance lines from this selection to `other`. `color` and `diameter` set the default style for subsequent `.to(...)` calls; existing lines keep their original style. `options.customText` overrides the auto-generated distance label (pass `''` to hide it). `selection.distance(other)` is kept as a one-shot shorthand.",
+    example:
+      "pdb.select('PLP').distances.color('orange').to(pdb.select('within 3.5 of PLP and not PLP'));",
+  },
+  {
     signature: 'selection.<channel>.show() / .hide()',
     description:
       'Toggle the visibility of one rendering channel (`atoms`, `bonds`, `ribbon`, `surface`) for this selection without dropping its color/size state. Both methods return the channel so calls can be chained.',
     example: "pdb.select('water').atoms.hide();",
   },
   {
-    signature: 'selection.label(template)',
+    signature: 'selection.label(template, options?)',
     description:
-      "Add residue/element/chain labels using Mol*'s built-in label rep. The renderer picks a level based on which fields the template references (atom → element, chain → chain, otherwise residue). Custom-text templates are not yet supported — Mol* draws the level's default text.",
+      "Add residue/element/chain labels using Mol*'s built-in label rep. The renderer picks a level based on which fields the template references (atom → element, chain → chain, otherwise residue). Custom-text templates are not yet supported — Mol* draws the level's default text. `options` mirror `ms.echo(...)`'s font preferences: `{ size, bold, italic, color }` (no `position` — labels are anchored to atoms). `size` is a Mol* size-factor multiplier on the default 3D text size.",
     example:
       // eslint-disable-next-line no-template-curly-in-string -- this string documents the template syntax
-      "cys.select('.CA').label('${residue.name}${residue.number}');",
+      "cys.select('.CA').label('${residue.name}${residue.number}', { size: 1.5, bold: true, color: 'red' });",
   },
   {
     signature: 'selection.select(expression)',
@@ -145,6 +163,34 @@ const PDB_METHODS: MethodEntry[] = [
     signature: 'pdb.clearRamachandran()',
     description: 'Remove the Ramachandran overlay.',
     example: 'pdb.clearRamachandran();',
+  },
+  {
+    signature: 'pdb.createModel(name, options?)',
+    description:
+      "Create a named view. Clones the active model's PDB and op log; pass `{ pdb }` to load a synthetic PDB string instead. The new model becomes active and `pdb` follows it — channel calls record into this model. Returns the same `pdb` handle.",
+    example: "pdb.createModel('rainbow');",
+  },
+  {
+    signature: 'pdb.switchModel(name)',
+    description:
+      "Activate a previously-created model. Tears down current `animate` representations, reloads Mol* when the target PDB differs, then replays the target model's op log. Returns the same `pdb` handle.",
+    example: "pdb.switchModel('initial');",
+  },
+  {
+    signature: 'pdb.currentModel()',
+    description: "Active model name — defaults to `'initial'`.",
+    example: 'const name = pdb.currentModel();',
+  },
+  {
+    signature: 'pdb.deleteModel(name)',
+    description:
+      "Remove a model by name. The `'initial'` model cannot be deleted, and the active model cannot be deleted (switch first).",
+    example: "pdb.deleteModel('rainbow');",
+  },
+  {
+    signature: 'pdb.listModels()',
+    description: 'List every registered model name in creation order.',
+    example: 'const names = pdb.listModels();',
   },
 ];
 
@@ -361,7 +407,17 @@ ms.spin('y');`}</pre>
             JSmol&apos;s <code>moveto</code> with explicit camera matrices is
             not ported. Use <code>{`selection.focus()`}</code> instead.
           </li>
-          <li>H-bond rendering is not yet implemented in this v1.</li>
+          <li>
+            H-bond detection uses a simple geometric heuristic on backbone N/O
+            pairs (2.5–3.5 Å, |Δresidue| &gt; 1). It catches alpha-helix and
+            most beta-sheet H-bonds; non-backbone donors / acceptors are not
+            considered.
+          </li>
+          <li>
+            <code>helix</code> / <code>sheet</code> selections rely on the HELIX
+            / SHEET records present in the PDB text — files without those
+            records will return an empty selection.
+          </li>
         </ul>
       </section>
     </div>

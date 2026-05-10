@@ -29,6 +29,7 @@ interface MolScriptApi {
         auth_atom_id: () => unknown;
         entityType: () => unknown;
         entitySubtype: () => unknown;
+        secondaryStructureFlags: () => unknown;
       };
       core: {
         elementSymbol: () => unknown;
@@ -36,6 +37,7 @@ interface MolScriptApi {
     };
     type: {
       elementSymbol: (args: [string]) => unknown;
+      secondaryStructureFlags: (args: string[]) => unknown;
     };
   };
   core: {
@@ -49,9 +51,15 @@ interface MolScriptApi {
     str: {
       match: (args: [unknown, unknown]) => unknown;
     };
+    flags: {
+      hasAny: (args: [unknown, unknown]) => unknown;
+    };
   };
   re: (pattern: string, flags?: string) => unknown;
 }
+
+/** Backbone atom names (protein) used by `backbone` / `sidechain` keywords. */
+const PROTEIN_BACKBONE_ATOMS = ['N', 'CA', 'C', 'O', 'OXT', 'H', 'HA'];
 
 /**
  * Compile a parsed `Selection` to a Mol* MolScript expression. The second
@@ -190,9 +198,48 @@ function compileGroup(name: KeywordGroup, Q: MolScriptApi): unknown {
         0: Q.struct.generator.all(),
         by: entityTypeIs(Q, 'polymer'),
       });
+    case 'helix':
+      return secondaryStructureIs(Q, ['helix']);
+    case 'sheet':
+      return secondaryStructureIs(Q, ['beta']);
+    case 'backbone':
+      return atomNameIn(Q, PROTEIN_BACKBONE_ATOMS);
+    case 'sidechain':
+      return Q.struct.modifier.intersectBy({
+        0: entitySubtypeMatches(
+          Q,
+          '(polypeptide|cyclic-pseudo-peptide|peptide nucleic acid)',
+        ),
+        by: Q.struct.modifier.exceptBy({
+          0: Q.struct.generator.all(),
+          by: atomNameIn(Q, PROTEIN_BACKBONE_ATOMS),
+        }),
+      });
     default:
       throw new Error(`Unknown keyword group: ${name as string}`);
   }
+}
+
+function secondaryStructureIs(Q: MolScriptApi, flags: string[]): unknown {
+  return Q.struct.generator.atomGroups({
+    'residue-test': Q.core.flags.hasAny([
+      Q.struct.atomProperty.macromolecular.secondaryStructureFlags(),
+      Q.struct.type.secondaryStructureFlags(flags),
+    ]),
+  });
+}
+
+function atomNameIn(Q: MolScriptApi, atomNames: string[]): unknown {
+  return Q.struct.combinator.merge(
+    atomNames.map((atomName) =>
+      Q.struct.generator.atomGroups({
+        'atom-test': Q.core.rel.eq([
+          Q.struct.atomProperty.macromolecular.auth_atom_id(),
+          atomName,
+        ]),
+      }),
+    ),
+  );
 }
 
 function entityTypeIs(Q: MolScriptApi, value: string): unknown {

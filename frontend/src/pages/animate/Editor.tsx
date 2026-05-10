@@ -1,4 +1,6 @@
+import type { Monaco } from '@monaco-editor/react';
 import MonacoEditor from '@monaco-editor/react';
+import type { editor as monacoEditor } from 'monaco-editor';
 
 import { configureMonaco } from './monacoSetup.ts';
 
@@ -35,7 +37,8 @@ export default function Editor({
   return (
     <MonacoEditor
       value={value}
-      defaultLanguage="javascript"
+      defaultLanguage="typescript"
+      defaultPath="file:///script.ts"
       height={height}
       theme="vs"
       options={{
@@ -49,6 +52,20 @@ export default function Editor({
         fixedOverflowWidgets: true,
       }}
       onChange={(next) => onChange(next ?? '')}
+      onMount={handleMount}
     />
   );
+}
+
+function handleMount(
+  editor: monacoEditor.IStandaloneCodeEditor,
+  monaco: Monaco,
+) {
+  // Monaco's default trigger-suggest binding on macOS is Cmd+I; bind the
+  // physical Ctrl+Space too so users with the macOS Input Sources shortcut
+  // disabled can use the same chord they'd use on Linux/Windows.
+  // KeyMod.WinCtrl maps to the literal Ctrl key on macOS (CtrlCmd is Cmd).
+  editor.addCommand(monaco.KeyMod.WinCtrl | monaco.KeyCode.Space, () => {
+    editor.trigger('keyboard', 'editor.action.triggerSuggest', {});
+  });
 }

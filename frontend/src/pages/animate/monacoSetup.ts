@@ -31,17 +31,15 @@ export function configureMonaco(): void {
 
   loader.config({ monaco });
 
-  monaco.typescript.javascriptDefaults.setCompilerOptions({
+  monaco.typescript.typescriptDefaults.setCompilerOptions({
     target: monaco.typescript.ScriptTarget.ES2020,
     module: monaco.typescript.ModuleKind.ESNext,
     allowNonTsExtensions: true,
-    allowJs: true,
-    checkJs: true,
     strict: false,
     noLib: false,
   });
 
-  monaco.typescript.javascriptDefaults.setDiagnosticsOptions({
+  monaco.typescript.typescriptDefaults.setDiagnosticsOptions({
     noSemanticValidation: false,
     noSyntaxValidation: false,
     // 1375/1378: top-level `await` not allowed in a script.
@@ -50,7 +48,7 @@ export function configureMonaco(): void {
     diagnosticCodesToIgnore: [1108, 1375, 1378],
   });
 
-  monaco.typescript.javascriptDefaults.addExtraLib(
+  monaco.typescript.typescriptDefaults.addExtraLib(
     SCRIPT_API_DTS,
     'file:///scriptApi.d.ts',
   );

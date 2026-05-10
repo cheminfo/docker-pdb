@@ -44,27 +44,40 @@ ligand.surface.dots();
 ligand.surface.color({ value: 'pink' });
 `;
 
-const DISPLAY_HELIX = `// Alpha helix on chain A, residues 108-122. Highlights the helix in
-// translucent magenta then zooms in on its side chains.
+const DISPLAY_HELIX = `// Alpha helix walkthrough on chain A, residues 108-122.
+// Demonstrates the new keyword selectors (helix, backbone, sidechain) and
+// the hbonds channel (yellow dashed lines by default).
 const ms = new MolStar();
 const pdb = ms.loadPDB(text);
-ms.echo('Alpha Helix: residues 108-122, chain A', { size: 26, italic: true });
+ms.echo('Alpha Helix: residues 108-122, chain A', { size: 24, italic: true });
 
-pdb.select('not PLP').ribbon.color({ model: 'structure', alpha: 0.4 });
+// 1. Whole protein as a structure-coloured ribbon, then one full rotation
+//    to give the viewer time to orient themselves.
+pdb.all.ribbon.color({ model: 'structure', alpha: 0.6 });
+ms.rotate({ degrees: 360 });
 
+// 2. Hide every other helix by re-rendering the ribbon on "not helix" only,
+//    then highlight our target helix in magenta on top.
+pdb.all.ribbon.hide();
+pdb.select('not helix').ribbon.color({ model: 'structure', alpha: 0.5 });
 const helix = pdb.select('108-122:A');
-helix.ribbon.color({ color: 'magenta', alpha: 0.8 });
-ms.spin('y');
-delay(2);
+helix.ribbon.color({ color: 'magenta', alpha: 0.9 });
 
-// .zoom(factor) frames the helix's bounding sphere to fill 'factor' of
-// the viewport (default 0.75). Because the bounding sphere is rotation-
-// invariant, the helix stays well-framed while the camera spins.
-helix.zoom();
-helix.atoms.radius({ value: 0.3 });
-helix.atoms.color({ model: 'element' });
-helix.bonds.diameter(0.15);
-delay(3);
+// 3. Zoom in and show backbone atoms + bonds for our helix.
+helix.zoom(0.6);
+const backbone = helix.select('backbone');
+backbone.atoms.radius({ value: 0.3 });
+backbone.atoms.color({ model: 'element' });
+backbone.bonds.diameter(0.15);
+
+// 4. Hydrogen bonds — defaults to yellow dashed lines.
+helix.hbonds.show();
+
+// 5. Slow rotation so the i,i+4 H-bond pattern is easy to follow.
+ms.rotate({ degrees: 360, speed: 45 });
+
+// 6. Side chains: just the bond cylinders, no atom spheres.
+helix.select('sidechain').bonds.diameter(0.15);
 `;
 
 const DISPLAY_SHEET = `// Two beta strands on chain A (residues 99-105 and 267-274) highlighted
@@ -134,12 +147,47 @@ pdb.select('PLP or within 3.5 of PLP').focus();
 ligand.distance(close);
 `;
 
+const MODELS = `// Demonstrate the model API: 'pdb' is one handle that follows the active
+// model. createModel clones the active model (PDB + recorded ops) and
+// activates the new one — channel calls then record into it. Switching
+// between models tears down current representations, reloads Mol* if the
+// PDB differs, then replays the target model's op log.
+const ms = new MolStar();
+const pdb = ms.loadPDB(text);
+
+// 'initial' model: structure-coloured ribbon + ligands as spheres.
+pdb.all.ribbon.color({ model: 'structure' });
+pdb.select('hetero and not water').atoms.color({ model: 'element' });
+ms.echo("Active model: 'initial' — structure colouring", {
+  size: 22,
+  italic: true,
+});
+delay(3);
+
+// 'rainbow' model: clones 'initial' (so the ligand spheres carry over)
+// then adds a second op recolouring the ribbon by sequence position.
+pdb.createModel('rainbow');
+pdb.all.ribbon.color({ model: 'sequence' });
+ms.echo("Active model: 'rainbow' — N→C terminus gradient", {
+  size: 22,
+  italic: true,
+});
+delay(3);
+
+// Switch back. Mol* keeps the same loaded structure (same PDB), but
+// the rep tree is rebuilt from 'initial'.ops — ribbon goes back to
+// structure colours and the rainbow op is gone.
+pdb.switchModel('initial');
+ms.echo("Switched back: 'initial' restored", { size: 22, italic: true });
+`;
+
 export const SCENES: Scene[] = [
   { id: 'global', label: 'Global view', code: GLOBAL_VIEW },
   { id: 'helix', label: 'Display helix', code: DISPLAY_HELIX },
   { id: 'sheet', label: 'Display β-sheet', code: DISPLAY_SHEET },
   { id: 'ramachandran', label: 'Ramachandran', code: RAMACHANDRAN },
   { id: 'interaction', label: 'Interaction 3.5 Å', code: INTERACTION },
+  { id: 'models', label: 'Models', code: MODELS },
 ];
 
 export const DEFAULT_SCENE_CODE = GLOBAL_VIEW;

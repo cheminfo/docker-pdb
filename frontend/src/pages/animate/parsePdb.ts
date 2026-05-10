@@ -38,12 +38,23 @@ export interface MolStarResidue {
   atomCount: number;
 }
 
+/** Inclusive residue range for one secondary-structure record. */
+export interface SecondaryStructureRange {
+  chainId: string;
+  fromResNum: number;
+  toResNum: number;
+}
+
 /** Result of `parsePdb`. */
 export interface ParsedPdb {
   atoms: MolStarAtom[];
   residues: MolStarResidue[];
   chains: string[];
   ligands: string[];
+  /** Inclusive residue ranges declared by HELIX records. */
+  helices: SecondaryStructureRange[];
+  /** Inclusive residue ranges declared by SHEET records. */
+  sheets: SecondaryStructureRange[];
 }
 
 /**
@@ -61,8 +72,21 @@ export function parsePdb(pdbText: string): ParsedPdb {
   const ligands: string[] = [];
   const ligandSeen = new Set<string>();
 
+  const helices: SecondaryStructureRange[] = [];
+  const sheets: SecondaryStructureRange[] = [];
+
   let modelEnded = false;
   for (const line of pdbText.split(/\r?\n/)) {
+    if (line.startsWith('HELIX ')) {
+      const range = parseSecondaryStructureRange(line, 19, 21, 31, 33);
+      if (range) helices.push(range);
+      continue;
+    }
+    if (line.startsWith('SHEET ')) {
+      const range = parseSecondaryStructureRange(line, 21, 22, 32, 33);
+      if (range) sheets.push(range);
+      continue;
+    }
     if (line.startsWith('ENDMDL')) {
       modelEnded = true;
       continue;
@@ -116,5 +140,39 @@ export function parsePdb(pdbText: string): ParsedPdb {
     }
   }
 
-  return { atoms, residues, chains, ligands };
+  return { atoms, residues, chains, ligands, helices, sheets };
+}
+
+/**
+ * Parse a HELIX or SHEET record's residue range (chain + start/end seq num).
+ * Both records share the same column layout for the chain id and sequence
+ * numbers, but at different offsets — pass them in. Returns `null` if the
+ * line is too short or the numbers are unparseable.
+ * @param line - Raw record line.
+ * @param chainColumn - Column (0-based) holding the initial chain id.
+ * @param fromColumnStart - Start of the 4-char `initSeqNum` slice.
+ * @param endChainColumn - Column (0-based) holding the terminal chain id.
+ * @param toColumnStart - Start of the 4-char `endSeqNum` slice.
+ * @returns Parsed range, or `null` if invalid.
+ */
+function parseSecondaryStructureRange(
+  line: string,
+  chainColumn: number,
+  fromColumnStart: number,
+  endChainColumn: number,
+  toColumnStart: number,
+): SecondaryStructureRange | null {
+  const chainId = line.charAt(chainColumn).trim();
+  const endChainId = line.charAt(endChainColumn).trim();
+  if (!chainId || chainId !== endChainId) return null;
+  const fromResNum = Number.parseInt(
+    line.slice(fromColumnStart, fromColumnStart + 4),
+    10,
+  );
+  const toResNum = Number.parseInt(
+    line.slice(toColumnStart, toColumnStart + 4),
+    10,
+  );
+  if (Number.isNaN(fromResNum) || Number.isNaN(toResNum)) return null;
+  return { chainId, fromResNum, toResNum };
 }
