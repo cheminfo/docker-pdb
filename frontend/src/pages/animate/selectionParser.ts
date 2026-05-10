@@ -5,9 +5,14 @@
  *
  * Grammar:
  *   sel := atom | "not" sel | sel "or" sel | sel "and" sel | "(" sel ")"
- *   atom := <ligandLabel>           e.g. PLP
- *         | <from>-<to>:<chain>     e.g. 108-122:A
- *         | <residue>:<chain>       e.g. 119:A
+ *   atom := <ligandLabel>                  e.g. PLP
+ *         | "[" <ligandLabel> "]"          e.g. [CYS], [H2O]
+ *         | <ligandLabel> "." <atomName>   e.g. CYS.CA, [CYS].CA
+ *         | "." <atomName>                 e.g. .CA, .NZ
+ *         | "_" <element>                  e.g. _C, _N, _Fe
+ *         | ":" <chain>                    e.g. :A
+ *         | <from>-<to>:<chain>            e.g. 108-122:A
+ *         | <residue>:<chain>              e.g. 119:A
  *         | "all" | "none"
  *         | "protein" | "ligand" | "water" | "nucleic" | "polymer" | "hetero"
  *         | "within" <number> "of" sel
@@ -30,6 +35,10 @@ export type KeywordGroup =
 export type Selection =
   | { kind: 'group'; name: KeywordGroup }
   | { kind: 'ligand'; label: string }
+  | { kind: 'atomName'; name: string }
+  | { kind: 'residueAtom'; residue: string; atom: string }
+  | { kind: 'element'; element: string }
+  | { kind: 'chain'; chain: string }
   | { kind: 'residueRange'; chain: string; from: number; to: number }
   | { kind: 'residue'; chain: string; index: number }
   | { kind: 'not'; expr: Selection }
@@ -51,6 +60,11 @@ const KEYWORD_GROUPS = new Set<string>([
 type Token =
   | { kind: 'range'; from: number; to: number; chain: string }
   | { kind: 'residue'; index: number; chain: string }
+  | { kind: 'bracketed'; label: string }
+  | { kind: 'residueAtom'; residue: string; atom: string }
+  | { kind: 'element'; element: string }
+  | { kind: 'chain'; chain: string }
+  | { kind: 'atomName'; name: string }
   | { kind: 'number'; value: number }
   | { kind: 'ident'; value: string }
   | { kind: '(' }
@@ -131,6 +145,35 @@ function parseAtom(parser: Parser): Selection {
     return { kind: 'residue', index: token.index, chain: token.chain };
   }
 
+  if (token.kind === 'bracketed') {
+    parser.position++;
+    return { kind: 'ligand', label: token.label.toUpperCase() };
+  }
+
+  if (token.kind === 'residueAtom') {
+    parser.position++;
+    return {
+      kind: 'residueAtom',
+      residue: token.residue.toUpperCase(),
+      atom: token.atom.toUpperCase(),
+    };
+  }
+
+  if (token.kind === 'element') {
+    parser.position++;
+    return { kind: 'element', element: token.element.toUpperCase() };
+  }
+
+  if (token.kind === 'chain') {
+    parser.position++;
+    return { kind: 'chain', chain: token.chain };
+  }
+
+  if (token.kind === 'atomName') {
+    parser.position++;
+    return { kind: 'atomName', name: token.name.toUpperCase() };
+  }
+
   if (token.kind === 'ident') {
     const lower = token.value.toLowerCase();
     if (lower === 'within') {
@@ -189,6 +232,16 @@ function describeToken(token: Token): string {
       return `${token.from}-${token.to}:${token.chain}`;
     case 'residue':
       return `${token.index}:${token.chain}`;
+    case 'bracketed':
+      return `[${token.label}]`;
+    case 'residueAtom':
+      return `${token.residue}.${token.atom}`;
+    case 'element':
+      return `_${token.element}`;
+    case 'chain':
+      return `:${token.chain}`;
+    case 'atomName':
+      return `.${token.name}`;
     case '(':
     case ')':
       return token.kind;
@@ -212,6 +265,45 @@ function tokenize(input: string): Token[] {
       continue;
     }
     const remainder = input.slice(index);
+    const bracketedAtom =
+      /^\[(?<label>[A-Za-z0-9]+)\]\.(?<atomName>[A-Za-z][A-Za-z0-9]*)/.exec(
+        remainder,
+      );
+    if (bracketedAtom?.groups) {
+      tokens.push({
+        kind: 'residueAtom',
+        residue: bracketedAtom.groups.label ?? '',
+        atom: bracketedAtom.groups.atomName ?? '',
+      });
+      index += bracketedAtom[0].length;
+      continue;
+    }
+    const bracketed = /^\[(?<label>[A-Za-z0-9]+)\]/.exec(remainder);
+    if (bracketed?.groups) {
+      tokens.push({ kind: 'bracketed', label: bracketed.groups.label ?? '' });
+      index += bracketed[0].length;
+      continue;
+    }
+    const element = /^_(?<element>[A-Za-z]{1,3})(?![A-Za-z0-9_])/.exec(
+      remainder,
+    );
+    if (element?.groups) {
+      tokens.push({ kind: 'element', element: element.groups.element ?? '' });
+      index += element[0].length;
+      continue;
+    }
+    const chain = /^:(?<chain>[A-Za-z0-9]+)/.exec(remainder);
+    if (chain?.groups) {
+      tokens.push({ kind: 'chain', chain: chain.groups.chain ?? '' });
+      index += chain[0].length;
+      continue;
+    }
+    const atomName = /^\.(?<name>[A-Za-z][A-Za-z0-9]*)/.exec(remainder);
+    if (atomName?.groups) {
+      tokens.push({ kind: 'atomName', name: atomName.groups.name ?? '' });
+      index += atomName[0].length;
+      continue;
+    }
     const range = /^(?<from>\d+)-(?<to>\d+):(?<chain>[A-Za-z0-9]+)/.exec(
       remainder,
     );
@@ -241,7 +333,20 @@ function tokenize(input: string): Token[] {
       index += number[0].length;
       continue;
     }
-    const ident = /^[A-Za-z_][A-Za-z0-9_]*/.exec(remainder);
+    const identAtom =
+      /^(?<label>[A-Za-z][A-Za-z0-9_]*)\.(?<atomName>[A-Za-z][A-Za-z0-9]*)/.exec(
+        remainder,
+      );
+    if (identAtom?.groups && !isOperatorKeyword(identAtom.groups.label ?? '')) {
+      tokens.push({
+        kind: 'residueAtom',
+        residue: identAtom.groups.label ?? '',
+        atom: identAtom.groups.atomName ?? '',
+      });
+      index += identAtom[0].length;
+      continue;
+    }
+    const ident = /^[A-Za-z][A-Za-z0-9_]*/.exec(remainder);
     if (ident) {
       tokens.push({ kind: 'ident', value: ident[0] });
       index += ident[0].length;
@@ -252,4 +357,10 @@ function tokenize(input: string): Token[] {
     );
   }
   return tokens;
+}
+
+const OPERATOR_KEYWORDS = new Set<string>(['and', 'or', 'not', 'within', 'of']);
+
+function isOperatorKeyword(label: string): boolean {
+  return OPERATOR_KEYWORDS.has(label.toLowerCase());
 }

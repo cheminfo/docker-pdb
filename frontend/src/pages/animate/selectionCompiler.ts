@@ -26,9 +26,16 @@ interface MolScriptApi {
         auth_comp_id: () => unknown;
         auth_asym_id: () => unknown;
         auth_seq_id: () => unknown;
+        auth_atom_id: () => unknown;
         entityType: () => unknown;
         entitySubtype: () => unknown;
       };
+      core: {
+        elementSymbol: () => unknown;
+      };
+    };
+    type: {
+      elementSymbol: (args: [string]) => unknown;
     };
   };
   core: {
@@ -71,6 +78,38 @@ function compile(sel: Selection, Q: MolScriptApi): unknown {
         'residue-test': Q.core.rel.eq([
           Q.struct.atomProperty.macromolecular.auth_comp_id(),
           sel.label,
+        ]),
+      });
+    case 'atomName':
+      return Q.struct.generator.atomGroups({
+        'atom-test': Q.core.rel.eq([
+          Q.struct.atomProperty.macromolecular.auth_atom_id(),
+          sel.name,
+        ]),
+      });
+    case 'residueAtom':
+      return Q.struct.generator.atomGroups({
+        'residue-test': Q.core.rel.eq([
+          Q.struct.atomProperty.macromolecular.auth_comp_id(),
+          sel.residue,
+        ]),
+        'atom-test': Q.core.rel.eq([
+          Q.struct.atomProperty.macromolecular.auth_atom_id(),
+          sel.atom,
+        ]),
+      });
+    case 'element':
+      return Q.struct.generator.atomGroups({
+        'atom-test': Q.core.rel.eq([
+          Q.struct.atomProperty.core.elementSymbol(),
+          Q.struct.type.elementSymbol([sel.element]),
+        ]),
+      });
+    case 'chain':
+      return Q.struct.generator.atomGroups({
+        'chain-test': Q.core.rel.eq([
+          Q.struct.atomProperty.macromolecular.auth_asym_id(),
+          sel.chain,
         ]),
       });
     case 'residueRange':

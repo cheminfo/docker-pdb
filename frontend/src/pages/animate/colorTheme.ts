@@ -1,16 +1,18 @@
 /**
  * Translate the script-facing `ColorSpec` into Mol* representation
- * parameters. We accept three shapes:
+ * parameters. We accept four shapes:
  *
  *   - a CSS color name or hex string  (e.g. 'limegreen', '#ff0080')
- *   - `{ by: 'chain' | 'element' | 'structure' | … }` for built-in themes
+ *   - `{ value: 'limegreen' }`        (explicit uniform shape)
+ *   - `{ model: 'chain' | 'element' | 'structure' | … }` for built-in themes
  *   - `{ color: ColorSpec, alpha: number }` for translucent variants
  */
 
 /** Mol* built-in color theme names, exposed through a friendlier alias. */
-export type ColorBy =
+export type ColorModel =
   | 'chain'
   | 'element'
+  | 'atoms'
   | 'structure'
   | 'residue'
   | 'sequence'
@@ -19,9 +21,10 @@ export type ColorBy =
   | 'molecule-type'
   | 'uniform';
 
-const COLOR_BY_TO_THEME: Record<ColorBy, string> = {
+const COLOR_MODEL_TO_THEME: Record<ColorModel, string> = {
   chain: 'chain-id',
   element: 'element-symbol',
+  atoms: 'element-symbol',
   structure: 'secondary-structure',
   'secondary-structure': 'secondary-structure',
   residue: 'residue-name',
@@ -31,11 +34,11 @@ const COLOR_BY_TO_THEME: Record<ColorBy, string> = {
   uniform: 'uniform',
 };
 
+/** Inner color expression — anything except the alpha-wrapper. */
+type ColorBase = string | { value: string } | { model: ColorModel };
+
 /** Color expression accepted by the script-facing helpers. */
-export type ColorSpec =
-  | string
-  | { by: ColorBy }
-  | { color: string | { by: ColorBy }; alpha: number };
+export type ColorSpec = ColorBase | { color: ColorBase; alpha: number };
 
 /** Mol* representation parameters derived from a `ColorSpec`. */
 export interface ColorParams {
@@ -59,7 +62,6 @@ export function buildColorParams(
   colorModule: { Color: (hex: number) => unknown },
 ): ColorParams {
   const result: ColorParams = { type: representationType };
-
   if (!spec) return result;
 
   if (typeof spec === 'object' && 'color' in spec) {
@@ -67,21 +69,21 @@ export function buildColorParams(
       result,
       buildColorParams(representationType, spec.color, colorModule),
     );
-    result.typeParams = { alpha: spec.alpha };
+    result.typeParams = { ...result.typeParams, alpha: spec.alpha };
     return result;
   }
 
-  if (typeof spec === 'object' && 'by' in spec) {
-    result.color = COLOR_BY_TO_THEME[spec.by];
+  if (typeof spec === 'object' && 'model' in spec) {
+    result.color = COLOR_MODEL_TO_THEME[spec.model];
     return result;
   }
 
-  const hex = parseCssColorToHex(spec);
+  const cssValue = typeof spec === 'string' ? spec : spec.value;
+  const hex = parseCssColorToHex(cssValue);
   if (hex !== null) {
     result.color = 'uniform';
-    // The Mol* color module exports `Color` as a function-style constructor;
-    // the eslint `new-cap` rule trips on the uppercase name even though no
-    // `new` is intended.
+    // Mol* exports `Color` as a callable factory; eslint `new-cap` trips
+    // on the uppercase name even though no `new` is intended.
     // eslint-disable-next-line new-cap -- Mol* exports `Color` as a callable factory
     result.colorParams = { value: colorModule.Color(hex) };
   }

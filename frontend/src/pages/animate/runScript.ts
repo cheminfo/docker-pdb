@@ -1,4 +1,6 @@
+import type { Delay, MolStarConstructor } from './MolStar.ts';
 import type { ScriptApi } from './helpers.ts';
+import { rewriteAwait } from './rewriteAwait.ts';
 
 // Reach for the AsyncFunction constructor without lint complaining about an
 // empty arrow body. Native AsyncFunction is not in lib.dom.d.ts so we resolve
@@ -11,32 +13,58 @@ const AsyncFunctionConstructor = Object.getPrototypeOf(asyncPlaceholder)
   ...args: string[]
 ) => (...callArgs: unknown[]) => unknown;
 
+type ScriptFunction = (
+  text: string,
+  MolStar: MolStarConstructor,
+  delay: Delay,
+) => Promise<void>;
+
 /**
- * Compile and execute a student-written script against the helper API.
- * The script body runs as the body of an async function whose only
- * parameter is `api`, so callers can write `await api.cpk(...)` directly.
+ * Bundle of values the runner needs to execute a script.
+ */
+export interface RunScriptParams {
+  /** Internal renderer used to clear state before each run. */
+  api: ScriptApi;
+  /** Raw PDB text of the loaded structure, injected as `text`. */
+  text: string;
+  /** `MolStar` class injected as a script global. */
+  MolStar: MolStarConstructor;
+  /** `delay` injected as a script global. */
+  delay: Delay;
+  /** User-typed script source. */
+  body: string;
+}
+
+/**
+ * Compile and execute a student-written script. The script body runs as the
+ * body of an async function with three parameters wired up as globals: `text`
+ * (raw PDB text), `MolStar` (constructor class — `new MolStar()` returns the
+ * viewer) and `delay` (`delay(2)` to pause).
  *
- * Errors thrown during compilation or execution are returned as
+ * Before evaluation, `rewriteAwait` injects `await` in front of every call
+ * to a `Promise`-returning method, so users write linear synchronous-looking
+ * code. Errors thrown during compilation or execution are returned as
  * `{ error }` rather than thrown — the caller decides how to surface them.
- * @param api - The bound helper API.
- * @param body - User-typed script source.
+ * @param params - Runner inputs.
  * @returns Resolved promise with `{ error }` if the script failed; `{}` on success.
  */
 export async function runScript(
-  api: ScriptApi,
-  body: string,
+  params: RunScriptParams,
 ): Promise<{ error?: Error }> {
-  let scriptFunction: (api: ScriptApi) => Promise<void>;
+  let scriptFunction: ScriptFunction;
   try {
-    scriptFunction = new AsyncFunctionConstructor('api', body) as (
-      api: ScriptApi,
-    ) => Promise<void>;
+    scriptFunction = new AsyncFunctionConstructor(
+      'text',
+      'MolStar',
+      'delay',
+      rewriteAwait(params.body),
+    ) as ScriptFunction;
   } catch (error) {
     return { error: toError(error) };
   }
   try {
-    await api.clear();
-    await scriptFunction(api);
+    await params.api.clear();
+    await scriptFunction(params.text, params.MolStar, params.delay);
     return {};
   } catch (error) {
     return { error: toError(error) };

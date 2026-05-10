@@ -1,22 +1,30 @@
-import { javascript } from '@codemirror/lang-javascript';
-import CodeMirror from '@uiw/react-codemirror';
+import MonacoEditor from '@monaco-editor/react';
+
+import { configureMonaco } from './monacoSetup.ts';
 
 interface EditorProps {
   value: string;
   onChange: (value: string) => void;
+  /**
+   * CSS height for the editor frame. Pass `'100%'` (combined with the
+   * `editor-fill` class on a sized parent) to make the editor stretch.
+   * @default '260px'
+   */
   height?: string;
 }
 
-const EXTENSIONS = [javascript({ jsx: false, typescript: false })];
+configureMonaco();
 
 /**
- * CodeMirror-based JavaScript editor used on the Animate page. Wraps the
- * `@uiw/react-codemirror` component with the JavaScript language extension
- * and a fixed monospace size so every scene editor looks identical.
+ * Monaco-based JavaScript editor used on the Animate page. Loads the
+ * Monaco bundle locally (no CDN), wires the script-facing globals
+ * (`text`, `delay`, `MolStar`) as an ambient `.d.ts`, and turns on the
+ * full TypeScript Language Service so users get on-the-fly syntax and
+ * type errors plus VSCode-quality autocomplete and hover docs.
  * @param props - Component props.
  * @param props.value - Current script source.
  * @param props.onChange - Called with the new source on every keystroke.
- * @param props.height - CSS height for the editor frame (default `260px`).
+ * @param props.height - CSS height for the editor frame.
  * @returns The editor element.
  */
 export default function Editor({
@@ -25,19 +33,22 @@ export default function Editor({
   height = '260px',
 }: EditorProps) {
   return (
-    <CodeMirror
+    <MonacoEditor
       value={value}
+      defaultLanguage="javascript"
       height={height}
-      extensions={EXTENSIONS}
-      basicSetup={{
-        lineNumbers: true,
-        highlightActiveLineGutter: true,
-        highlightActiveLine: true,
-        bracketMatching: true,
-        autocompletion: false,
-        foldGutter: true,
+      theme="vs"
+      options={{
+        automaticLayout: true,
+        minimap: { enabled: false },
+        scrollBeyondLastLine: false,
+        wordWrap: 'on',
+        fontSize: 13,
+        tabSize: 2,
+        renderLineHighlight: 'line',
+        fixedOverflowWidgets: true,
       }}
-      onChange={onChange}
+      onChange={(next) => onChange(next ?? '')}
     />
   );
 }

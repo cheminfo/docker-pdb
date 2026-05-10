@@ -1,9 +1,9 @@
 /**
- * Static help panel rendered below the editor on the Animate page. Documents
- * every helper available on the `api` object and the selection grammar
- * accepted by `api.select(...)`. The content is intentionally embedded as
- * TSX (rather than markdown) so it ships in the same bundle as the page
- * and stays in lockstep with the helper surface.
+ * Static help panel rendered in the Help floating window. Documents the
+ * three script globals (`text`, `MolStar`, `delay`), the `ms` viewer they
+ * produce, the `pdb` handle returned by `ms.loadPDB(text)`, and the
+ * channel objects (`.atoms`, `.bonds`, `.ribbon`, `.surface`) that hang
+ * off every Selection.
  */
 
 const SELECTION_EXAMPLES: Array<[string, string]> = [
@@ -16,6 +16,14 @@ const SELECTION_EXAMPLES: Array<[string, string]> = [
   ['nucleic', 'DNA + RNA residues'],
   ['hetero', 'everything that is not a polymer'],
   ['PLP', 'every residue whose 3-letter code is PLP'],
+  ['[CYS]', 'bracketed residue label (same as `CYS`)'],
+  ['[H2O]', 'all waters by name'],
+  ['.CA', 'every atom whose name is CA'],
+  ['[CYS].CA', 'CA atoms of every cysteine (compound shorthand)'],
+  ['CYS.SG', 'bare-form compound: SG atoms of every cysteine'],
+  ['_C', 'every carbon atom (element symbol)'],
+  ['_Fe', 'every iron atom'],
+  [':A', 'everything on chain A'],
   ['108-122:A', 'residues 108 through 122 on chain A'],
   ['119:A', 'residue 119 on chain A'],
   ['within 3.5 of PLP', 'every atom within 3.5 Å of any PLP atom'],
@@ -30,117 +38,165 @@ interface MethodEntry {
   example: string;
 }
 
-const REPRESENTATIONS: MethodEntry[] = [
+const SELECTION_METHODS: MethodEntry[] = [
   {
-    signature: 'api.cpk(selection, options?)',
+    signature: 'selection.atoms.color(spec)',
     description:
-      'CPK / spacefill spheres. `options.scale` sets sphere radius (≈0.3 = bond-and-stick size).',
+      'Sphere channel (Mol* spacefill). First call creates the spheres; subsequent calls merge into the same representation.',
+    example: "pdb.select('PLP').atoms.color({ value: 'limegreen' });",
+  },
+  {
+    signature: 'selection.atoms.radius({ value })',
+    description:
+      'Set the spacefill `sizeFactor` (multiplier on Van der Waals radius). 1.0 ≈ full VdW; 0.3 ≈ ball-and-stick size.',
+    example: "pdb.select('[CYS]').atoms.radius({ value: 1.4 });",
+  },
+  {
+    signature: 'selection.bonds.color(spec)',
+    description:
+      "Bond cylinder channel (Mol* ball-and-stick, atoms hidden). `{ model: 'atoms' }` colors each bond half by its endpoint atom.",
+    example: "pdb.select('[CYS]').bonds.color({ model: 'atoms', alpha: 0.8 });",
+  },
+  {
+    signature: 'selection.bonds.diameter(value)',
+    description:
+      'Set the bond cylinder `sizeFactor`. ~0.15 = standard ball-and-stick; 0.4 = thick.',
+    example: "pdb.select('108-122:A').bonds.diameter(0.15);",
+  },
+  {
+    signature: 'selection.ribbon.color(spec)',
+    description: 'Cartoon / ribbon channel for protein backbone.',
+    example: "pdb.all.ribbon.color({ model: 'structure' });",
+  },
+  {
+    signature: 'selection.surface.color(spec)',
+    description:
+      'Solid molecular (Connolly) surface — unless `dots()` was called first, then the surface stays dotted.',
     example:
-      "await api.cpk(api.select('PLP'), { scale: 0.4, color: 'limegreen' });",
+      "pdb.select('protein').surface.color({ model: 'hydrophobicity', alpha: 0.7 });",
   },
   {
-    signature: 'api.wireframe(selection, options?)',
+    signature: 'selection.surface.dots()',
     description:
-      'Ball-and-stick / bond cylinders. `options.scale` sets bond thickness.',
-    example: "await api.wireframe(api.select('108-122:A'), { scale: 0.15 });",
+      'Switch the surface channel to a dotted Gaussian-surface visual (closest analogue to JSmol `dots ON`).',
+    example: "pdb.select('PLP').surface.dots();",
   },
   {
-    signature: 'api.cartoon(selection, options?)',
-    description: 'Mol*-style cartoon (helices/sheets/loops).',
-    example: "await api.cartoon(api.all, { color: { by: 'structure' } });",
-  },
-  {
-    signature: 'api.ribbon(selection, options?)',
+    signature: 'selection.label(template)',
     description:
-      'Alias for `cartoon` — Mol*’s cartoon already includes ribbons.',
+      "Add residue/element/chain labels using Mol*'s built-in label rep. The renderer picks a level based on which fields the template references (atom → element, chain → chain, otherwise residue). Custom-text templates are not yet supported — Mol* draws the level's default text.",
     example:
-      "await api.ribbon(api.select('not PLP'), { color: { by: 'chain' } });",
+      // eslint-disable-next-line no-template-curly-in-string -- this string documents the template syntax
+      "cys.select('.CA').label('${residue.name}${residue.number}');",
   },
   {
-    signature: 'api.surface(selection, options?)',
-    description: 'Smooth molecular surface (Connolly).',
-    example:
-      "await api.surface(api.select('protein'), { color: { by: 'hydrophobicity', alpha: 0.7 } });",
+    signature: 'selection.select(expression)',
+    description: 'Sub-select within this selection (intersection).',
+    example: "const cAlpha = pdb.select('[CYS]').select('.CA');",
   },
   {
-    signature: 'api.dots(selection, options?)',
+    signature: 'selection.focus()',
     description:
-      'Dotted Gaussian surface — closest analogue to JSmol `dots ON`.',
-    example: "await api.dots(api.select('PLP'), { color: 'limegreen' });",
+      'Zoom + center the camera on the bounding sphere of this selection (≈ JSmol `zoomto`).',
+    example: "pdb.select('within 5 of PLP').focus();",
+  },
+  {
+    signature: 'selection.zoom(factor?)',
+    description:
+      "Center + frame the camera on this selection's bounding sphere so it fills `factor` of the viewport. Defaults to `0.75` (75% of the viewport, with 25% margin). Because the bounding sphere is rotation-invariant, the framing is preserved while `ms.spin(...)` is active.",
+    example: "pdb.select('108-122:A').zoom(0.6);",
+  },
+  {
+    signature: 'selection.distance(other)',
+    description:
+      'Draw a labeled distance line between the centroids of this selection and `other`.',
+    example:
+      "pdb.select('PLP').distance(pdb.select('within 3.5 of PLP and not PLP'));",
   },
 ];
 
-const CAMERA: MethodEntry[] = [
+const PDB_METHODS: MethodEntry[] = [
   {
-    signature: 'api.focus(selection)',
+    signature: 'pdb.select(expression)',
     description:
-      'Zoom + center on the bounding sphere of `selection` (≈ JSmol `zoomto`).',
-    example: "await api.focus(api.select('within 5 of PLP'));",
+      'Build a Selection from a JSmol-flavoured expression (see grammar table above).',
+    example: "const helix = pdb.select('108-122:A');",
   },
   {
-    signature: 'api.resetCamera()',
-    description: 'Reset to the default Mol* view of the loaded structure.',
-    example: 'await api.resetCamera();',
-  },
-  {
-    signature: 'api.spin(axis, speedRpm?)',
+    signature: 'pdb.all  /  pdb.none',
     description:
-      "Continuous rotation. `axis`: 'x' | 'y' | 'z' | 'off'. Default speed: 1 rpm.",
-    example: "await api.spin('y', 2);",
+      'Shortcut Selections covering every atom or no atoms, respectively.',
+    example: "pdb.all.ribbon.color({ model: 'structure' });",
   },
-];
-
-const OVERLAY: MethodEntry[] = [
   {
-    signature: 'api.echo(text, options?)',
+    signature: 'pdb.ramachandran(options?)',
     description:
-      "On-canvas title (HTML overlay). Options: `{ position: 'top'|'middle'|'bottom', size, bold, italic, color }`.",
-    example: "api.echo('Active site', { size: 30, color: 'navy' });",
-  },
-  {
-    signature: 'api.clearEcho()',
-    description: 'Remove the current echo overlay.',
-    example: 'api.clearEcho();',
-  },
-  {
-    signature: 'api.ramachandran(options?)',
-    description:
-      "2D overlay with two panels: a standard Ramachandran (φ × ψ) and an ω plot rotated 90° about the y-axis (residue index × ω) so cis vs trans peptide bonds are immediately visible. Each point is colored green (trans, |ω|>150°), red (cis, |ω|<30°), or gray. Options: `{ position: 'top-left'|'top-right'|'bottom-left'|'bottom-right', highlight: string[] }` where each highlight entry is `'resNum:chainId'`.",
+      "2D overlay: φ × ψ + a 90°-rotated ω plot. Each point is colored green (trans, |ω|>150°), red (cis, |ω|<30°), or gray. Options: `{ position, highlight: string[] }` where each highlight entry is `'resNum:chainId'`.",
     example:
-      "api.ramachandran({ position: 'bottom-right', highlight: ['29:A', '166:A'] });",
+      "pdb.ramachandran({ position: 'bottom-right', highlight: ['29:A', '166:A'] });",
   },
   {
-    signature: 'api.clearRamachandran()',
+    signature: 'pdb.clearRamachandran()',
     description: 'Remove the Ramachandran overlay.',
-    example: 'api.clearRamachandran();',
+    example: 'pdb.clearRamachandran();',
   },
 ];
 
-const TIMING_AND_OTHER: MethodEntry[] = [
+const MS_METHODS: MethodEntry[] = [
   {
-    signature: 'api.delay(seconds)',
+    signature: 'ms.loadPDB(text)',
     description:
-      'Pause the script. Combine with `spin` to give the camera time to rotate before the next change.',
-    example: 'await api.delay(2);',
+      'Parse PDB text and return a `pdb` handle exposing `.select`, `.chains`, `.all`, `.ramachandran`, …',
+    example: 'const pdb = ms.loadPDB(text);',
   },
   {
-    signature: 'api.selectionHalos(on)',
+    signature: 'ms.spin(axis, speedDegreesPerSecond?)',
+    description:
+      "Continuous rotation. `axis`: 'x' | 'y' | 'z' | 'off'. Default speed: 30 deg/s.",
+    example: "ms.spin('y', 60);",
+  },
+  {
+    signature: 'ms.rotate(options?)',
+    description:
+      "Finite rotation that returns when finished. `options`: `{ axis: 'x' | 'y' | 'z', degrees, speed }`. Defaults: `axis: 'y'`, `degrees: 360`, `speed: 60` (deg/s).",
+    example: "ms.rotate({ axis: 'y', degrees: 180, speed: 90 });",
+  },
+  {
+    signature: 'ms.resetCamera()',
+    description: 'Reset to the default Mol* view of the loaded structure.',
+    example: 'ms.resetCamera();',
+  },
+  {
+    signature: 'ms.selectionHalos(on)',
     description:
       'Show / hide Mol*’s yellow halos around the persistent selection.',
-    example: 'await api.selectionHalos(true);',
+    example: 'ms.selectionHalos(true);',
   },
   {
-    signature: 'api.distance(sel1, sel2)',
+    signature: 'ms.echo(text, options?)',
     description:
-      'Draw a labeled distance line between the centroids of two selections.',
-    example:
-      "await api.distance(api.select('PLP'), api.select('within 3.5 of PLP and not PLP'));",
+      "On-canvas title (HTML overlay). Options: `{ position: 'top'|'middle'|'bottom', size, bold, italic, color }`. Independent of any loaded molecule.",
+    example: "ms.echo('Active site', { size: 30, color: 'navy' });",
   },
   {
-    signature: 'api.clear()',
+    signature: 'ms.clearEcho()',
+    description: 'Remove the current echo overlay.',
+    example: 'ms.clearEcho();',
+  },
+  {
+    signature: 'ms.clear()',
     description:
       'Wipe every representation/measurement/echo. Called automatically before each Run.',
-    example: 'await api.clear();',
+    example: 'ms.clear();',
+  },
+];
+
+const GLOBAL_METHODS: MethodEntry[] = [
+  {
+    signature: 'delay(seconds)',
+    description:
+      'Pause the script. Combine with `ms.spin` to give the camera time to rotate before the next change.',
+    example: 'delay(2);',
   },
 ];
 
@@ -153,29 +209,74 @@ export default function AnimateHelp() {
     <div className="animate-help">
       <section>
         <h3>Quick start</h3>
+        <p>Three globals are available to every script:</p>
+        <ul>
+          <li>
+            <code>text</code> — raw PDB text of the loaded structure.
+          </li>
+          <li>
+            <code>MolStar</code> — class for the 3D viewer (Mol*). Build a
+            viewer with <code>{`const ms = new MolStar();`}</code>, then load
+            the structure with <code>{`const pdb = ms.loadPDB(text);`}</code>.
+          </li>
+          <li>
+            <code>delay(seconds)</code> — <code>{`delay(2);`}</code> to pause
+            the script.
+          </li>
+        </ul>
         <p>
-          Each scene is a regular async JavaScript function whose only argument
-          is
-          <code>api</code>. Every helper that touches Mol* is async, so prefix
-          it with <code>await</code>.
+          A Selection (returned by <code>pdb.select(...)</code>) carries four
+          channel objects — <code>.atoms</code>, <code>.bonds</code>,{' '}
+          <code>.ribbon</code>, <code>.surface</code> — plus{' '}
+          <code>.label(template)</code>, <code>.select(sub)</code>,{' '}
+          <code>.focus()</code>, <code>.zoom()</code>,{' '}
+          <code>.distance(other)</code>. Channel calls are idempotent: calling{' '}
+          <code>{`bonds.diameter(0.4)`}</code> then{' '}
+          <code>{`bonds.color({...})`}</code> updates the same Mol*
+          representation, it does not stack two visuals.
         </p>
-        <pre className="animate-help-code">{`api.echo('My first scene', { size: 28 });
-const protein = api.select('not PLP');
-await api.cartoon(protein, { color: { by: 'structure' } });
-await api.cpk(api.select('PLP'), { scale: 0.4, color: 'limegreen' });
-await api.focus(api.select('within 5 of PLP'));
-await api.spin('y');`}</pre>
+        <p>
+          Scripts run in <em>linear</em> mode: the runner inserts{' '}
+          <code>await</code> automatically before every call to a{' '}
+          <code>Promise</code>-returning method, so you can write the script as
+          a flat sequence of statements. Explicit <code>await</code> is also
+          accepted (the rewrite is idempotent) for power users.
+        </p>
+        <p>
+          Channel methods (<code>color</code>, <code>radius</code>,{' '}
+          <code>diameter</code>, <code>dots</code>, <code>show</code>,{' '}
+          <code>hide</code>) return the channel itself so you can chain them:{' '}
+          <code>{`bonds.diameter(0.4).color({ model: 'atoms' })`}</code> sets
+          both attributes in one statement. Each channel keeps its own internal
+          queue, so awaiting the chain waits for every queued op.
+        </p>
+        <pre className="animate-help-code">{`const ms = new MolStar();
+const pdb = ms.loadPDB(text);
+ms.echo('My first scene', { size: 28 });
+
+const protein = pdb.select('not PLP');
+protein.ribbon.color({ model: 'structure' });
+
+const cys = pdb.select('[CYS]');
+cys.bonds.diameter(0.4).color({ model: 'atoms', alpha: 0.8 });
+cys.atoms.radius({ value: 1.4 });
+
+pdb.select('PLP').focus();
+ms.spin('y');`}</pre>
+        <p>
+          The <code>pdb</code> handle also exposes parsed-data fields:{' '}
+          <code>pdb.atoms</code>, <code>pdb.residues</code>,{' '}
+          <code>pdb.chains</code>, <code>pdb.ligands</code>,{' '}
+          <code>pdb.text</code>.
+        </p>
       </section>
 
       <section>
-        <h3>
-          <code>api.select(expression)</code> — selections
-        </h3>
+        <h3>Selection grammar</h3>
         <p>
-          Builds an opaque <code>Selection</code> token from a JSmol-flavoured
+          <code>pdb.select(expression)</code> compiles a JSmol-flavoured
           expression. Compose with <code>and</code>, <code>or</code>,{' '}
           <code>not</code>, parentheses, and <code>within X of …</code>.
-          Shortcuts: <code>api.all</code>, <code>api.none</code>.
         </p>
         <table className="animate-help-table">
           <thead>
@@ -197,51 +298,62 @@ await api.spin('y');`}</pre>
         </table>
       </section>
 
-      <MethodSection title="Representations" entries={REPRESENTATIONS} />
-      <MethodSection title="Camera" entries={CAMERA} />
-      <MethodSection title="Overlays" entries={OVERLAY} />
-      <MethodSection title="Timing & utilities" entries={TIMING_AND_OTHER} />
+      <MethodSection
+        title="Selection — channels and helpers"
+        entries={SELECTION_METHODS}
+      />
+      <MethodSection title="pdb — structure-level" entries={PDB_METHODS} />
+      <MethodSection title="ms — viewer / camera" entries={MS_METHODS} />
+      <MethodSection title="Global helpers" entries={GLOBAL_METHODS} />
 
       <section>
         <h3>Color spec</h3>
         <p>
-          Every representation accepts <code>options.color</code>, which can be
-          one of:
+          Every <code>color(spec)</code> call accepts one of:
         </p>
         <ul>
           <li>
-            CSS color name or hex — <code>{`'limegreen'`}</code>,{' '}
+            CSS color name or hex shortcut — <code>{`'limegreen'`}</code>,{' '}
             <code>{`'#ff8000'`}</code>, <code>{`'#f80'`}</code>
           </li>
           <li>
-            A theme object — <code>{`{ by: 'chain' }`}</code> /{' '}
-            <code>{`'element'`}</code> / <code>{`'structure'`}</code> /{' '}
+            Explicit value — <code>{`{ value: 'limegreen' }`}</code>
+          </li>
+          <li>
+            A theme — <code>{`{ model: 'chain' }`}</code> /{' '}
+            <code>{`'element'`}</code> / <code>{`'atoms'`}</code> (= per-bond
+            endpoint atoms) / <code>{`'structure'`}</code> /{' '}
             <code>{`'residue'`}</code> / <code>{`'sequence'`}</code> /{' '}
             <code>{`'hydrophobicity'`}</code> / <code>{`'molecule-type'`}</code>
           </li>
           <li>
             Translucent variant —{' '}
             <code>{`{ color: 'magenta', alpha: 0.6 }`}</code> or{' '}
-            <code>{`{ color: { by: 'structure' }, alpha: 0.4 }`}</code>
+            <code>{`{ color: { model: 'structure' }, alpha: 0.4 }`}</code>
           </li>
         </ul>
       </section>
 
       <section>
-        <h3>Notes & limitations</h3>
+        <h3>Notes &amp; limitations</h3>
         <ul>
           <li>
-            Each Run starts from a clean slate — every helper that adds a
-            representation is purely additive. There is no <code>hide</code>{' '}
-            verb; just don&apos;t add what you don&apos;t want.
+            Each Run starts from a clean slate — every channel is purely
+            additive. There is no <code>hide</code> verb; just don&apos;t add
+            what you don&apos;t want.
           </li>
           <li>
-            <code>spin</code> persists between scenes. Call{' '}
-            <code>{`await api.spin('off')`}</code> to stop it.
+            <code>label(template)</code> currently uses Mol*&apos;s built-in
+            level-based label text (chain id; residue name + seq; atom name).
+            The template chooses the level but does not yet drive custom text.
+          </li>
+          <li>
+            <code>ms.spin</code> persists between scenes. Call{' '}
+            <code>{`ms.spin('off')`}</code> to stop it.
           </li>
           <li>
             JSmol&apos;s <code>moveto</code> with explicit camera matrices is
-            not ported. Use <code>focus(selection)</code> instead.
+            not ported. Use <code>{`selection.focus()`}</code> instead.
           </li>
           <li>H-bond rendering is not yet implemented in this v1.</li>
         </ul>

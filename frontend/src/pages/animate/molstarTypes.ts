@@ -23,11 +23,25 @@ export interface PluginContext {
   };
   canvas3d?: { setProps: (props: Record<string, unknown>) => void };
   managers: {
-    camera: { reset: () => void; focusLoci: (loci: unknown) => void };
+    camera: {
+      reset: () => void;
+      focusLoci: (
+        loci: unknown,
+        options?: {
+          extraRadius?: number;
+          minRadius?: number;
+          durationMs?: number;
+        },
+      ) => void;
+    };
     structure: {
       hierarchy: {
         current: { structures: StructureRef[] };
         remove: (components: ComponentRef[]) => Promise<void>;
+        toggleVisibility: (
+          components: ComponentRef[],
+          action?: 'show' | 'hide',
+        ) => void;
       };
       selection: {
         fromLoci: (modifier: 'set' | 'add' | 'remove', loci: unknown) => void;
@@ -48,6 +62,13 @@ export interface StructureRef {
 
 export interface ComponentRef {
   cell: { transform: { tags?: string[] } };
+}
+
+/** Subset of `molstar/lib/mol-model/loci` used by `selection.zoom(...)`. */
+export interface LociHelpers {
+  getBoundingSphere: (
+    loci: unknown,
+  ) => { radius: number; center: [number, number, number] } | undefined;
 }
 
 export interface MolScriptApi {
