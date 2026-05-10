@@ -75,6 +75,16 @@ export function buildColorParams(
 
   if (typeof spec === 'object' && 'model' in spec) {
     result.color = COLOR_MODEL_TO_THEME[spec.model];
+    // For element-symbol colouring, override Mol*'s default `carbonColor`
+    // (which is `chain-id` and would tint every ligand carbon by its chain
+    // — heme on chain B comes out orange, etc.) with the element-symbol
+    // theme itself, so carbons render as the textbook grey alongside red
+    // O, blue N, yellow S, orange Fe.
+    if (spec.model === 'element' || spec.model === 'atoms') {
+      result.colorParams = {
+        carbonColor: { name: 'element-symbol', params: {} },
+      };
+    }
     return result;
   }
 

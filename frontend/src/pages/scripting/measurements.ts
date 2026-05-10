@@ -542,6 +542,25 @@ export function createMeasurements(context: MeasurementsContext): Measurements {
 
     const kinds = options?.kinds ?? [...ALL_INTERACTION_KINDS];
 
+    // Force a uniform "yellow dashed cylinder, no arrow" style for every
+    // requested kind — matches `setHbonds` and matches what the scripting
+    // API documents ("hbonds in yellow hash cylinders"). Without an
+    // explicit `styles` map, `InteractionsShape` falls back to Mol*'s
+    // built-in defaults, which include grey-ish donor→acceptor arrows
+    // (showArrow: true) that read as out-of-place black wedges over a
+    // faded protein cartoon.
+    const styles: Record<string, unknown> = {};
+    for (const kind of kinds) {
+      styles[kind] = {
+        // eslint-disable-next-line new-cap -- Mol* `Color` factory
+        color: context.colorModule.Color(DEFAULT_HBOND_FALLBACK_HEX),
+        style: 'dashed',
+        radius: DEFAULT_HBOND_DIAMETER,
+        showArrow: false,
+        arrowOffset: 0,
+      };
+    }
+
     const update = context.plugin.state.data.build();
     const repr = update
       .toRoot()
@@ -561,7 +580,7 @@ export function createMeasurements(context: MeasurementsContext): Measurements {
         },
       )
       .apply(context.interactions.ComputeContacts)
-      .apply(context.interactions.InteractionsShape, { kinds })
+      .apply(context.interactions.InteractionsShape, { kinds, styles })
       .apply(context.interactions.ShapeRepresentation3D);
 
     await update.commit();

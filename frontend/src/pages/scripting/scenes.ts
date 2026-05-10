@@ -219,9 +219,12 @@ pdb.switchModel('initial');
 `;
 
 const INTERACTION = `// HEC binding-site walkthrough: faded protein cartoon for context,
-// HEC rendered bold, every contact residue (any atom within 3.5 Å of
-// HEC) revealed one by one with a labeled distance line from HEC to its
-// CA. Ends with chemistry-aware H-bond cylinders.
+// HEC as clean ball-and-stick (element colors, small spheres), every
+// residue with at least one atom within 3.5 Å of HEC revealed with its
+// sidechain plus a SHORT orange line between the closest HEC ↔ residue
+// atom pair (so the labelled distance is the actual close contact, not
+// a misleading centroid-to-CA shortcut). Ends with Mol*'s chemistry-
+// aware H-bond detector layered on top as yellow dashed cylinders.
 const ms = new MolStar();
 const pdb = ms.loadPDB(text);
 ms.echo('HEC binding site — residues within 3.5 Å', {
@@ -231,76 +234,84 @@ ms.echo('HEC binding site — residues within 3.5 Å', {
 
 ms.hideDefaults();
 
-// 1. Faded protein cartoon for context, HEC as bold ball-and-stick.
+// 1. Faded protein cartoon for context, HEC as small-radius ball-and-
+//    stick. The bonds channel automatically adds element-coloured spheres
+//    at atom endpoints, so we don't need a separate spacefill rep — that
+//    one made the heme look like a fat orange blob.
 pdb.all.ribbon.color({ color: { model: 'structure' }, alpha: 0.25 });
 const ligand = pdb.select('HEC');
-ligand.bonds.diameter(0.3).color({ model: 'element' });
-ligand.atoms.radius({ value: 0.5 }).color({ model: 'element' });
+ligand.bonds.diameter(0.2).color({ model: 'element' });
 ms.rotate({ degrees: 360 });
 
 // 2. Find every non-HEC, non-water residue with at least one atom within
-//    3.5 Å of any HEC atom. Pure JS over pdb.atoms — no Mol* round-trip.
+//    3.5 Å of HEC, and for each such residue keep the CLOSEST HEC ↔
+//    residue atom pair so step 4 can draw the actual close contact.
 const cutoffSq = 3.5 * 3.5;
 const ligandAtoms = pdb.atoms.filter((a) => a.resName === 'HEC');
-const seen = new Set();
-const contacts = [];
+const contactMap = new Map();
 for (const atom of pdb.atoms) {
   if (atom.resName === 'HEC') continue;
   if (atom.resName === 'HOH') continue;
-  const key = atom.chainId + ':' + atom.resNum;
-  if (seen.has(key)) continue;
   for (const p of ligandAtoms) {
     const dx = atom.x - p.x;
     const dy = atom.y - p.y;
     const dz = atom.z - p.z;
-    if (dx * dx + dy * dy + dz * dz <= cutoffSq) {
-      seen.add(key);
-      contacts.push({
+    const d2 = dx * dx + dy * dy + dz * dz;
+    if (d2 > cutoffSq) continue;
+    const key = atom.chainId + ':' + atom.resNum;
+    const previous = contactMap.get(key);
+    if (!previous || d2 < previous.d2) {
+      contactMap.set(key, {
         chainId: atom.chainId,
         resNum: atom.resNum,
         resName: atom.resName,
+        residueAtom: atom.name,
+        ligandAtom: p.name,
+        d2,
       });
-      break;
     }
   }
 }
-contacts.sort((a, b) =>
+const contacts = [...contactMap.values()].sort((a, b) =>
   a.chainId === b.chainId ? a.resNum - b.resNum : a.chainId < b.chainId ? -1 : 1,
 );
 
 // 3. Frame HEC plus a 4-Å shell — wide enough that contact residues fit
 //    and HEC stays centred.
 pdb.select('HEC or within 4 of HEC').zoom(0.75);
-ms.echo(contacts.length + ' contact residues — revealing each one with its distance to HEC', {
+ms.echo(contacts.length + ' contact residues — closest-atom distance to HEC', {
   size: 18,
   italic: true,
 });
 delay(1);
 
 // 4. Reveal each contact residue one at a time: sidechain ball-and-stick
-//    + CA label + an orange labeled distance line from the HEC centroid
-//    to the residue's CA.
-ligand.distances.color({ value: 'orange' }).diameter(0.05);
+//    + CA label + a short orange line between the closest HEC atom and
+//    the closest residue atom. The line lies inside the 3.5 Å shell so
+//    its length matches what the title promises.
 for (const r of contacts) {
   const sel = pdb.select(r.resNum + ':' + r.chainId);
-  const sidechain = sel.select('sidechain or .CA');
-  sidechain.bonds.diameter(0.15).color({ model: 'element' });
-  sidechain.atoms.radius({ value: 0.25 }).color({ model: 'element' });
-  const cAlpha = sel.select('.CA');
-  cAlpha.label('\${residue.name}\${residue.number}', {
+  sel.select('sidechain or .CA').bonds.diameter(0.15).color({ model: 'element' });
+  sel.select('.CA').label('\${residue.name}\${residue.number}', {
     size: 1.3,
     bold: true,
   });
-  ligand.distances.to(cAlpha);
+  const residueAtomSel = sel.select('.' + r.residueAtom);
+  const ligandAtomSel = pdb.select('HEC').select('.' + r.ligandAtom);
+  residueAtomSel.distances.to(ligandAtomSel, {
+    color: 'orange',
+    diameter: 0.05,
+  });
   delay(0.6);
 }
 
-// 5. Chemistry-aware H-bond cylinders (yellow dashed) on top of the
-//    orange distance labels.
+// 5. Chemistry-aware H-bond cylinders (yellow dashed) overlaid on the
+//    short orange distance labels for any HEC ↔ residue pair Mol*'s
+//    contact detector flags as a hydrogen bond.
 const shell = pdb.select('within 3.5 of HEC and not HEC');
 ligand.contactsWith(shell, { kinds: ['hydrogen-bond'] });
 
-ms.echo('HEC — H-bonds (yellow dashed) + labeled distances to each contact', {
+ms.echo('HEC — H-bonds (yellow dashed) + closest-atom orange distances', {
   size: 18,
   italic: true,
 });
