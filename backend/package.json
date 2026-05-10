@@ -1,0 +1,40 @@
+{
+  "name": "pdb-quickview-backend",
+  "version": "1.1.1",
+  "description": "Fastify backend for pdb-quickview: parses, indexes, and serves the wwPDB mirror from sqlite.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "api": "node src/api/server.js",
+    "cron": "node src/cron.js",
+    "cron-ccd": "node src/ccd/cron.js",
+    "dev": "DATA_DIR=../data node --watch --env-file-if-exists=../.env src/dev.js",
+    "eslint": "eslint src",
+    "eslint-fix": "eslint src --fix",
+    "prettier": "prettier --check src",
+    "prettier-write": "prettier --write src",
+    "rebuild": "node src/rebuild.js",
+    "seed": "node src/seed.js",
+    "seed-ccd": "node src/ccd/seedCCD.js",
+    "test": "npm run test-only && npm run eslint && npm run prettier",
+    "test-only": "vitest run --coverage",
+    "update": "node src/update.js"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.2.0",
+    "chokidar": "^5.0.0",
+    "debug": "^4.4.0",
+    "fastify": "^5.8.5",
+    "glob": "^11.0.0",
+    "gm": "^1.25.1",
+    "openchemlib": "^9.22.1",
+    "openchemlib-utils": "^8.15.1",
+    "pino": "^10.3.1",
+    "postgrator": "^8.0.0",
+    "rsync": "^0.6.1"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^3.2.4",
+    "vitest": "^3.2.4"
+  }
+}

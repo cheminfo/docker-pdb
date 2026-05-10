@@ -4,6 +4,10 @@
   "description": "Searchable mirror of the wwPDB with precomputed PyMol thumbnails, served from SQLite behind nginx.",
   "type": "module",
   "private": true,
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/cheminfo/pdb-quickview.git"
@@ -21,44 +25,26 @@
   ],
   "author": "Daniel Kostro",
   "license": "MIT",
-  "dependencies": {
-    "@fastify/cors": "^11.2.0",
-    "chokidar": "^5.0.0",
-    "debug": "^4.4.0",
-    "fastify": "^5.8.5",
-    "glob": "^11.0.0",
-    "gm": "^1.25.1",
-    "openchemlib": "^9.22.1",
-    "openchemlib-utils": "^8.15.1",
-    "pino": "^10.3.1",
-    "postgrator": "^8.0.0",
-    "rsync": "^0.6.1"
+  "scripts": {
+    "api": "npm run api -w backend",
+    "cron": "npm run cron -w backend",
+    "cron-ccd": "npm run cron-ccd -w backend",
+    "dev": "docker compose -f compose.dev.yaml up -d && concurrently --names backend,frontend --prefix-colors blue,magenta \"npm:dev:backend\" \"npm:dev:frontend\"",
+    "dev:backend": "npm run dev -w backend",
+    "dev:down": "docker compose -f compose.dev.yaml down",
+    "dev:frontend": "npm run dev -w frontend",
+    "eslint": "npm run eslint -w backend && npm run eslint -w frontend",
+    "eslint-fix": "npm run eslint-fix -w backend && npm run eslint-fix -w frontend",
+    "prettier": "npm run prettier -w backend && npm run prettier -w frontend",
+    "prettier-write": "npm run prettier-write -w backend && npm run prettier-write -w frontend",
+    "rebuild": "npm run rebuild -w backend",
+    "seed": "npm run seed -w backend",
+    "seed-ccd": "npm run seed-ccd -w backend",
+    "test": "npm run test-only && npm run eslint && npm run prettier",
+    "test-only": "npm run test-only -w backend",
+    "update": "npm run update -w backend"
   },
   "devDependencies": {
-    "@vitest/coverage-v8": "^3.2.4",
-    "concurrently": "^9.2.1",
-    "eslint": "^9.39.0",
-    "eslint-config-cheminfo": "^14.0.0",
-    "prettier": "^3.6.2",
-    "vitest": "^3.2.4"
-  },
-  "scripts": {
-    "api": "node src/api/server.js",
-    "cron": "node src/cron.js",
-    "cron-ccd": "node src/ccd/cron.js",
-    "dev": "docker compose -f compose.dev.yaml up -d && concurrently --names backend,frontend --prefix-colors blue,magenta \"npm:dev:backend\" \"npm:dev:frontend\"",
-    "dev:backend": "DATA_DIR=./data node --watch --env-file-if-exists=.env src/dev.js",
-    "dev:frontend": "npm --prefix frontend run dev",
-    "dev:down": "docker compose -f compose.dev.yaml down",
-    "eslint": "eslint src",
-    "eslint-fix": "eslint src --fix",
-    "prettier": "prettier --check src",
-    "prettier-write": "prettier --write src",
-    "rebuild": "node src/rebuild.js",
-    "seed": "node src/seed.js",
-    "seed-ccd": "node src/ccd/seedCCD.js",
-    "test": "npm run test-only && npm run eslint && npm run prettier",
-    "test-only": "vitest run --coverage",
-    "update": "node src/update.js"
+    "concurrently": "^9.2.1"
   }
 }

@@ -9,11 +9,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
+# Workspace metadata first so the install layer is cached.
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+COPY backend/package.json ./backend/
+COPY frontend/package.json ./frontend/
+RUN npm ci --omit=dev --workspace=backend && npm cache clean --force
 
-COPY src ./src
-COPY config.json ./
+COPY backend ./backend
 COPY docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 

@@ -1,0 +1,176 @@
+import OCL from 'openchemlib';
+import { afterAll, beforeAll, expect, test } from 'vitest';
+
+import { getInMemoryLigandsDB } from '../../db/getDB.js';
+import { computeSSIndex } from '../../util/computeSSIndex.js';
+import { buildApp } from '../server.js';
+
+let db;
+let app;
+
+beforeAll(async () => {
+  db = await getInMemoryLigandsDB();
+  // Seed three ligands: benzene (BNZ), naphthalene (NAP), ethanol (ETH).
+  // Substructure benzene should match BNZ + NAP, not ETH.
+  for (const [code, smiles, name] of [
+    ['BNZ', 'c1ccccc1', 'BENZENE'],
+    ['NAP', 'c1ccc2ccccc2c1', 'NAPHTHALENE'],
+    ['ETH', 'CCO', 'ETHANOL'],
+  ]) {
+    const molecule = OCL.Molecule.fromSmiles(smiles);
+    const { idCode, coordinates } = molecule.getIDCodeAndCoordinates();
+    const formula = molecule.getMolecularFormula();
+    db.statement(
+      `INSERT INTO ligands (code, name, formula, type, id_code, coordinates, mf, mw, nb_atoms)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      code,
+      name,
+      formula.formula,
+      'NON-POLYMER',
+      idCode,
+      coordinates,
+      formula.formula,
+      formula.relativeWeight,
+      molecule.getAllAtoms(),
+    );
+    const ssIndex = computeSSIndex(molecule);
+    db.statement(
+      `INSERT INTO ligand_ss_index
+         (code, ss_index0, ss_index1, ss_index2, ss_index3, ss_index4, ss_index5, ss_index6, ss_index7)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      code,
+      ssIndex.ss_index0,
+      ssIndex.ss_index1,
+      ssIndex.ss_index2,
+      ssIndex.ss_index3,
+      ssIndex.ss_index4,
+      ssIndex.ss_index5,
+      ssIndex.ss_index6,
+      ssIndex.ss_index7,
+    );
+  }
+  // Three PDBs link to BNZ, two to NAP, none to ETH.
+  for (const [pdbId, code] of [
+    ['1AAA', 'BNZ'],
+    ['1BBB', 'BNZ'],
+    ['1CCC', 'BNZ'],
+    ['2AAA', 'NAP'],
+    ['2BBB', 'NAP'],
+  ]) {
+    db.statement(
+      `INSERT INTO pdb_ligands (pdb_id, ligand_code, count) VALUES (?, ?, 1)`,
+    ).run(pdbId, code);
+  }
+  app = await buildApp({ db });
+});
+
+afterAll(async () => {
+  await app.close();
+  db.close();
+});
+
+test('GET /v1/ligands returns a default ranking when no substructure is provided', async () => {
+  const response = await app.inject({ method: 'GET', url: '/v1/ligands' });
+
+  expect(response.statusCode).toBe(200);
+
+  const body = response.json();
+
+  expect(body.ligands.map((row) => row.code)).toStrictEqual([
+    'BNZ',
+    'NAP',
+    'ETH',
+  ]);
+  expect(body.ligands[0]).toMatchObject({
+    code: 'BNZ',
+    name: 'BENZENE',
+    nbPdbs: 3,
+  });
+});
+
+test('GET /v1/ligands?substructure=<benzene> returns BNZ + NAP and stats', async () => {
+  const benzeneIdCode = OCL.Molecule.fromSmiles('c1ccccc1').getIDCode();
+  const response = await app.inject({
+    method: 'GET',
+    url: `/v1/ligands?substructure=${encodeURIComponent(benzeneIdCode)}`,
+  });
+
+  expect(response.statusCode).toBe(200);
+
+  const body = response.json();
+  const codes = body.ligands.map((row) => row.code).toSorted();
+
+  expect(codes).toStrictEqual(['BNZ', 'NAP']);
+  expect(body.stats.verified).toBeGreaterThanOrEqual(2);
+});
+
+test('GET /v1/ligands/:code returns a ligand row or 404', async () => {
+  const ok = await app.inject({ method: 'GET', url: '/v1/ligands/BNZ' });
+
+  expect(ok.statusCode).toBe(200);
+  expect(ok.json().ligand).toMatchObject({
+    code: 'BNZ',
+    name: 'BENZENE',
+    nbPdbs: 3,
+  });
+
+  const missing = await app.inject({ method: 'GET', url: '/v1/ligands/XXX' });
+
+  expect(missing.statusCode).toBe(404);
+});
+
+test('GET /v1/ligands/:code/pdbs paginates the link table', async () => {
+  const response = await app.inject({
+    method: 'GET',
+    url: '/v1/ligands/BNZ/pdbs?limit=2&offset=0',
+  });
+
+  expect(response.statusCode).toBe(200);
+
+  const body = response.json();
+
+  expect(body).toMatchObject({ total: 3, limit: 2, offset: 0 });
+  expect(body.pdbs.map((row) => row.pdbId)).toStrictEqual(['1AAA', '1BBB']);
+
+  const page2 = await app.inject({
+    method: 'GET',
+    url: '/v1/ligands/BNZ/pdbs?limit=2&offset=2',
+  });
+
+  expect(page2.json().pdbs.map((row) => row.pdbId)).toStrictEqual(['1CCC']);
+});
+
+test('legacy aliases /pdb/<id>, /stats/<view>, /assembly/<id>/<size>, /view/jsmol still respond', async () => {
+  // /pdb/<id> — should 404 like its v1 counterpart when the entry is unknown.
+  const pdbAlias = await app.inject({ method: 'GET', url: '/pdb/9XXX' });
+
+  expect(pdbAlias.statusCode).toBe(404);
+
+  // /stats/<view> — unknown view yields the same shape as /v1/stats.
+  const statsAlias = await app.inject({
+    method: 'GET',
+    url: '/stats/bogusView',
+  });
+
+  expect(statsAlias.statusCode).toBe(404);
+  expect(statsAlias.json()).toStrictEqual({ error: 'unknown_view' });
+
+  // /assembly/<id>/<size> — invalid size triggers the same validation.
+  const assemblyAlias = await app.inject({
+    method: 'GET',
+    url: '/assembly/1ABC/notasize',
+  });
+
+  expect(assemblyAlias.statusCode).toBe(400);
+  expect(assemblyAlias.json()).toStrictEqual({ error: 'invalid_size' });
+
+  // /view/jsmol — should respond with the same CouchDB-shaped envelope as
+  // /v1/pdbs/jsmol (empty here since no pdb_entries were seeded).
+  const viewAlias = await app.inject({ method: 'GET', url: '/view/jsmol' });
+
+  expect(viewAlias.statusCode).toBe(200);
+  // eslint-disable-next-line camelcase -- legacy CouchDB-shaped key
+  expect(viewAlias.json()).toMatchObject({ total_rows: 0, offset: 0 });
+});

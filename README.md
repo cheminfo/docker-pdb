@@ -154,7 +154,7 @@ right thing without any manual intervention.
 
 ## Local development
 
-### Backend (`src/`)
+### Backend (`backend/src/`)
 
 ```sh
 npm install
@@ -170,7 +170,7 @@ npm run dev:down   # stop the dev backend
   surface as production (`/v1/...`), so the Vite dev server below can
   talk to it transparently.
 
-It then runs [`src/dev.js`](./src/dev.js) under `node --watch`: the
+It then runs [`backend/src/dev.js`](./backend/src/dev.js) under `node --watch`: the
 script applies migrations on `data/sqlite3/ligands.db` and ingests up to
 `DEV_SEED_LIMIT` (default 20) `.ent.gz` files already present under
 `data/pdb/`, so the API is queryable in seconds:
@@ -181,7 +181,7 @@ curl http://127.0.0.1:12346/v1/pdbs/100D
 curl 'http://127.0.0.1:12346/v1/pdbs?methods=X-RAY+DIFFRACTION&limit=3'
 ```
 
-Editing any file under `src/` re-runs the seed (idempotent — existing rows
+Editing any file under `backend/src/` re-runs the seed (idempotent — existing rows
 are upserted). The full rsync pipeline and pymol-rendered biological
 assemblies are skipped; if you need them locally you will need `pymol`,
 `graphicsmagick`, and `rsync`, and should run `npm run cron` (or `npm run
