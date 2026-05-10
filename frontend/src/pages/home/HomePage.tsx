@@ -1,5 +1,3 @@
-import type { ReactNode } from 'react';
-
 import {
   fetchAssemblyInfo,
   fetchByExperiment,
@@ -8,7 +6,7 @@ import {
   fetchLastBioAssemblyRsync,
   fetchPdbInfo,
 } from '../../shared/api/client.ts';
-import type { AsyncState } from '../../shared/useAsync.ts';
+import Panel from '../../shared/charts/Panel.tsx';
 import { useAsync } from '../../shared/useAsync.ts';
 
 import ExperimentChart from './ExperimentChart.tsx';
@@ -23,35 +21,6 @@ function fetchOverview() {
     fetchLastAsymRsync(),
     fetchLastBioAssemblyRsync(),
   ]);
-}
-
-interface PanelProps<TData> {
-  title: string;
-  state: AsyncState<TData>;
-  errorPrefix: string;
-  children: (data: TData) => ReactNode;
-}
-
-function Panel<TData>({
-  title,
-  state,
-  errorPrefix,
-  children,
-}: PanelProps<TData>) {
-  return (
-    <div className="panel">
-      <h3>{title}</h3>
-      {state.status === 'loading' ? (
-        <p className="placeholder">Loading…</p>
-      ) : state.status === 'error' ? (
-        <p className="placeholder">
-          {errorPrefix}: {state.error.message}
-        </p>
-      ) : (
-        children(state.data)
-      )}
-    </div>
-  );
 }
 
 /**

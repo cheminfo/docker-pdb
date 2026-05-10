@@ -1,6 +1,7 @@
 import { ResponsiveBar } from '@nivo/bar';
 
 import type { ViewResponse } from '../../shared/api/types.ts';
+import { formatNumber } from '../../shared/format.ts';
 
 interface ExperimentChartProps {
   data: ViewResponse<string>;
@@ -54,8 +55,7 @@ export default function ExperimentChart({ data }: ExperimentChartProps) {
         theme={chartTheme}
         tooltip={({ indexValue, value }) => (
           <div className="chart-tooltip">
-            <strong>{indexValue}</strong>: {value.toLocaleString('en-US')}{' '}
-            structures
+            <strong>{indexValue}</strong>: {formatNumber(value)} structures
           </div>
         )}
         animate={false}

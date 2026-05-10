@@ -55,7 +55,6 @@
     "prettier": "prettier --check src",
     "prettier-write": "prettier --write src",
     "rebuild": "node src/rebuild.js",
-    "rebuild-db": "node src/rebuild.js",
     "seed": "node src/seed.js",
     "seed-ccd": "node src/ccd/seedCCD.js",
     "test": "npm run test-only && npm run eslint && npm run prettier",

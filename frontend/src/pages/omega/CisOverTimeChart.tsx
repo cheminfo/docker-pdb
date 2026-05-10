@@ -6,6 +6,7 @@ import {
   chartTheme,
   pickEveryNth,
 } from '../../shared/charts/theme.ts';
+import { formatNumber } from '../../shared/format.ts';
 
 interface CisOverTimeChartProps {
   /** Per-year ω totals (rows of `omegaByYear`). */
@@ -82,9 +83,8 @@ export default function CisOverTimeChart({
         theme={chartTheme}
         tooltip={({ data: row }) => (
           <div className="chart-tooltip">
-            <strong>{row.index}</strong>: {row.percentage.toFixed(2)} % cis (
-            {row.nbCis.toLocaleString('en-US')} /{' '}
-            {row.nbBonds.toLocaleString('en-US')})
+            <strong>{row.index}</strong>: {formatNumber(row.percentage, 2)} %
+            cis ({formatNumber(row.nbCis)} / {formatNumber(row.nbBonds)})
           </div>
         )}
         animate={false}

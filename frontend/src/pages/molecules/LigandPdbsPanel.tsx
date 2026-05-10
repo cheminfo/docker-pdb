@@ -1,6 +1,7 @@
 import { Link } from 'react-router';
 
 import type { LigandPdbReference } from '../../shared/api/types.ts';
+import { formatNumber } from '../../shared/format.ts';
 
 interface LigandPdbsPanelProps {
   /** Code of the active ligand selection, or `null` for the empty state. */
@@ -54,8 +55,7 @@ export default function LigandPdbsPanel({
   return (
     <div>
       <p className="ligand-pdbs-summary">
-        <strong>{ligandCode}</strong> appears in {total.toLocaleString('en-US')}{' '}
-        PDB
+        <strong>{ligandCode}</strong> appears in {formatNumber(total)} PDB
         {total === 1 ? ' entry' : ' entries'}
         {pdbs.length < total
           ? ` (showing first ${pdbs.length.toString()})`

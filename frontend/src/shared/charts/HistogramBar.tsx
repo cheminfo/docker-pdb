@@ -1,5 +1,7 @@
 import { ResponsiveBar } from '@nivo/bar';
 
+import { formatNumber } from '../format.ts';
+
 import { chartAccent, chartTheme, formatCompact } from './theme.ts';
 
 interface HistogramBarProps {
@@ -116,7 +118,7 @@ export default function HistogramBar(props: HistogramBarProps) {
         theme={chartTheme}
         tooltip={({ indexValue, value }) => (
           <div className="chart-tooltip">
-            <strong>{indexValue}</strong>: {value.toLocaleString('en-US')}
+            <strong>{indexValue}</strong>: {formatNumber(value)}
             {valueLabel}
           </div>
         )}

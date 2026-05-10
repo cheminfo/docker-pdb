@@ -9,7 +9,6 @@
 //   docker compose exec node-pdb-sync npm run seed
 
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import createDebug from 'debug';
@@ -82,16 +81,6 @@ function existingFiles(ids, root, fileFor) {
   return files;
 }
 
-function asymUnitPath(root, id) {
-  const lower = id.toLowerCase();
-  return join(root, lower.slice(1, 3), `pdb${lower}.ent.gz`);
-}
-
-function bioAssemblyPath(root, id) {
-  const lower = id.toLowerCase();
-  return join(root, lower.slice(1, 3), `${lower}.pdb1.gz`);
-}
-
 async function main() {
   debug(`Wiping pdb_* tables`);
   await clearTables();
@@ -101,7 +90,7 @@ async function main() {
   const asymFiles = existingFiles(
     SEED_IDS,
     config.asymetrical.rsync.destination,
-    asymUnitPath,
+    common.asymUnitPath,
   );
   debug(`Re-ingesting ${asymFiles.length} asymmetric-unit entries`);
   await common.processPdbs(asymFiles);
@@ -109,7 +98,7 @@ async function main() {
   const bioFiles = existingFiles(
     SEED_IDS,
     config.bioAssembly.rsync.destination,
-    bioAssemblyPath,
+    common.bioAssemblyPath,
   );
   debug(`Re-ingesting ${bioFiles.length} biological-assembly entries`);
   await common.processPdbAssemblies(bioFiles);

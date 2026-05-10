@@ -113,4 +113,22 @@ export const endpoints: EndpointDefinition[] = [
     ),
     example: '/v1/ligands?limit=20',
   },
+  {
+    method: 'GET',
+    path: '/v1/ligands/<CODE>',
+    description:
+      'Full record for one ligand: name, formula, molecular weight, atom count, OCL idCode, packed coordinates, and number of PDB entries it appears in.',
+    example: '/v1/ligands/HEM',
+  },
+  {
+    method: 'GET',
+    path: '/v1/ligands/<CODE>/pdbs',
+    description: (
+      <>
+        Paginated list of PDB entries containing the ligand, with per-entry copy
+        count. Supports <code>limit</code> and <code>offset</code>.
+      </>
+    ),
+    example: '/v1/ligands/HEM/pdbs?limit=20',
+  },
 ];

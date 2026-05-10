@@ -68,7 +68,7 @@ export default async function update() {
     await doRsync(
       config.bioAssembly.rsync.source,
       config.bioAssembly.rsync.destination,
-      config.asymetrical.rsync.port || 873,
+      config.bioAssembly.rsync.port || 873,
       common.processPdbAssembly,
       config.bioAssembly.rsync.historyDir,
       'bioAssembly',

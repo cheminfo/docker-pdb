@@ -129,3 +129,32 @@ test('GET /v1/ligands/:code/pdbs paginates the link table', async () => {
   });
   expect(page2.json().pdbs.map((row) => row.pdbId)).toStrictEqual(['1CCC']);
 });
+
+test('legacy aliases /pdb/<id>, /stats/<view>, /assembly/<id>/<size>, /view/jsmol still respond', async () => {
+  // /pdb/<id> — should 404 like its v1 counterpart when the entry is unknown.
+  const pdbAlias = await app.inject({ method: 'GET', url: '/pdb/9XXX' });
+  expect(pdbAlias.statusCode).toBe(404);
+
+  // /stats/<view> — unknown view yields the same shape as /v1/stats.
+  const statsAlias = await app.inject({
+    method: 'GET',
+    url: '/stats/bogusView',
+  });
+  expect(statsAlias.statusCode).toBe(404);
+  expect(statsAlias.json()).toStrictEqual({ error: 'unknown_view' });
+
+  // /assembly/<id>/<size> — invalid size triggers the same validation.
+  const assemblyAlias = await app.inject({
+    method: 'GET',
+    url: '/assembly/1ABC/notasize',
+  });
+  expect(assemblyAlias.statusCode).toBe(400);
+  expect(assemblyAlias.json()).toStrictEqual({ error: 'invalid_size' });
+
+  // /view/jsmol — should respond with the same CouchDB-shaped envelope as
+  // /v1/pdbs/jsmol (empty here since no pdb_entries were seeded).
+  const viewAlias = await app.inject({ method: 'GET', url: '/view/jsmol' });
+  expect(viewAlias.statusCode).toBe(200);
+  // eslint-disable-next-line camelcase -- legacy CouchDB-shaped key
+  expect(viewAlias.json()).toMatchObject({ total_rows: 0, offset: 0 });
+});

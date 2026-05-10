@@ -1,5 +1,6 @@
 import { fetchHelicesVsSheets } from '../../shared/api/client.ts';
 import Panel from '../../shared/charts/Panel.tsx';
+import { formatNumber } from '../../shared/format.ts';
 import { useAsync } from '../../shared/useAsync.ts';
 
 const BINS = [0, 1, 5, 10, 20, 50] as const;
@@ -132,7 +133,7 @@ export default function HelicesVsSheetsChart() {
                         fontSize={11}
                         fill={intensity > 0.55 ? '#ffffff' : '#0f172a'}
                       >
-                        {value > 0 ? value.toLocaleString('en-US') : ''}
+                        {value > 0 ? formatNumber(value) : ''}
                       </text>
                     </g>
                   );

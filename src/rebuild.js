@@ -3,7 +3,6 @@
 // source of truth, so a fresh sqlite file (or a wiped one) can be fully
 // reconstructed without re-downloading anything from the wwPDB.
 
-import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
@@ -64,26 +63,14 @@ async function getFiles(searchPattern) {
 
 function getPdbFiles() {
   if (file) {
-    return [
-      join(
-        config.asymetrical.rsync.destination,
-        file.slice(1, 3),
-        `pdb${file}.ent.gz`,
-      ),
-    ];
+    return [common.asymUnitPath(config.asymetrical.rsync.destination, file)];
   }
   return getFiles(config.asymetrical.rsync.destination + pattern);
 }
 
 function getAssemblyFiles() {
   if (file) {
-    return [
-      join(
-        config.bioAssembly.rsync.destination,
-        file.slice(1, 3),
-        `${file}.pdb1.gz`,
-      ),
-    ];
+    return [common.bioAssemblyPath(config.bioAssembly.rsync.destination, file)];
   }
   return getFiles(config.bioAssembly.rsync.destination + pattern);
 }

@@ -11,6 +11,29 @@ export function formatInteger(value: number): string {
   return integerFormatter.format(value);
 }
 
+const decimalFormatters = new Map<number, Intl.NumberFormat>();
+
+/**
+ * Format a number with thousands separators and a fixed number of fractional
+ * digits. Pass `decimals = 0` (or omit it) for plain integer formatting.
+ * Backed by cached `Intl.NumberFormat` instances.
+ * @param value - Number to format.
+ * @param decimals - Number of fractional digits to display. Defaults to `0`.
+ * @returns Locale-formatted string (en-US).
+ */
+export function formatNumber(value: number, decimals = 0): string {
+  if (decimals === 0) return integerFormatter.format(value);
+  let formatter = decimalFormatters.get(decimals);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    });
+    decimalFormatters.set(decimals, formatter);
+  }
+  return formatter.format(value);
+}
+
 const dateTimeFormatter = new Intl.DateTimeFormat('en-US', {
   dateStyle: 'medium',
   timeStyle: 'short',

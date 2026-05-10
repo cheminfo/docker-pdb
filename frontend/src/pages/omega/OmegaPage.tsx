@@ -11,6 +11,7 @@ import type {
   OmegaTuple,
 } from '../../shared/api/types.ts';
 import Panel from '../../shared/charts/Panel.tsx';
+import { formatNumber } from '../../shared/format.ts';
 import { useAsync } from '../../shared/useAsync.ts';
 
 import CisHeatmap from './CisHeatmap.tsx';
@@ -131,24 +132,24 @@ function SummaryCards({ state }: SummaryCardsProps) {
     <div className="stats-grid">
       <div className="stat-card">
         <span className="label">Peptide bonds</span>
-        <span className="value">{nbBonds.toLocaleString('en-US')}</span>
+        <span className="value">{formatNumber(nbBonds)}</span>
         <span className="sub">across the whole PDB</span>
       </div>
       <div className="stat-card">
         <span className="label">Trans</span>
-        <span className="value">{nbTrans.toLocaleString('en-US')}</span>
+        <span className="value">{formatNumber(nbTrans)}</span>
         <span className="sub">|ω| ≥ 150°</span>
       </div>
       <div className="stat-card">
         <span className="label">Cis</span>
-        <span className="value">{nbCis.toLocaleString('en-US')}</span>
-        <span className="sub">{cisPercent.toFixed(3)} % of bonds</span>
+        <span className="value">{formatNumber(nbCis)}</span>
+        <span className="sub">{formatNumber(cisPercent, 3)} % of bonds</span>
       </div>
       <div className="stat-card">
         <span className="label">Twisted</span>
-        <span className="value">{nbTwisted.toLocaleString('en-US')}</span>
+        <span className="value">{formatNumber(nbTwisted)}</span>
         <span className="sub">
-          {twistedPercent.toFixed(3)} % (30° &lt; |ω| &lt; 150°)
+          {formatNumber(twistedPercent, 3)} % (30° &lt; |ω| &lt; 150°)
         </span>
       </div>
     </div>

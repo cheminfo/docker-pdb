@@ -52,6 +52,54 @@ function asGroupedRows(pairs) {
 }
 
 /**
+ * Strip every column except `key` and `value` and wrap into the CouchDB
+ * grouped-reduce envelope. Convenience for SQL queries that already alias
+ * the columns to `key` and `value`.
+ * @param {Array<{ key: unknown, value: number }>} rows - SQL rows.
+ * @returns {{ rows: Array<{ key: unknown, value: number }> }} Wrapped response.
+ */
+function rowsAsGroupedRows(rows) {
+  return { rows: rows.map(({ key, value }) => ({ key, value })) };
+}
+
+/**
+ * Build a histogram by lower-bound bucketing. Each row contributes 1 to the
+ * bucket whose lower bound is the largest entry in `bins` strictly less than
+ * or equal to the value (`0` for the first bucket). Empty buckets are
+ * dropped, and the result is wrapped in the CouchDB grouped-reduce envelope.
+ *
+ * Mirrors the shape of the legacy `histogram(<column>, [<bins>])` reduce
+ * views from the original CouchDB design docs.
+ * @param {object[]} rows - Rows yielding the values to bucket.
+ * @param {number[]} bins - Strictly-increasing upper bounds (last bin's upper bound is `Infinity`).
+ * @param {(row: unknown) => number} valueOf - Extract the numeric value to bucket from each row.
+ * @returns {{ rows: Array<{ key: number, value: number }> }} Grouped-reduce envelope sorted by lower bound.
+ */
+function histogram(rows, bins, valueOf) {
+  const buckets = new Map();
+  for (const lower of [0, ...bins]) buckets.set(lower, 0);
+  for (const row of rows) {
+    const value = valueOf(row);
+    let lower = 0;
+    let placed = false;
+    for (const bin of bins) {
+      if (value < bin) {
+        buckets.set(lower, (buckets.get(lower) ?? 0) + 1);
+        placed = true;
+        break;
+      }
+      lower = bin;
+    }
+    if (!placed) buckets.set(lower, (buckets.get(lower) ?? 0) + 1);
+  }
+  return asGroupedRows(
+    Array.from(buckets.entries())
+      .filter(([, value]) => value > 0)
+      .toSorted(([a], [b]) => a - b),
+  );
+}
+
+/**
  * Compute a `_stats` reduce result over a single integer column.
  * @param {import('../db/getDB.js').LigandsDB} db - Open database.
  * @param {string} sql - Query that selects one numeric column called `v`.
@@ -95,7 +143,7 @@ export function byYear(db) {
        ORDER BY year`,
     )
     .all();
-  return { rows: rows.map((row) => ({ key: row.key, value: row.value })) };
+  return rowsAsGroupedRows(rows);
 }
 
 export function byExperiment(db) {
@@ -108,7 +156,7 @@ export function byExperiment(db) {
        ORDER BY value DESC`,
     )
     .all();
-  return { rows: rows.map((row) => ({ key: row.key, value: row.value })) };
+  return rowsAsGroupedRows(rows);
 }
 
 export function helicesStats(db) {
@@ -147,7 +195,7 @@ export function aminoAcidFreq(db) {
        GROUP BY residue`,
     )
     .all(...STANDARD_AA);
-  return { rows: rows.map((row) => ({ key: row.key, value: row.value })) };
+  return rowsAsGroupedRows(rows);
 }
 
 export function nucleicBaseFreq(db) {
@@ -160,7 +208,7 @@ export function nucleicBaseFreq(db) {
        GROUP BY residue`,
     )
     .all(...NUCLEIC_BASES);
-  return { rows: rows.map((row) => ({ key: row.key, value: row.value })) };
+  return rowsAsGroupedRows(rows);
 }
 
 export function moleculeType(db) {
@@ -188,7 +236,7 @@ export function moleculeType(db) {
        GROUP BY category`,
     )
     .all(...STANDARD_AA, ...NUCLEIC_BASES);
-  return { rows: rows.map((row) => ({ key: row.key, value: row.value })) };
+  return rowsAsGroupedRows(rows);
 }
 
 export function modifiedResiduesHist(db) {
@@ -200,7 +248,7 @@ export function modifiedResiduesHist(db) {
        ORDER BY nb_modified_residues`,
     )
     .all();
-  return { rows: rows.map((row) => ({ key: row.key, value: row.value })) };
+  return rowsAsGroupedRows(rows);
 }
 
 export function helixKindHist(db) {
@@ -213,7 +261,7 @@ export function helixKindHist(db) {
        ORDER BY kind`,
     )
     .all();
-  return { rows: rows.map((row) => ({ key: row.key, value: row.value })) };
+  return rowsAsGroupedRows(rows);
 }
 
 export function helixLengthHist(db) {
@@ -228,7 +276,7 @@ export function helixLengthHist(db) {
        ORDER BY key`,
     )
     .all(HELIX_SHEET_LENGTH_LIMIT);
-  return { rows: rows.map((row) => ({ key: row.key, value: row.value })) };
+  return rowsAsGroupedRows(rows);
 }
 
 export function sheetLengthHist(db) {
@@ -243,7 +291,7 @@ export function sheetLengthHist(db) {
        ORDER BY key`,
     )
     .all(HELIX_SHEET_LENGTH_LIMIT);
-  return { rows: rows.map((row) => ({ key: row.key, value: row.value })) };
+  return rowsAsGroupedRows(rows);
 }
 
 export function helicesVsSheets(db) {
@@ -274,37 +322,14 @@ export function secondaryStructurePresence(db) {
        GROUP BY label`,
     )
     .all();
-  return { rows: rows.map((row) => ({ key: row.key, value: row.value })) };
+  return rowsAsGroupedRows(rows);
 }
 
 export function residuesHistogram(db) {
-  const buckets = new Map();
-  for (const lower of [0, ...RESIDUES_HISTOGRAM_BINS]) {
-    buckets.set(lower, 0);
-  }
   const all = db
     .statement(`SELECT nb_residues FROM pdb_entries WHERE nb_residues > 0`)
     .all();
-  for (const row of all) {
-    let lower = 0;
-    let placed = false;
-    for (const bin of RESIDUES_HISTOGRAM_BINS) {
-      if (row.nb_residues < bin) {
-        buckets.set(lower, (buckets.get(lower) ?? 0) + 1);
-        placed = true;
-        break;
-      }
-      lower = bin;
-    }
-    if (!placed) {
-      buckets.set(lower, (buckets.get(lower) ?? 0) + 1);
-    }
-  }
-  return asGroupedRows(
-    Array.from(buckets.entries())
-      .filter(([, value]) => value > 0)
-      .toSorted(([a], [b]) => a - b),
-  );
+  return histogram(all, RESIDUES_HISTOGRAM_BINS, (row) => row.nb_residues);
 }
 
 export function chainsHistogram(db) {
@@ -317,7 +342,7 @@ export function chainsHistogram(db) {
        ORDER BY nb_chains`,
     )
     .all();
-  return { rows: rows.map((row) => ({ key: row.key, value: row.value })) };
+  return rowsAsGroupedRows(rows);
 }
 
 export function residuesPerChainStats(db) {
@@ -338,7 +363,7 @@ export function ligandFrequency(db) {
        ORDER BY value DESC`,
     )
     .all();
-  return { rows: rows.map((row) => ({ key: row.key, value: row.value })) };
+  return rowsAsGroupedRows(rows);
 }
 
 export function ligandMwHistogram(db) {
@@ -347,28 +372,7 @@ export function ligandMwHistogram(db) {
       `SELECT mw FROM pdb_formulas WHERE label <> 'HOH' AND mw IS NOT NULL AND mw > 0`,
     )
     .all();
-  const buckets = new Map();
-  for (const lower of [0, ...LIGAND_MW_BINS]) buckets.set(lower, 0);
-  for (const row of all) {
-    let lower = 0;
-    let placed = false;
-    for (const bin of LIGAND_MW_BINS) {
-      if (row.mw < bin) {
-        buckets.set(lower, (buckets.get(lower) ?? 0) + 1);
-        placed = true;
-        break;
-      }
-      lower = bin;
-    }
-    if (!placed) {
-      buckets.set(lower, (buckets.get(lower) ?? 0) + 1);
-    }
-  }
-  return asGroupedRows(
-    Array.from(buckets.entries())
-      .filter(([, value]) => value > 0)
-      .toSorted(([a], [b]) => a - b),
-  );
+  return histogram(all, LIGAND_MW_BINS, (row) => row.mw);
 }
 
 export function ligandsByYear(db) {
@@ -410,7 +414,7 @@ export function iepHistogram(db) {
        ORDER BY key`,
     )
     .all();
-  return { rows: rows.map((row) => ({ key: row.key, value: row.value })) };
+  return rowsAsGroupedRows(rows);
 }
 
 export function ecClasses(db) {
@@ -428,7 +432,7 @@ export function ecClasses(db) {
        ORDER BY head`,
     )
     .all();
-  return { rows: rows.map((row) => ({ key: row.key, value: row.value })) };
+  return rowsAsGroupedRows(rows);
 }
 
 export function residuesByYear(db) {
@@ -538,7 +542,7 @@ export function cisCountHistogram(db) {
        ORDER BY omega_nb_cis`,
     )
     .all();
-  return { rows: rows.map((row) => ({ key: row.key, value: row.value })) };
+  return rowsAsGroupedRows(rows);
 }
 
 export function pairFrequency(db, yearRange) {

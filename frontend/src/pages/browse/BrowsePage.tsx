@@ -23,11 +23,10 @@ import {
 } from '../../shared/viewerOptions.ts';
 
 import FilterPanel from './FilterPanel.tsx';
-import HelicesTable from './HelicesTable.tsx';
 import LigandsTable from './LigandsTable.tsx';
 import PdbHeader from './PdbHeader.tsx';
 import PdbTable from './PdbTable.tsx';
-import SheetsTable from './SheetsTable.tsx';
+import StructureTable from './StructureTable.tsx';
 import ViewerControls from './ViewerControls.tsx';
 import type { FilterState } from './filters.ts';
 import { emptyFilterState, filtersToFindParams } from './filters.ts';
@@ -339,15 +338,18 @@ function SideTabs({ doc, selectedKey, onFocus }: SideTabsProps) {
           />
         )}
         {active === 'helices' && (
-          <HelicesTable
-            helices={doc.helices}
+          <StructureTable
+            kind="helix"
+            rows={doc.helices}
+            extraColumns={[{ header: 'Kind', render: (helix) => helix.kind }]}
             selectedKey={selectedKey}
             onFocus={onFocus}
           />
         )}
         {active === 'sheets' && (
-          <SheetsTable
-            sheets={doc.sheets}
+          <StructureTable
+            kind="sheet"
+            rows={doc.sheets}
             selectedKey={selectedKey}
             onFocus={onFocus}
           />

@@ -7,6 +7,7 @@ import {
   formatCompact,
   pickEveryNth,
 } from '../../shared/charts/theme.ts';
+import { formatNumber } from '../../shared/format.ts';
 import { useAsync } from '../../shared/useAsync.ts';
 
 const METHOD_COLORS: Record<string, string> = {
@@ -131,7 +132,7 @@ export default function MethodByYearChart() {
                   <strong>
                     {indexValue} · {String(id)}
                   </strong>
-                  : {value.toLocaleString('en-US')}
+                  : {formatNumber(value)}
                 </div>
               )}
               animate={false}

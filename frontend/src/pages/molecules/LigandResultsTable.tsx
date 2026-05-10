@@ -2,6 +2,7 @@ import { MF } from 'react-mf';
 
 import LigandStructure from '../../shared/LigandStructure.tsx';
 import type { LigandSummary } from '../../shared/api/types.ts';
+import { formatNumber } from '../../shared/format.ts';
 
 interface LigandResultsTableProps {
   /** Matching ligand rows, in descending PDB-count order. */
@@ -66,8 +67,8 @@ export default function LigandResultsTable({
                 <td className="mf-cell">
                   <MF mf={ligand.mf} />
                 </td>
-                <td className="num">{ligand.mw.toFixed(2)}</td>
-                <td className="num">{ligand.nbPdbs.toLocaleString('en-US')}</td>
+                <td className="num">{formatNumber(ligand.mw, 2)}</td>
+                <td className="num">{formatNumber(ligand.nbPdbs)}</td>
               </tr>
             );
           })}

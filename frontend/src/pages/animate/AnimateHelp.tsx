@@ -82,6 +82,12 @@ const SELECTION_METHODS: MethodEntry[] = [
     example: "pdb.select('PLP').surface.dots();",
   },
   {
+    signature: 'selection.<channel>.show() / .hide()',
+    description:
+      'Toggle the visibility of one rendering channel (`atoms`, `bonds`, `ribbon`, `surface`) for this selection without dropping its color/size state. Both methods return the channel so calls can be chained.',
+    example: "pdb.select('water').atoms.hide();",
+  },
+  {
     signature: 'selection.label(template)',
     description:
       "Add residue/element/chain labels using Mol*'s built-in label rep. The renderer picks a level based on which fields the template references (atom → element, chain → chain, otherwise residue). Custom-text templates are not yet supported — Mol* draws the level's default text.",

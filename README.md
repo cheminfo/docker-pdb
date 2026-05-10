@@ -6,6 +6,8 @@ rendered once into PyMol thumbnails (100/200/400 px), so structure metadata
 and previews are served straight from disk — no on-the-fly rendering, no
 upstream lookup.
 
+![Animate page screenshot](./frontend/animate-smoke.png)
+
 ## What you get
 
 - **Searchable index** — every PDB entry is parsed and indexed by number of
@@ -19,7 +21,7 @@ upstream lookup.
   assemblies are kept on disk, kept up-to-date by a daily `rsync` against
   `rsync.wwpdb.org`. The raw `.gz` files are the single source of truth:
   the sqlite index can be wiped and rebuilt from them with `npm run
-  rebuild-db`, no re-download required.
+  rebuild`, no re-download required.
 - **Small React dashboard** — homepage at `/` with database statistics
   and a thumbnail gallery, built from [`frontend/`](./frontend) into
   [`nginx/www/`](./nginx/www).
@@ -137,7 +139,7 @@ upgrade, restoring from a partial backup), wipe `data/sqlite3/ligands.db`
 and run:
 
 ```sh
-docker compose exec node-pdb-sync npm run rebuild-db
+docker compose exec node-pdb-sync npm run rebuild
 ```
 
 This re-parses every `.ent.gz` and `.pdb1.gz` already on disk and rebuilds
@@ -183,7 +185,7 @@ Editing any file under `src/` re-runs the seed (idempotent — existing rows
 are upserted). The full rsync pipeline and pymol-rendered biological
 assemblies are skipped; if you need them locally you will need `pymol`,
 `graphicsmagick`, and `rsync`, and should run `npm run cron` (or `npm run
-rebuild-db` / `npm run update`) instead. Tests that depend on `pymol` are
+rebuild` / `npm run update`) instead. Tests that depend on `pymol` are
 skipped unless `HAS_PYMOL=1` is set.
 
 ```sh
@@ -197,7 +199,7 @@ npm run test-only  # vitest with coverage
 cd frontend
 npm install
 npm run dev        # vite dev server, proxies /v1 to PDB_API_URL
-                   #                   (default http://localhost:12345)
+                   #                   (default http://localhost:12346)
 npm run build      # type-check + vite build → ../nginx/www
 npm run test       # check-types + eslint + prettier
 ```
@@ -207,12 +209,11 @@ under `frontend/src/`, rebuild and commit both the source change and the
 updated assets so a `git pull && docker compose up -d` on the deploy host
 picks up the new homepage without needing Node installed.
 
-To point the Vite dev server at the **dev backend** that `npm run dev`
-(in the project root) brings up — useful when you don't have a full
-production stack on `12345`:
+To point the Vite dev server at a **production stack** running on a
+non-default port (`http://localhost:12346` is the dev-backend default):
 
 ```sh
-PDB_API_URL=http://127.0.0.1:12346 npm run dev
+PDB_API_URL=http://127.0.0.1:12345 npm run dev
 ```
 
 Or at a remote stack:

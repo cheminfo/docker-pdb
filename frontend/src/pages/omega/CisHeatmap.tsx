@@ -1,4 +1,5 @@
 import type { PairFrequencyResponse } from '../../shared/api/types.ts';
+import { formatNumber } from '../../shared/format.ts';
 
 import type { AminoAcid } from './aminoAcids.ts';
 import { AA_ONE_LETTER, STANDARD_AA } from './aminoAcids.ts';
@@ -108,9 +109,7 @@ export default function CisHeatmap({ pairs }: CisHeatmapProps) {
             const tooltip =
               totalValue === 0
                 ? `${rowResidue}-${colResidue}: no observations`
-                : `${rowResidue}-${colResidue}: ${cisValue}/${totalValue.toLocaleString(
-                    'en-US',
-                  )} = ${(probability * 100).toFixed(2)} % cis`;
+                : `${rowResidue}-${colResidue}: ${cisValue}/${formatNumber(totalValue)} = ${formatNumber(probability * 100, 2)} % cis`;
             return (
               <g key={`${rowResidue}-${colResidue}`}>
                 <rect
@@ -184,7 +183,7 @@ function ColorScale({ max }: ColorScaleProps) {
           />
         ))}
       </div>
-      <span className="omega-scale-label">{(max * 100).toFixed(2)} %</span>
+      <span className="omega-scale-label">{formatNumber(max * 100, 2)} %</span>
     </div>
   );
 }

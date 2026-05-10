@@ -27,10 +27,10 @@ const FIND_PAGE_LIMIT = 200;
  * and run requests with `app.inject()` instead of opening a port.
  *
  * The API replaces every CouchDB-proxied path that the frontend used to
- * call: `/pdb/<id>`, `/assembly/<id>/...`, `/find`, `/view/jsmol`,
- * `/stats/*`, `/rsync-history/*` are all served from sqlite + the on-disk
- * rsync tree under their `/v1/...` equivalents (and the legacy paths are
- * preserved as aliases so existing third-party callers keep working).
+ * call. Everything is served from sqlite + the on-disk rsync tree under
+ * `/v1/...`. Four legacy paths are kept as aliases so existing third-party
+ * callers keep working: `/pdb/<id>`, `/assembly/<id>/<size>`,
+ * `/stats/<view>`, and `/view/jsmol`.
  * @param {{ db: import('../db/getDB.js').LigandsDB, logger?: boolean }} options - Wiring options.
  * @returns {Promise<import('fastify').FastifyInstance>} A Fastify app ready to listen or be injected.
  */
@@ -166,38 +166,30 @@ export async function buildApp({ db, logger = false }) {
     });
   });
 
-  // ----- /v1/pdbs/:id (parsed metadata) ----------------------------
+  // ----- /v1/pdbs/:id (parsed metadata; legacy alias: /pdb/:id) ----
 
-  app.get('/v1/pdbs/:id', async (request, reply) => {
+  const handlePdbDoc = async (request, reply) => {
     const id = String(request.params.id).toUpperCase();
     const doc = readPdbDoc(db, id);
     if (!doc) return reply.code(404).send({ error: 'not_found' });
     return reply.send(doc);
-  });
+  };
+  app.get('/v1/pdbs/:id', handlePdbDoc);
+  app.get('/pdb/:id', handlePdbDoc);
 
-  // ----- /v1/pdbs/:id/raw (raw .pdb text) --------------------------
+  // ----- /v1/pdbs/:id/raw and /v1/assemblies/:id/raw ---------------
 
-  app.get('/v1/pdbs/:id/raw', async (request, reply) => {
-    const id = String(request.params.id).toUpperCase();
-    const file = findAsymUnitFile(id);
-    if (!file) return reply.code(404).send({ error: 'not_found' });
-    const buffer = await ungzip(await readFile(file.path));
-    return reply.header('content-type', 'chemical/x-pdb').send(buffer);
-  });
-
-  // ----- /v1/assemblies/:id/raw ------------------------------------
-
-  app.get('/v1/assemblies/:id/raw', async (request, reply) => {
-    const id = String(request.params.id).toUpperCase();
-    const file = findAssemblyFile(id);
-    if (!file) return reply.code(404).send({ error: 'not_found' });
-    const buffer = await ungzip(await readFile(file.path));
-    return reply.header('content-type', 'chemical/x-pdb').send(buffer);
-  });
+  app.get('/v1/pdbs/:id/raw', (request, reply) =>
+    sendRawPdbFile(reply, findAsymUnitFile(String(request.params.id))),
+  );
+  app.get('/v1/assemblies/:id/raw', (request, reply) =>
+    sendRawPdbFile(reply, findAssemblyFile(String(request.params.id))),
+  );
 
   // ----- /v1/assemblies/:id/image/:size (pymol thumbnail) ----------
+  // ----- legacy alias: /assembly/:id/:size (with .png) -------------
 
-  app.get('/v1/assemblies/:id/image/:size', async (request, reply) => {
+  const handleAssemblyImage = async (request, reply) => {
     const id = String(request.params.id).toUpperCase();
     const size = String(request.params.size);
     if (!/^\d+x\d+\.png$/.test(size) && !/^\d+x\d+$/.test(size)) {
@@ -209,13 +201,15 @@ export async function buildApp({ db, logger = false }) {
     if (!existsSync(path)) return reply.code(404).send({ error: 'not_found' });
     const stream = await readFile(path);
     return reply.header('content-type', 'image/png').send(stream);
-  });
+  };
+  app.get('/v1/assemblies/:id/image/:size', handleAssemblyImage);
+  app.get('/assembly/:id/:size', handleAssemblyImage);
 
-  // ----- /v1/stats/<view> ------------------------------------------
+  // ----- /v1/stats/<view> (legacy alias: /stats/<view>) ------------
 
   // pairFrequency is special-cased: it accepts an optional [fromYear,toYear]
   // window, just like the CouchDB pairFrequencyByYear view did.
-  app.get('/v1/stats/pairFrequency', async (request, reply) => {
+  const handlePairFrequency = async (request, reply) => {
     const query = request.query ?? {};
     const fromYear = Number.parseInt(query.fromYear, 10);
     const toYear = Number.parseInt(query.toYear, 10);
@@ -224,13 +218,17 @@ export async function buildApp({ db, logger = false }) {
         ? [fromYear, toYear]
         : null;
     return reply.send(pairFrequency(db, range));
-  });
+  };
+  app.get('/v1/stats/pairFrequency', handlePairFrequency);
+  app.get('/stats/pairFrequency', handlePairFrequency);
 
-  app.get('/v1/stats/:view', async (request, reply) => {
+  const handleStats = async (request, reply) => {
     const handler = STATS_HANDLERS[String(request.params.view)];
     if (!handler) return reply.code(404).send({ error: 'unknown_view' });
     return reply.send(handler(db));
-  });
+  };
+  app.get('/v1/stats/:view', handleStats);
+  app.get('/stats/:view', handleStats);
 
   // ----- /v1/pdbs (search; replaces /find Mango) -------------------
 
@@ -308,9 +306,9 @@ export async function buildApp({ db, logger = false }) {
     return reply.send({ docs, fts: useFts });
   });
 
-  // ----- /v1/pdbs/jsmol (replaces /view/jsmol curated list) --------
+  // ----- /v1/pdbs/jsmol (legacy alias: /view/jsmol) ----------------
 
-  app.get('/v1/pdbs/jsmol', async (_request, reply) => {
+  const handleJsmol = async (_request, reply) => {
     // Mirrors the CouchDB `_design/query/jsmol` filter:
     //  - 100 ≤ nbResidues ≤ 500
     //  - nbModifiedResidues = 0
@@ -348,7 +346,9 @@ export async function buildApp({ db, logger = false }) {
       offset: 0,
       rows,
     });
-  });
+  };
+  app.get('/v1/pdbs/jsmol', handleJsmol);
+  app.get('/view/jsmol', handleJsmol);
 
   // ----- /v1/rsync-history -----------------------------------------
 
@@ -380,6 +380,20 @@ export async function buildApp({ db, logger = false }) {
   });
 
   return app;
+}
+
+/**
+ * Stream a gzipped `.pdb`-flavored archive back to the client, decompressing
+ * on the fly. Returns 404 when `file` is null. The original `.gz` on disk is
+ * the single source of truth — no decompressed copy is ever persisted.
+ * @param {import('fastify').FastifyReply} reply - Outgoing Fastify reply.
+ * @param {{ path: string } | null} file - Resolved file from `findAsymUnitFile` / `findAssemblyFile`.
+ * @returns {Promise<import('fastify').FastifyReply>} The reply, after sending.
+ */
+async function sendRawPdbFile(reply, file) {
+  if (!file) return reply.code(404).send({ error: 'not_found' });
+  const buffer = await ungzip(await readFile(file.path));
+  return reply.header('content-type', 'chemical/x-pdb').send(buffer);
 }
 
 /**
