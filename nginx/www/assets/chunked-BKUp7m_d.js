@@ -1,0 +1,1 @@
+import{n as i}from"./progress-CNHmJUTQ.js";async function S(n,m,e,l,a){let u=Math.max(m,0),o=0,h=0;if(n.isSynchronous)return l(Number.MAX_SAFE_INTEGER,e),e;let s=i(),d=0,r=0;for(;(d=l(u,e))>0;){o+=d;const t=i()-s;r+=t,h+=t,n.shouldUpdate&&(await a(n,e,o),u=Math.round(r*o/h)+1,s=i(),r=0)}return n.shouldUpdate&&await a(n,e,o),e}export{S as c};
