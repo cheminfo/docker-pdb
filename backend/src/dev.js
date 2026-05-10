@@ -1,40 +1,65 @@
 // Local-development entrypoint: ensures the sqlite database is initialized
-// and seeds a small batch of asymmetric-unit documents from already-rsynced
-// files under `data/pdb/`, so the API can be exercised immediately. Skips
-// the multi-day rsync from rsync.wwpdb.org and skips pymol-rendered
-// biological assemblies (which require a local pymol/graphicsmagick install).
+// and seeds the exact same deterministic set of PDB entries every time, so
+// `npm run dev` always produces the same database for every developer.
+//
+// Each id in SEED_IDS is resolved against (1) the optional local rsync tree
+// under `data/pdb/` (full mirror, if you have one) and (2) the in-repo
+// fallback under `backend/fixtures/pdb/` (committed to git, see seed.js).
+// The fixture copy guarantees a working `npm run dev` on a fresh checkout
+// without any rsync — and pins the data so the database is reproducible.
 //
 // Started by `npm run dev`, which points this script at the local data/
 // directory via DATA_DIR=./data.
 //
-// Tweak how many files are ingested with DEV_SEED_LIMIT (default 20).
+// Skips the multi-day rsync from rsync.wwpdb.org and skips pymol-rendered
+// biological assemblies (which require a local pymol/graphicsmagick install).
+
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 
 import createDebug from 'debug';
-import { glob } from 'glob';
 
 import * as common from './common.js';
 import getConfig from './config.js';
 import { getLigandsDB } from './db/getDB.js';
+import { SEED_IDS } from './seed.js';
 
 const debug = createDebug('pdb-sync:dev');
 const config = getConfig();
-const SEED_LIMIT = Number(process.env.DEV_SEED_LIMIT) || 20;
+
+const FIXTURES_DIR = join(import.meta.dirname, '../fixtures/pdb');
 
 await getLigandsDB();
 
-const pattern = `${config.asymetrical.rsync.destination}**/*.ent.gz`;
-const allFiles = await glob(pattern);
-const files = allFiles.slice(0, SEED_LIMIT);
-debug(
-  `Found ${allFiles.length} local PDB files; ingesting ${files.length} into sqlite.`,
-);
+const files = [];
+const missing = [];
+for (const pdbId of SEED_IDS) {
+  const rsyncPath = common.asymUnitPath(
+    config.asymetrical.rsync.destination,
+    pdbId,
+  );
+  const fixturePath = common.asymUnitPath(FIXTURES_DIR, pdbId);
+  if (existsSync(rsyncPath)) {
+    files.push(rsyncPath);
+  } else if (existsSync(fixturePath)) {
+    files.push(fixturePath);
+  } else {
+    missing.push(pdbId);
+  }
+}
+
+if (missing.length > 0) {
+  debug(
+    `Missing fixtures for ${missing.length} ids (run the rsync or add fixtures): ${missing.join(', ')}`,
+  );
+}
 
 if (files.length === 0) {
   debug(
-    `No .ent.gz files under ${config.asymetrical.rsync.destination}. ` +
-      'Run the rsync (or drop a few .ent.gz files there) before re-running `npm run dev`.',
+    `No SEED_IDS files found under ${config.asymetrical.rsync.destination} or ${FIXTURES_DIR}.`,
   );
 } else {
+  debug(`Ingesting ${files.length} SEED_IDS entries into sqlite.`);
   await common.processPdbs(files);
 }
 

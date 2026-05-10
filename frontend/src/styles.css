@@ -425,6 +425,18 @@ h2 {
   font-size: 13px;
 }
 
+.endpoint p.endpoint-legacy {
+  font-size: 12px;
+  font-style: italic;
+  opacity: 0.8;
+}
+
+.endpoint p.endpoint-legacy code {
+  font-style: normal;
+  text-decoration: line-through;
+  text-decoration-color: var(--muted);
+}
+
 .endpoint a.example {
   color: var(--accent);
   text-decoration: none;
@@ -826,6 +838,13 @@ code {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.browse-entry-id-row {
+  display: flex;
+  align-items: center;
   gap: 16px;
   flex-wrap: wrap;
 }
@@ -1569,13 +1588,13 @@ code {
   }
 }
 
-/* --- Animate page --------------------------------------------------- */
+/* --- Scripting page --------------------------------------------------- */
 
-.app-main:has(.animate-page) {
+.app-main:has(.scripting-page) {
   overflow: hidden;
 }
 
-.animate-page {
+.scripting-page {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -1585,13 +1604,13 @@ code {
   min-height: 0;
 }
 
-.animate-content {
+.scripting-content {
   flex: 1;
   min-height: 0;
   display: flex;
 }
 
-.animate-toolbar {
+.scripting-toolbar {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -1600,15 +1619,15 @@ code {
   flex: 0 0 auto;
 }
 
-.animate-pdb-input {
+.scripting-pdb-input {
   margin: 0;
 }
 
-.animate-pdb-input-control {
+.scripting-pdb-input-control {
   width: 90px;
 }
 
-.animate-viewer-panel {
+.scripting-viewer-panel {
   position: relative;
   padding: 0;
   overflow: hidden;
@@ -1617,23 +1636,23 @@ code {
   flex-direction: column;
 }
 
-.animate-viewer-panel .placeholder {
+.scripting-viewer-panel .placeholder {
   padding: 24px;
 }
 
-.animate-viewer-stack {
+.scripting-viewer-stack {
   position: relative;
   width: 100%;
   flex: 1;
   min-height: 0;
 }
 
-.animate-viewer-stack .pdb-viewer-canvas {
+.scripting-viewer-stack .pdb-viewer-canvas {
   width: 100%;
   height: 100%;
 }
 
-.animate-editor-panel {
+.scripting-editor-panel {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1642,7 +1661,7 @@ code {
   min-height: 0;
 }
 
-.animate-editor-frame {
+.scripting-editor-frame {
   flex: 1;
   min-height: 0;
   display: flex;
@@ -1652,32 +1671,32 @@ code {
   overflow: hidden;
 }
 
-.animate-editor-frame > section {
+.scripting-editor-frame > section {
   flex: 1;
   min-height: 0;
 }
 
-.animate-editor-frame .monaco-editor,
-.animate-editor-frame .monaco-editor .overflow-guard {
+.scripting-editor-frame .monaco-editor,
+.scripting-editor-frame .monaco-editor .overflow-guard {
   border-radius: 5px;
 }
 
-.animate-editor-header {
+.scripting-editor-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   font-size: 13px;
 }
 
-.animate-viewer-stack {
+.scripting-viewer-stack {
   transition: opacity 110ms ease-in-out;
 }
 
-.animate-viewer-stack--swapping {
+.scripting-viewer-stack--swapping {
   opacity: 0.35;
 }
 
-.animate-error {
+.scripting-error {
   background: #fef2f2;
   color: #991b1b;
   border: 1px solid #fecaca;
@@ -1688,16 +1707,16 @@ code {
   margin: 0;
 }
 
-.animate-help {
+.scripting-help {
   font-size: 13px;
   line-height: 1.5;
 }
 
-.animate-help section {
+.scripting-help section {
   margin-bottom: 18px;
 }
 
-.animate-help h3 {
+.scripting-help h3 {
   font-size: 13px;
   font-weight: 600;
   text-transform: uppercase;
@@ -1706,7 +1725,7 @@ code {
   margin: 0 0 8px;
 }
 
-.animate-help h3 code {
+.scripting-help h3 code {
   text-transform: none;
   letter-spacing: 0;
   background: var(--accent-soft);
@@ -1715,13 +1734,13 @@ code {
   font-size: 12px;
 }
 
-.animate-help p,
-.animate-help ul {
+.scripting-help p,
+.scripting-help ul {
   margin: 0 0 8px;
   color: var(--text);
 }
 
-.animate-help code {
+.scripting-help code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
   background: var(--bg);
@@ -1729,7 +1748,7 @@ code {
   border-radius: 4px;
 }
 
-.animate-help-code {
+.scripting-help-code {
   background: #0f172a;
   color: #f1f5f9;
   padding: 10px 12px;
@@ -1742,21 +1761,21 @@ code {
   overflow-x: auto;
 }
 
-.animate-help-table {
+.scripting-help-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 12px;
 }
 
-.animate-help-table th,
-.animate-help-table td {
+.scripting-help-table th,
+.scripting-help-table td {
   text-align: left;
   padding: 4px 8px;
   border-bottom: 1px solid var(--border);
   vertical-align: top;
 }
 
-.animate-help-table th {
+.scripting-help-table th {
   font-weight: 600;
   color: var(--muted);
   font-size: 11px;
@@ -1764,29 +1783,29 @@ code {
   letter-spacing: 0.05em;
 }
 
-.animate-help-methods {
+.scripting-help-methods {
   margin: 0;
 }
 
-.animate-help-method {
+.scripting-help-method {
   margin-bottom: 14px;
 }
 
-.animate-help-method dt {
+.scripting-help-method dt {
   margin: 0 0 4px;
 }
 
-.animate-help-method dt code {
+.scripting-help-method dt code {
   background: var(--accent-soft);
   color: var(--accent);
   font-weight: 600;
 }
 
-.animate-help-method dd {
+.scripting-help-method dd {
   margin: 0;
 }
 
-.animate-help-method dd p {
+.scripting-help-method dd p {
   margin: 0 0 4px;
   color: var(--muted);
   font-size: 12px;

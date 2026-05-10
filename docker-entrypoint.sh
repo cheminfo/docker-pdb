@@ -20,7 +20,8 @@ mkdir -p \
   /app/data/logs/pdb \
   /app/data/logs/bioAssembly \
   /app/data/sqlite \
-  /app/data/ccd
+  /app/data/ccd \
+  /app/data/control
 chown app:app \
   /app/data \
   /app/data/pdb \
@@ -30,6 +31,7 @@ chown app:app \
   /app/data/logs/pdb \
   /app/data/logs/bioAssembly \
   /app/data/sqlite \
-  /app/data/ccd
+  /app/data/ccd \
+  /app/data/control
 
 exec gosu app "$@"

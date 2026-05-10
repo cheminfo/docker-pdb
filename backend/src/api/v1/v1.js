@@ -11,6 +11,8 @@ import { registerGetPdbRawRoute } from './getPdbRaw.js';
 import { registerGetPdbsRoute } from './getPdbs.js';
 import { registerGetRsyncHistoryRoute } from './getRsyncHistory.js';
 import { registerGetStatsByViewRoute } from './getStatsByView.js';
+import { registerGetSyncStatusRoute } from './getSyncStatus.js';
+import { registerTriggerSyncRoute } from './triggerSync.js';
 
 /**
  * Register every v1 API route on the Fastify instance.
@@ -36,4 +38,6 @@ export function v1(fastify, db) {
   registerGetPairFrequencyStatsRoute(fastify, db);
   registerGetStatsByViewRoute(fastify, db);
   registerGetRsyncHistoryRoute(fastify, db);
+  registerGetSyncStatusRoute(fastify, db);
+  registerTriggerSyncRoute(fastify);
 }

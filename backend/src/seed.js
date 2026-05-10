@@ -9,6 +9,7 @@
 //   docker compose exec node-pdb-sync npm run seed
 
 import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 
 import createDebug from 'debug';
 
@@ -18,12 +19,19 @@ import { getLigandsDB } from './db/getDB.js';
 
 const debug = createDebug('pdb-sync:seed');
 
+/** Tracked-in-repo fallback when the rsync tree isn't available locally. */
+const FIXTURES_DIR = join(import.meta.dirname, '../fixtures/pdb');
+
 /**
  * Hand-picked PDB ids covering different experimental methods, sizes,
  * eras, and ligand profiles — small enough to seed in a few seconds, big
  * enough to exercise filters / charts / 3D viewer.
+ *
+ * The matching `.ent.gz` files are checked into `backend/fixtures/pdb/`,
+ * mirroring the wwPDB on-disk layout, so `npm run dev` produces a
+ * deterministic database without needing the wwPDB rsync tree.
  */
-const SEED_IDS = [
+export const SEED_IDS = [
   '101D', // 1995 X-ray DNA dodecamer
   '1AZ8', // 1998 X-ray trypsin + bis-phenamidine inhibitor
   '1B66', // 1999 X-ray pyruvoyl tetrahydropterin synthase
@@ -44,6 +52,7 @@ const SEED_IDS = [
   '6LYZ', // 1981 X-ray lysozyme
   '1IGT', // 1996 X-ray immunoglobulin
   '3PGM', // 1993 X-ray phosphoglycerate mutase
+  '8ZXR', // 2024 X-ray SSR1698 + heme c (HEC) — default for scripting scenes
 ];
 
 async function clearTables() {
@@ -67,15 +76,22 @@ async function clearTables() {
   debug('Wiped pdb_* tables');
 }
 
-function existingFiles(ids, root, fileFor) {
+function existingFiles(ids, root, fileFor, fallbackRoot) {
   const files = [];
   for (const id of ids) {
     const path = fileFor(root, id);
     if (existsSync(path)) {
       files.push(path);
-    } else {
-      debug(`Skipping ${id} — file not found at ${path}`);
+      continue;
     }
+    if (fallbackRoot) {
+      const fallback = fileFor(fallbackRoot, id);
+      if (existsSync(fallback)) {
+        files.push(fallback);
+        continue;
+      }
+    }
+    debug(`Skipping ${id} — file not found at ${path}`);
   }
   return files;
 }
@@ -90,6 +106,7 @@ async function main() {
     SEED_IDS,
     config.asymetrical.rsync.destination,
     common.asymUnitPath,
+    FIXTURES_DIR,
   );
   debug(`Re-ingesting ${asymFiles.length} asymmetric-unit entries`);
   await common.processPdbs(asymFiles);

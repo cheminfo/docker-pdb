@@ -9,7 +9,7 @@ interface LayoutProps {
 const NAV_TABS = [
   { id: '/', label: 'Home' },
   { id: '/browse', label: 'Browse' },
-  { id: '/animate', label: 'Animate' },
+  { id: '/scripting', label: 'Scripting' },
   { id: '/molecules', label: 'Molecules' },
   { id: '/stats', label: 'Stats' },
   { id: '/omega', label: 'Omega' },

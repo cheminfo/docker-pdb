@@ -10,6 +10,12 @@ export interface EndpointDefinition {
   description: ReactNode;
   /** Concrete example URL the user can click or copy. */
   example: string;
+  /**
+   * Pre-v1 paths still served by the same handler for backwards
+   * compatibility. They are documented as obsolete; new code should use
+   * `path` instead.
+   */
+  legacyAliases?: string[];
 }
 
 /**
@@ -31,6 +37,7 @@ export const endpoints: EndpointDefinition[] = [
     description:
       'Parsed JSON metadata: residues, chains, helices, sheets, formulas, isoelectric point, amino-acid percentages, omega-bond summary.',
     example: '/v1/pdbs/5ABY',
+    legacyAliases: ['/pdb/<PDB-ID>'],
   },
   {
     method: 'GET',
@@ -55,6 +62,7 @@ export const endpoints: EndpointDefinition[] = [
       </>
     ),
     example: '/v1/assemblies/101D/image/400x400',
+    legacyAliases: ['/assembly/<PDB-ID>/<size>'],
   },
   {
     method: 'GET',
@@ -77,6 +85,7 @@ export const endpoints: EndpointDefinition[] = [
     description:
       'Curated list of teaching-friendly entries (one peptidic sequence, ≥1 helix and 1 sheet, a small ligand). Returns full parsed docs.',
     example: '/v1/pdbs/jsmol',
+    legacyAliases: ['/view/jsmol'],
   },
   {
     method: 'GET',
@@ -92,6 +101,7 @@ export const endpoints: EndpointDefinition[] = [
       </>
     ),
     example: '/v1/stats/byYear',
+    legacyAliases: ['/stats/<view>'],
   },
   {
     method: 'GET',

@@ -176,6 +176,70 @@ export interface RsyncHistoryResponse {
   rows: RsyncHistoryDoc[];
 }
 
+/** A trigger marker, present while the API has queued a manual sync. */
+export interface SyncTriggerInfo {
+  /** ISO timestamp when the API queued this trigger. */
+  requestedAt: string;
+  /** Identifier of the caller that queued the trigger (always `api`). */
+  source: string;
+}
+
+/** A running marker, present while the cron container is actively working. */
+export interface SyncRunningInfo {
+  /** ISO timestamp when the cron loop started this iteration. */
+  startedAt: string;
+  /** Cron kind (`rsync` or `ccd`). */
+  type: 'rsync' | 'ccd';
+  /** PID of the cron container's node process — surfaced for debugging. */
+  pid: number;
+  /** Archives included in this rsync run, when applicable. */
+  scope?: Array<'asymUnit' | 'bioAssembly'>;
+}
+
+/** Live state of the rsync cron. */
+export interface RsyncSyncState {
+  kind: 'rsync';
+  label: string;
+  /** Configured cadence between automatic runs (24 h). */
+  intervalMs: number;
+  running: SyncRunningInfo | null;
+  triggerQueued: SyncTriggerInfo | null;
+  /** Most recent asym-unit run, or `null` if none has been recorded yet. */
+  lastAsymUnit: RsyncHistoryDoc | null;
+  /** Most recent bio-assembly run, or `null` if none has been recorded yet. */
+  lastBioAssembly: RsyncHistoryDoc | null;
+}
+
+/** Live state of the CCD cron. */
+export interface CcdSyncState {
+  kind: 'ccd';
+  label: string;
+  /** Configured cadence between automatic runs (7 days). */
+  intervalMs: number;
+  running: SyncRunningInfo | null;
+  triggerQueued: SyncTriggerInfo | null;
+  /** Mtime of the cached `components.cif.gz`, or `null` if not yet seeded. */
+  lastRefreshedAt: string | null;
+  /** Size on disk of the cached archive, or `null` if not present. */
+  bytesOnDisk: number | null;
+}
+
+/** Response of `GET /v1/sync/status`. */
+export interface SyncStatusResponse {
+  rsync: RsyncSyncState;
+  ccd: CcdSyncState;
+  kinds: Array<'rsync' | 'ccd'>;
+}
+
+/** Response of `POST /v1/sync/trigger`. */
+export interface SyncTriggerResponse {
+  kind: 'rsync' | 'ccd';
+  /** `queued` = marker written; `already-*` = no-op reasons. */
+  status: 'queued' | 'already-queued' | 'already-running';
+  triggerQueued?: SyncTriggerInfo;
+  running?: SyncRunningInfo;
+}
+
 /** One ligand row returned by the substructure-search API. */
 export interface LigandSummary {
   /** 3-letter wwPDB chemical-component code (e.g. `ATP`). */

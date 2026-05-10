@@ -14,6 +14,8 @@ import type {
   PdbViewResponse,
   RsyncHistoryDoc,
   RsyncHistoryResponse,
+  SyncStatusResponse,
+  SyncTriggerResponse,
   ViewResponse,
 } from './types.ts';
 
@@ -335,6 +337,50 @@ export async function fetchLastBioAssemblyRsync(): Promise<RsyncHistoryDoc | nul
     '/v1/rsync-history?type=bioAssembly&limit=1',
   );
   return response.rows[0] ?? null;
+}
+
+/**
+ * Fetch a page of rsync-history rows for the given archive type.
+ * @param type - Which archive's history to load.
+ * @param limit - Maximum rows to return (1–200).
+ * @returns The rsync-history page.
+ */
+export function fetchRsyncHistory(
+  type: 'asymUnit' | 'bioAssembly',
+  limit = 20,
+): Promise<RsyncHistoryResponse> {
+  return fetchJson<RsyncHistoryResponse>(
+    `/v1/rsync-history?type=${type}&limit=${limit}`,
+  );
+}
+
+/**
+ * Fetch the live state of the rsync and CCD crons.
+ * @returns Promise resolving to the combined sync status.
+ */
+export function fetchSyncStatus(): Promise<SyncStatusResponse> {
+  return fetchJson<SyncStatusResponse>('/v1/sync/status');
+}
+
+/**
+ * Queue a manual run for the given cron. The API drops a marker in the
+ * shared `data/control/` volume; the cron container picks it up on its
+ * next 5-second poll and runs immediately.
+ * @param kind - Which cron to wake.
+ * @returns Promise resolving to the post-trigger sync state.
+ */
+export async function triggerSync(
+  kind: 'rsync' | 'ccd',
+): Promise<SyncTriggerResponse> {
+  const response = await fetch('/v1/sync/trigger', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ kind }),
+  });
+  if (!response.ok) {
+    throw new Error(`${response.status} ${response.statusText}`);
+  }
+  return response.json() as Promise<SyncTriggerResponse>;
 }
 
 /* ------------------------------------------------------------------------ *

@@ -6,7 +6,7 @@ rendered once into PyMol thumbnails (100/200/400 px), so structure metadata
 and previews are served straight from disk — no on-the-fly rendering, no
 upstream lookup.
 
-![Animate page screenshot](./frontend/animate-smoke.png)
+![Scripting page screenshot](./frontend/scripting-smoke.png)
 
 ## What you get
 

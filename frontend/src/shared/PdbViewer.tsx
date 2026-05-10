@@ -19,9 +19,24 @@ interface PdbViewerProps {
   /** Raw PDB-format file contents to render. */
   pdb: string;
   representation: RepresentationName;
-  color: ColorName;
+  /**
+   * Global theme override applied to every component. Omit to keep Mol*'s
+   * per-component defaults (e.g. `element-symbol` for ligands and water).
+   * @default undefined
+   */
+  color?: ColorName;
   spin: boolean;
   background: BackgroundName;
+  /**
+   * Called once the Mol* preset has been applied to a freshly-loaded
+   * structure. Receives the live plugin so the caller can re-theme
+   * specific components (e.g. set the polymer cartoon to
+   * `secondary-structure`). The plugin is typed as `unknown` because the
+   * shared component does not import the Scripting-specific Mol* type
+   * extensions.
+   * @default undefined
+   */
+  onPresetApplied?: (plugin: unknown) => Promise<void> | void;
 }
 
 /**
@@ -40,7 +55,7 @@ export interface PdbViewerHandle {
   focus: (spec: FocusSpec | null) => void;
   /**
    * Return the Mol* plugin context plus the lazily-loaded MolScript API,
-   * or `null` while the viewer is still initializing. The Animate page uses
+   * or `null` while the viewer is still initializing. The Scripting page uses
    * this to drive Mol* directly from student-written scripts.
    */
   getPlugin: () => { plugin: unknown; molScript: unknown } | null;
@@ -58,7 +73,9 @@ interface MolstarViewer {
             preset: 'default',
             params: {
               representationPreset: RepresentationName;
-              representationPresetParams: { theme: { globalName: ColorName } };
+              representationPresetParams: {
+                theme?: { globalName?: ColorName };
+              };
             },
           ) => Promise<unknown>;
         };
@@ -109,7 +126,12 @@ interface MolScriptApi {
  */
 const PdbViewer = forwardRef<PdbViewerHandle, PdbViewerProps>(
   function PdbViewer(props, ref) {
-    const { pdb, representation, color, spin, background } = props;
+    const { pdb, representation, color, spin, background, onPresetApplied } =
+      props;
+    // Stable ref so swapping the callback between renders does not retrigger
+    // structure reload (the load effect intentionally excludes it from deps).
+    const onPresetAppliedRef = useRef(onPresetApplied);
+    onPresetAppliedRef.current = onPresetApplied;
     const containerRef = useRef<HTMLDivElement>(null);
     const viewerRef = useRef<MolstarViewer | null>(null);
     const molScriptApiRef = useRef<MolScriptApi | null>(null);
@@ -257,9 +279,13 @@ const PdbViewer = forwardRef<PdbViewerHandle, PdbViewerProps>(
           'default',
           {
             representationPreset: representation,
-            representationPresetParams: { theme: { globalName: color } },
+            representationPresetParams: color
+              ? { theme: { globalName: color } }
+              : {},
           },
         );
+        if (cancelled) return;
+        await onPresetAppliedRef.current?.(plugin);
       }
 
       void loadStructure();

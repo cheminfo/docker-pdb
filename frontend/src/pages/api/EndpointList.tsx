@@ -36,6 +36,21 @@ export default function EndpointList() {
               {endpoint.method} {endpoint.path}
             </code>
             <p>{endpoint.description}</p>
+            {endpoint.legacyAliases && endpoint.legacyAliases.length > 0 && (
+              <p className="endpoint-legacy">
+                Obsolete{' '}
+                {endpoint.legacyAliases.length === 1 ? 'alias' : 'aliases'}{' '}
+                (kept for backwards compatibility — prefer the v1 path above):{' '}
+                {endpoint.legacyAliases.map((alias, index) => (
+                  <span key={alias}>
+                    {index > 0 && ', '}
+                    <code>
+                      {endpoint.method} {alias}
+                    </code>
+                  </span>
+                ))}
+              </p>
+            )}
             <div className="endpoint-row">
               <a className="example" href={endpoint.example}>
                 {endpoint.example}

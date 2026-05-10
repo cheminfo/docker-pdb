@@ -4,12 +4,12 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Route, Routes } from 'react-router';
 
 import AboutPage from './pages/about/AboutPage.tsx';
-import AnimatePage from './pages/animate/AnimatePage.tsx';
 import ApiPage from './pages/api/ApiPage.tsx';
 import BrowsePage from './pages/browse/BrowsePage.tsx';
 import HomePage from './pages/home/HomePage.tsx';
 import MoleculesPage from './pages/molecules/MoleculesPage.tsx';
 import OmegaPage from './pages/omega/OmegaPage.tsx';
+import ScriptingPage from './pages/scripting/ScriptingPage.tsx';
 import SettingsPage from './pages/settings/SettingsPage.tsx';
 import StatsPage from './pages/stats/StatsPage.tsx';
 import Layout from './shared/Layout.tsx';
@@ -31,7 +31,7 @@ createRoot(container).render(
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/browse" element={<BrowsePage />} />
-            <Route path="/animate" element={<AnimatePage />} />
+            <Route path="/scripting" element={<ScriptingPage />} />
             <Route path="/molecules" element={<MoleculesPage />} />
             <Route path="/stats" element={<StatsPage />} />
             <Route path="/omega" element={<OmegaPage />} />

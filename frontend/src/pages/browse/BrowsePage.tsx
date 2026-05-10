@@ -1,5 +1,6 @@
 import { Button, Card, Tab, Tabs, Tag } from '@blueprintjs/core';
 import { useCallback, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router';
 
 import type { FocusSpec, PdbViewerHandle } from '../../shared/PdbViewer.tsx';
 import PdbViewer from '../../shared/PdbViewer.tsx';
@@ -197,18 +198,28 @@ function SelectedEntry({ doc }: SelectedEntryProps) {
       <div className="browse-main">
         <Card className="panel browse-entry-header">
           <div className="browse-entry-top">
-            <Button
-              className="browse-entry-id"
-              variant="minimal"
-              icon={copied ? 'tick' : 'duplicate'}
-              onClick={copyId}
-              title="Click to copy PDB code"
-            >
-              <span className="browse-entry-id-code">{doc._id}</span>
-              <span className="browse-entry-id-hint">
-                {copied ? 'copied!' : 'click to copy'}
-              </span>
-            </Button>
+            <div className="browse-entry-id-row">
+              <Button
+                className="browse-entry-id"
+                variant="minimal"
+                icon={copied ? 'tick' : 'duplicate'}
+                onClick={copyId}
+                title="Click to copy PDB code"
+              >
+                <span className="browse-entry-id-code">{doc._id}</span>
+                <span className="browse-entry-id-hint">
+                  {copied ? 'copied!' : 'click to copy'}
+                </span>
+              </Button>
+              <Link
+                to={`/scripting?pdb=${encodeURIComponent(doc._id)}`}
+                title={`Open ${doc._id} in the scripting page`}
+              >
+                <Button variant="minimal" icon="code" endIcon="arrow-right">
+                  Open in Scripting
+                </Button>
+              </Link>
+            </div>
             <div className="browse-entry-meta">
               <span>
                 <strong>Chains:</strong> {doc.nbChains}
