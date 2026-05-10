@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { Button, HTMLTable, InputGroup, Popover } from '@blueprintjs/core';
+import type { Ref } from 'react';
 
 interface SearchBoxProps {
   /** Current value of the input. */
@@ -36,58 +37,65 @@ const examples: Example[] = [
  * @returns The search bar React element.
  */
 export default function SearchBox({ value, onChange }: SearchBoxProps) {
-  const [helpOpen, setHelpOpen] = useState(false);
   return (
-    <div className="searchbox">
-      <input
-        type="search"
-        className="searchbox-input"
-        placeholder="Filter… (e.g. nbResidues:>=200)"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        spellCheck={false}
-        autoComplete="off"
-      />
-      <button
-        type="button"
-        className="searchbox-help-button"
-        onClick={() => setHelpOpen((open) => !open)}
-        aria-expanded={helpOpen}
-        aria-label="Search syntax help"
-      >
-        ?
-      </button>
-      {helpOpen && (
-        <div className="searchbox-help">
-          <p>
-            Free-text search runs against the entry <code>title</code> only,
-            case-insensitively. Type one or more words separated by spaces;
-            every word must appear in the title (in any order).
-          </p>
-          <table>
-            <thead>
-              <tr>
-                <th>Example</th>
-                <th>What it does</th>
-              </tr>
-            </thead>
-            <tbody>
-              {examples.map((example) => (
-                <tr key={example.query}>
-                  <td>
-                    <code>{example.query}</code>
-                  </td>
-                  <td>{example.description}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <p className="searchbox-help-fields">
-            Use the controls below the search box to filter by experimental
-            method, number of helices / sheets / ligands / residues, and year.
-          </p>
-        </div>
-      )}
+    <InputGroup
+      type="search"
+      leftIcon="search"
+      placeholder="Filter… (e.g. nbResidues:>=200)"
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      spellCheck={false}
+      autoComplete="off"
+      rightElement={
+        <Popover
+          placement="bottom-end"
+          content={<HelpContent />}
+          renderTarget={({ isOpen, ref, ...targetProps }) => (
+            <Button
+              {...targetProps}
+              ref={ref as Ref<HTMLButtonElement>}
+              icon="help"
+              variant="minimal"
+              active={isOpen}
+              aria-label="Search syntax help"
+            />
+          )}
+        />
+      }
+    />
+  );
+}
+
+function HelpContent() {
+  return (
+    <div className="searchbox-help">
+      <p>
+        Free-text search runs against the entry <code>title</code> only,
+        case-insensitively. Type one or more words separated by spaces; every
+        word must appear in the title (in any order).
+      </p>
+      <HTMLTable compact>
+        <thead>
+          <tr>
+            <th>Example</th>
+            <th>What it does</th>
+          </tr>
+        </thead>
+        <tbody>
+          {examples.map((example) => (
+            <tr key={example.query}>
+              <td>
+                <code>{example.query}</code>
+              </td>
+              <td>{example.description}</td>
+            </tr>
+          ))}
+        </tbody>
+      </HTMLTable>
+      <p className="searchbox-help-fields">
+        Use the controls below the search box to filter by experimental method,
+        number of helices / sheets / ligands / residues, and year.
+      </p>
     </div>
   );
 }

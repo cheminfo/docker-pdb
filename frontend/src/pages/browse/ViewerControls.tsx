@@ -1,3 +1,5 @@
+import { Button, ButtonGroup, HTMLSelect } from '@blueprintjs/core';
+
 import type {
   BackgroundName,
   ColorName,
@@ -49,72 +51,55 @@ export default function ViewerControls({
 }: ViewerControlsProps) {
   return (
     <div className="viewer-controls">
-      <select
-        className="viewer-control-select"
+      <HTMLSelect
         value={representation}
         title="Style"
         aria-label="Style"
+        options={REPRESENTATION_OPTIONS.map((option) => ({
+          value: option.value,
+          label: option.label,
+        }))}
         onChange={(event) =>
           onRepresentationChange(event.target.value as RepresentationName)
         }
-      >
-        {REPRESENTATION_OPTIONS.map((option) => (
-          <option key={option.value} value={option.value}>
-            {`❖ ${option.label}`}
-          </option>
-        ))}
-      </select>
-
-      <select
-        className="viewer-control-select"
+      />
+      <HTMLSelect
         value={color}
         title="Color theme"
         aria-label="Color theme"
+        options={COLOR_OPTIONS.map((option) => ({
+          value: option.value,
+          label: option.label,
+        }))}
         onChange={(event) => onColorChange(event.target.value as ColorName)}
-      >
-        {COLOR_OPTIONS.map((option) => (
-          <option key={option.value} value={option.value}>
-            {`\u{1F3A8} ${option.label}`}
-          </option>
-        ))}
-      </select>
-
-      <select
-        className="viewer-control-select"
+      />
+      <HTMLSelect
         value={background}
         title="Background"
         aria-label="Background"
+        options={BACKGROUND_OPTIONS.map((option) => ({
+          value: option.value,
+          label: option.label,
+        }))}
         onChange={(event) =>
           onBackgroundChange(event.target.value as BackgroundName)
         }
-      >
-        {BACKGROUND_OPTIONS.map((option) => (
-          <option key={option.value} value={option.value}>
-            {`◐ ${option.label}`}
-          </option>
-        ))}
-      </select>
-
-      <button
-        type="button"
-        className={`viewer-control-icon${spin ? ' is-active' : ''}`}
-        onClick={onSpinToggle}
-        title={spin ? 'Stop spin' : 'Spin'}
-        aria-label={spin ? 'Stop spin' : 'Spin'}
-        aria-pressed={spin}
-      >
-        {'↻'}
-      </button>
-
-      <button
-        type="button"
-        className="viewer-control-icon"
-        onClick={onResetView}
-        title="Reset view"
-        aria-label="Reset view"
-      >
-        {'⌂'}
-      </button>
+      />
+      <ButtonGroup>
+        <Button
+          icon="refresh"
+          active={spin}
+          onClick={onSpinToggle}
+          title={spin ? 'Stop spin' : 'Spin'}
+          aria-label={spin ? 'Stop spin' : 'Spin'}
+        />
+        <Button
+          icon="home"
+          onClick={onResetView}
+          title="Reset view"
+          aria-label="Reset view"
+        />
+      </ButtonGroup>
     </div>
   );
 }

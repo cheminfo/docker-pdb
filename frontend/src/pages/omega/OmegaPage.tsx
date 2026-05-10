@@ -1,3 +1,4 @@
+import { Card } from '@blueprintjs/core';
 import { useCallback, useMemo, useState } from 'react';
 
 import DualRangeSlider from '../../shared/DualRangeSlider.tsx';
@@ -99,10 +100,10 @@ export default function OmegaPage() {
         effectiveRange={effectiveRange}
       />
       {effectiveRange === null ? (
-        <div className="panel omega-heatmap-panel">
+        <Card className="panel omega-heatmap-panel">
           <h3>Cis probability heatmap (20 × 20)</h3>
           <p className="placeholder">Loading heatmap…</p>
-        </div>
+        </Card>
       ) : (
         <HeatmapPanel range={effectiveRange} isFullRange={isFullRange} />
       )}
@@ -118,9 +119,9 @@ function SummaryCards({ state }: SummaryCardsProps) {
   if (state.status !== 'success') {
     return (
       <div className="stats-grid">
-        <div className="stat-card">
+        <Card className="stat-card" compact>
           <span className="label">Loading ω stats…</span>
-        </div>
+        </Card>
       </div>
     );
   }
@@ -130,28 +131,28 @@ function SummaryCards({ state }: SummaryCardsProps) {
   const twistedPercent = nbBonds > 0 ? (nbTwisted / nbBonds) * 100 : 0;
   return (
     <div className="stats-grid">
-      <div className="stat-card">
+      <Card className="stat-card" compact>
         <span className="label">Peptide bonds</span>
         <span className="value">{formatNumber(nbBonds)}</span>
         <span className="sub">across the whole PDB</span>
-      </div>
-      <div className="stat-card">
+      </Card>
+      <Card className="stat-card" compact>
         <span className="label">Trans</span>
         <span className="value">{formatNumber(nbTrans)}</span>
         <span className="sub">|ω| ≥ 150°</span>
-      </div>
-      <div className="stat-card">
+      </Card>
+      <Card className="stat-card" compact>
         <span className="label">Cis</span>
         <span className="value">{formatNumber(nbCis)}</span>
         <span className="sub">{formatNumber(cisPercent, 3)} % of bonds</span>
-      </div>
-      <div className="stat-card">
+      </Card>
+      <Card className="stat-card" compact>
         <span className="label">Twisted</span>
         <span className="value">{formatNumber(nbTwisted)}</span>
         <span className="sub">
           {formatNumber(twistedPercent, 3)} % (30° &lt; |ω| &lt; 150°)
         </span>
-      </div>
+      </Card>
     </div>
   );
 }
@@ -173,7 +174,7 @@ function YearRangeControl({
     return <p className="placeholder">Loading year range…</p>;
   }
   return (
-    <div className="omega-year-control panel">
+    <Card className="omega-year-control panel">
       <div className="omega-year-control-row">
         <span className="filter-group-label">Year range</span>
         <span className="filter-range-value">
@@ -187,7 +188,7 @@ function YearRangeControl({
         valueMax={value.max}
         onChange={onChange}
       />
-    </div>
+    </Card>
   );
 }
 

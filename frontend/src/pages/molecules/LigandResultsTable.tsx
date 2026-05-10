@@ -1,3 +1,4 @@
+import { HTMLTable } from '@blueprintjs/core';
 import { MF } from 'react-mf';
 
 import LigandStructure from '../../shared/LigandStructure.tsx';
@@ -33,7 +34,7 @@ export default function LigandResultsTable({
   }
   return (
     <div className="molecules-results-table-wrapper">
-      <table className="ligand-results-table">
+      <HTMLTable className="ligand-results-table" interactive compact>
         <thead>
           <tr>
             <th>Structure</th>
@@ -73,7 +74,7 @@ export default function LigandResultsTable({
             );
           })}
         </tbody>
-      </table>
+      </HTMLTable>
     </div>
   );
 }

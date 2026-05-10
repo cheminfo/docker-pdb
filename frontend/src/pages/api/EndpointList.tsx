@@ -1,3 +1,4 @@
+import { Button, ButtonGroup } from '@blueprintjs/core';
 import { useState } from 'react';
 
 import EndpointPreview from './EndpointPreview.tsx';
@@ -39,26 +40,26 @@ export default function EndpointList() {
               <a className="example" href={endpoint.example}>
                 {endpoint.example}
               </a>
-              <div className="endpoint-actions">
-                <button
-                  type="button"
-                  className="endpoint-button"
+              <ButtonGroup className="endpoint-actions">
+                <Button
+                  size="small"
+                  icon={isCopied ? 'tick' : 'duplicate'}
                   onClick={() => {
                     void handleCopy(endpoint.example);
                   }}
                 >
                   {isCopied ? 'Copied!' : 'Copy'}
-                </button>
-                <button
-                  type="button"
-                  className="endpoint-button"
+                </Button>
+                <Button
+                  size="small"
+                  icon={isOpen ? 'chevron-up' : 'play'}
                   onClick={() =>
                     setOpenExample(isOpen ? null : endpoint.example)
                   }
                 >
                   {isOpen ? 'Hide' : 'Test'}
-                </button>
-              </div>
+                </Button>
+              </ButtonGroup>
             </div>
             {isOpen && (
               <div className="endpoint-preview">

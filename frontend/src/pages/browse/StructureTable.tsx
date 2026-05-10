@@ -1,3 +1,4 @@
+import { HTMLTable } from '@blueprintjs/core';
 import type { ReactNode } from 'react';
 
 import type { FocusSpec } from '../../shared/PdbViewer.tsx';
@@ -55,7 +56,7 @@ export default function StructureTable<T extends StructureRow>({
   const totalCols = 5 + extraColumns.length;
   const empty = kind === 'helix' ? 'No helices.' : 'No sheets.';
   return (
-    <table className="info-table">
+    <HTMLTable className="info-table" compact>
       <thead>
         <tr>
           <th className="focus-col" aria-label="Show in viewer" />
@@ -112,6 +113,6 @@ export default function StructureTable<T extends StructureRow>({
           </tr>
         )}
       </tbody>
-    </table>
+    </HTMLTable>
   );
 }

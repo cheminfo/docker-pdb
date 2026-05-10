@@ -1,3 +1,12 @@
+import {
+  Button,
+  ButtonGroup,
+  Card,
+  Divider,
+  FormGroup,
+  InputGroup,
+  Intent,
+} from '@blueprintjs/core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import FloatingWindow from '../../shared/FloatingWindow.tsx';
@@ -12,10 +21,15 @@ import type { EchoEntry } from './EchoOverlay.tsx';
 import EchoOverlay from './EchoOverlay.tsx';
 import Editor from './Editor.tsx';
 import { createMolStarClass, delay } from './MolStar.ts';
-import type { RamachandranEntry } from './RamachandranOverlay.tsx';
-import RamachandranOverlay from './RamachandranOverlay.tsx';
+import { applyAnimateLoadDefaults } from './applyLoadDefaults.ts';
 import { createScriptApi } from './helpers.ts';
-import type { LociHelpers, StructureElementApi } from './molstarTypes.ts';
+import type {
+  InteractionsApi,
+  LociHelpers,
+  PluginContext,
+  ShapesApi,
+  StructureElementApi,
+} from './molstarTypes.ts';
 import { runScript } from './runScript.ts';
 import { DEFAULT_SCENE_CODE, SCENES } from './scenes.ts';
 
@@ -36,8 +50,6 @@ export default function AnimatePage() {
   const [loadedId, setLoadedId] = useState(DEFAULT_PDB_ID);
   const [code, setCode] = useState(DEFAULT_SCENE_CODE);
   const [echoEntry, setEchoEntry] = useState<EchoEntry | null>(null);
-  const [ramachandranEntry, setRamachandranEntry] =
-    useState<RamachandranEntry | null>(null);
   const [scriptError, setScriptError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [swapping, setSwapping] = useState(false);
@@ -45,6 +57,10 @@ export default function AnimatePage() {
   const [lociHelpers, setLociHelpers] = useState<LociHelpers | null>(null);
   const [structureElement, setStructureElement] =
     useState<StructureElementApi | null>(null);
+  const [interactions, setInteractions] = useState<InteractionsApi | null>(
+    null,
+  );
+  const [shapes, setShapes] = useState<ShapesApi | null>(null);
   const [showHelp, setShowHelp] = useState(false);
 
   const viewerHandleRef = useRef<PdbViewerHandle | null>(null);
@@ -89,9 +105,99 @@ export default function AnimatePage() {
         Loci: {
           isEmpty: (loci) =>
             module_.StructureElement.Loci.isEmpty(loci as never),
+          toStructure: (loci) =>
+            module_.StructureElement.Loci.toStructure(loci as never),
+        },
+        Bundle: {
+          fromLoci: (loci) =>
+            module_.StructureElement.Bundle.fromLoci(loci as never),
+        },
+        Location: {
+          create: (structure, unit, element) =>
+            module_.StructureElement.Location.create(
+              structure as never,
+              unit as never,
+              element as never,
+            ),
         },
       });
     });
+    // The `shapes.ts` module brings in the heavy `mol-geo` / `mol-model/shape`
+    // chain — lazy-load it so the bundle stays small for pages that never
+    // render an Animate scene with custom shapes.
+    void import('./shapes.ts').then((module_) => {
+      if (cancelled) return;
+      setShapes({ addShape: module_.addShape });
+    });
+    void Promise.all([
+      import('molstar/lib/extensions/interactions/transforms.js'),
+      import('molstar/lib/mol-plugin-state/transforms/model.js'),
+      import('molstar/lib/mol-plugin-state/transforms/representation.js'),
+      import('molstar/lib/mol-model-props/computed/interactions/interactions.js'),
+      import('molstar/lib/mol-model-props/computed/interactions/common.js'),
+      import('molstar/lib/mol-task/index.js'),
+      import('molstar/lib/mol-util/assets.js'),
+      import('molstar/lib/mol-model/structure.js'),
+    ]).then(
+      ([
+        interactionsModule,
+        modelModule,
+        representationModule,
+        computeInteractionsModule,
+        commonModule,
+        taskModule,
+        assetsModule,
+        structureModule,
+      ]) => {
+        if (cancelled) return;
+        setInteractions({
+          ComputeContacts: interactionsModule.ComputeContacts,
+          CustomInteractions: interactionsModule.CustomInteractions,
+          InteractionsShape: interactionsModule.InteractionsShape,
+          MultiStructureSelectionFromBundle:
+            modelModule.MultiStructureSelectionFromBundle,
+          ShapeRepresentation3D: representationModule.ShapeRepresentation3D,
+          computeInteractions:
+            computeInteractionsModule.computeInteractions as unknown as InteractionsApi['computeInteractions'],
+          AssetManager: assetsModule.AssetManager,
+          Task: taskModule.Task,
+          InteractionType: {
+            HydrogenBond: commonModule.InteractionType.HydrogenBond,
+            WeakHydrogenBond: commonModule.InteractionType.WeakHydrogenBond,
+          },
+          // FeatureType is a `const enum` (inlined at compile time in Mol*),
+          // so it isn't available at runtime. Reproduce the constants we
+          // touch from `mol-model-props/computed/interactions/common.ts`.
+          FeatureType: {
+            HydrogenDonor: 4,
+            HydrogenAcceptor: 5,
+            WeakHydrogenDonor: 9,
+          },
+          /* eslint-disable camelcase -- Mol* mmCIF accessor names */
+          StructureProperties: {
+            chain: {
+              auth_asym_id: (location) =>
+                structureModule.StructureProperties.chain.auth_asym_id(
+                  location as never,
+                ),
+            },
+            residue: {
+              auth_seq_id: (location) =>
+                structureModule.StructureProperties.residue.auth_seq_id(
+                  location as never,
+                ),
+            },
+            atom: {
+              auth_atom_id: (location) =>
+                structureModule.StructureProperties.atom.auth_atom_id(
+                  location as never,
+                ),
+            },
+          },
+          /* eslint-enable camelcase */
+        });
+      },
+    );
     return () => {
       cancelled = true;
     };
@@ -105,6 +211,8 @@ export default function AnimatePage() {
       !colorModule ||
       !lociHelpers ||
       !structureElement ||
+      !interactions ||
+      !shapes ||
       pdbText.status !== 'success'
     ) {
       setScriptError('Viewer is still initializing.');
@@ -116,14 +224,17 @@ export default function AnimatePage() {
       colorModule,
       lociHelpers,
       structureElement,
+      interactions,
+      shapes,
       setEchoEntry,
-      setRamachandranEntry,
       pdbText: pdbText.data,
       loadedPdbRef,
       setSwapping,
     });
     const MolStar = createMolStarClass(api);
     setRunning(true);
+    setEchoEntry(null);
+    await api.reset();
     const { error } = await runScript({
       api,
       text: pdbText.data,
@@ -133,18 +244,27 @@ export default function AnimatePage() {
     });
     setRunning(false);
     if (error) setScriptError(error.message);
-  }, [code, colorModule, lociHelpers, structureElement, pdbText]);
+  }, [
+    code,
+    colorModule,
+    lociHelpers,
+    structureElement,
+    interactions,
+    shapes,
+    pdbText,
+  ]);
 
   const handleReset = useCallback(async () => {
     setScriptError(null);
     setEchoEntry(null);
-    setRamachandranEntry(null);
     const handle = viewerHandleRef.current?.getPlugin();
     if (
       !handle ||
       !colorModule ||
       !lociHelpers ||
       !structureElement ||
+      !interactions ||
+      !shapes ||
       pdbText.status !== 'success'
     ) {
       return;
@@ -155,29 +275,35 @@ export default function AnimatePage() {
       colorModule,
       lociHelpers,
       structureElement,
+      interactions,
+      shapes,
       setEchoEntry,
-      setRamachandranEntry,
       pdbText: pdbText.data,
       loadedPdbRef,
       setSwapping,
     });
     await api.clear();
     await api.resetCamera();
-  }, [colorModule, lociHelpers, structureElement, pdbText]);
+  }, [
+    colorModule,
+    lociHelpers,
+    structureElement,
+    interactions,
+    shapes,
+    pdbText,
+  ]);
 
   function handleLoadPdb() {
     const trimmed = pdbId.trim().toUpperCase();
     if (!trimmed) return;
     setLoadedId(trimmed);
     setEchoEntry(null);
-    setRamachandranEntry(null);
     setScriptError(null);
   }
 
   function pickScene(sceneCode: string) {
     setCode(sceneCode);
     setEchoEntry(null);
-    setRamachandranEntry(null);
     setScriptError(null);
   }
 
@@ -185,10 +311,12 @@ export default function AnimatePage() {
     pdbText.status === 'success' &&
     colorModule !== null &&
     lociHelpers !== null &&
-    structureElement !== null;
+    structureElement !== null &&
+    interactions !== null &&
+    shapes !== null;
 
   const viewerPane = (
-    <div className="panel animate-viewer-panel">
+    <Card className="panel animate-viewer-panel">
       {pdbText.status === 'loading' && (
         <p className="placeholder">Loading {loadedId}…</p>
       )}
@@ -209,78 +337,84 @@ export default function AnimatePage() {
             ref={viewerHandleRef}
             pdb={pdbText.data}
             representation="auto"
-            color="chain-id"
             spin={false}
             background="white"
+            onPresetApplied={(plugin) =>
+              applyAnimateLoadDefaults(plugin as PluginContext)
+            }
           />
           <EchoOverlay entry={echoEntry} />
-          <RamachandranOverlay entry={ramachandranEntry} />
         </div>
       )}
-    </div>
+    </Card>
   );
 
   const editorPane = (
-    <div className="panel animate-editor-panel">
+    <Card className="panel animate-editor-panel">
       <div className="animate-editor-header">
         <strong>Script</strong>
-        <div className="animate-run-row">
-          <button type="button" onClick={() => setShowHelp(true)}>
+        <ButtonGroup>
+          <Button icon="help" onClick={() => setShowHelp(true)}>
             Help
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            icon="reset"
             onClick={() => void handleReset()}
             disabled={!viewerReady || running}
           >
             Reset
-          </button>
-          <button
-            type="button"
-            className="animate-run-btn"
+          </Button>
+          <Button
+            icon="play"
+            intent={Intent.PRIMARY}
+            loading={running}
             onClick={() => void handleRun()}
             disabled={!viewerReady || running}
           >
-            {running ? 'Running…' : 'Run'}
-          </button>
-        </div>
+            Run
+          </Button>
+        </ButtonGroup>
       </div>
       <div className="animate-editor-frame">
         <Editor value={code} onChange={setCode} height="100%" />
       </div>
       {scriptError && <pre className="animate-error">{scriptError}</pre>}
-    </div>
+    </Card>
   );
 
   return (
     <div className="animate-page">
-      <div className="animate-toolbar panel">
-        <label className="animate-pdb-input">
-          PDB code
-          <input
-            type="text"
+      <Card className="animate-toolbar panel">
+        <FormGroup
+          label="PDB code"
+          inline
+          className="animate-pdb-input"
+          contentClassName="animate-pdb-input-control"
+        >
+          <InputGroup
             value={pdbId}
-            onChange={(event) => setPdbId(event.target.value)}
+            onValueChange={setPdbId}
             onKeyDown={(event) => event.key === 'Enter' && handleLoadPdb()}
             maxLength={4}
             placeholder="1ART"
+            size="small"
           />
-        </label>
-        <button type="button" onClick={handleLoadPdb}>
+        </FormGroup>
+        <Button icon="cloud-download" onClick={handleLoadPdb}>
           Load
-        </button>
-        <span className="animate-toolbar-divider" aria-hidden />
+        </Button>
+        <Divider />
         {SCENES.map((scene) => (
-          <button
+          <Button
             key={scene.id}
-            type="button"
-            className="animate-scene-btn"
+            variant="minimal"
+            size="small"
             onClick={() => pickScene(scene.code)}
           >
             {scene.label}
-          </button>
+          </Button>
         ))}
-      </div>
+      </Card>
 
       <div className="animate-content">
         <Splitter left={viewerPane} right={editorPane} />

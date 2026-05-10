@@ -1,3 +1,4 @@
+import { Button, Card, Tab, Tabs, Tag } from '@blueprintjs/core';
 import { useCallback, useMemo, useRef, useState } from 'react';
 
 import type { FocusSpec, PdbViewerHandle } from '../../shared/PdbViewer.tsx';
@@ -101,7 +102,7 @@ export default function BrowsePage() {
           onChange={setFilters}
         />
         <div className="browse-list-col">
-          <div className="browse-list panel">
+          <Card className="browse-list panel">
             {findResult.status === 'loading' && (
               <p className="placeholder pdb-table-empty">Searching…</p>
             )}
@@ -117,22 +118,22 @@ export default function BrowsePage() {
                 onSelect={setPickedId}
               />
             )}
-          </div>
+          </Card>
         </div>
         {selectedDoc ? (
           <SelectedEntry doc={selectedDoc} />
         ) : (
           <>
             <div className="browse-main">
-              <div className="panel browse-entry-header">
+              <Card className="panel browse-entry-header">
                 <p className="placeholder">
                   {findResult.status === 'success'
                     ? 'No entries match the current filter.'
                     : 'Loading…'}
                 </p>
-              </div>
+              </Card>
             </div>
-            <div className="panel browse-side" />
+            <Card className="panel browse-side" />
           </>
         )}
       </div>
@@ -194,19 +195,20 @@ function SelectedEntry({ doc }: SelectedEntryProps) {
   return (
     <>
       <div className="browse-main">
-        <div className="panel browse-entry-header">
+        <Card className="panel browse-entry-header">
           <div className="browse-entry-top">
-            <button
-              type="button"
+            <Button
               className="browse-entry-id"
+              variant="minimal"
+              icon={copied ? 'tick' : 'duplicate'}
               onClick={copyId}
               title="Click to copy PDB code"
             >
-              {doc._id}
+              <span className="browse-entry-id-code">{doc._id}</span>
               <span className="browse-entry-id-hint">
                 {copied ? 'copied!' : 'click to copy'}
               </span>
-            </button>
+            </Button>
             <div className="browse-entry-meta">
               <span>
                 <strong>Chains:</strong> {doc.nbChains}
@@ -227,9 +229,9 @@ function SelectedEntry({ doc }: SelectedEntryProps) {
             </div>
           </div>
           <div className="browse-entry-title">{doc.title}</div>
-        </div>
+        </Card>
         <div className="browse-entry-grid">
-          <div className="panel browse-viewer">
+          <Card className="panel browse-viewer">
             {pdbText.status === 'success' && (
               <div className="browse-viewer-header">
                 <ViewerControls
@@ -263,8 +265,8 @@ function SelectedEntry({ doc }: SelectedEntryProps) {
                 background={background}
               />
             )}
-          </div>
-          <div className="panel browse-pdb-text">
+          </Card>
+          <Card className="panel browse-pdb-text">
             {pdbText.status === 'success' ? (
               <PdbHeader pdb={pdbText.data} />
             ) : (
@@ -273,16 +275,16 @@ function SelectedEntry({ doc }: SelectedEntryProps) {
                 <p className="placeholder">…</p>
               </>
             )}
-          </div>
+          </Card>
         </div>
       </div>
-      <div className="panel browse-side">
+      <Card className="panel browse-side">
         <SideTabs
           doc={doc}
           selectedKey={focusKey ?? undefined}
           onFocus={handleFocus}
         />
-      </div>
+      </Card>
     </>
   );
 }
@@ -312,48 +314,62 @@ function SideTabs({ doc, selectedKey, onFocus }: SideTabsProps) {
     { id: 'sheets', label: 'Sheets', count: doc.sheets.length },
   ];
 
+  function renderTabBody() {
+    if (active === 'ligands') {
+      return (
+        <LigandsTable
+          formula={doc.formula}
+          selectedKey={selectedKey}
+          onFocus={onFocus}
+        />
+      );
+    }
+    if (active === 'helices') {
+      return (
+        <StructureTable
+          kind="helix"
+          rows={doc.helices}
+          extraColumns={[{ header: 'Kind', render: (helix) => helix.kind }]}
+          selectedKey={selectedKey}
+          onFocus={onFocus}
+        />
+      );
+    }
+    return (
+      <StructureTable
+        kind="sheet"
+        rows={doc.sheets}
+        selectedKey={selectedKey}
+        onFocus={onFocus}
+      />
+    );
+  }
+
   return (
     <div className="side-tabs">
-      <div className="side-tablist" role="tablist">
+      <Tabs
+        id="browse-side-tabs"
+        selectedTabId={active}
+        onChange={(tabId) => setActive(tabId as SideTab)}
+        size="large"
+      >
         {tabs.map((tab) => (
-          <button
+          <Tab
             key={tab.id}
-            type="button"
-            role="tab"
-            aria-selected={active === tab.id}
-            className={active === tab.id ? 'side-tab is-active' : 'side-tab'}
-            onClick={() => setActive(tab.id)}
-          >
-            {tab.label}
-            <span className="side-count">{tab.count}</span>
-          </button>
+            id={tab.id}
+            title={
+              <span className="side-tab-title">
+                {tab.label}
+                <Tag minimal round>
+                  {tab.count}
+                </Tag>
+              </span>
+            }
+          />
         ))}
-      </div>
+      </Tabs>
       <div className="side-tabpanel" role="tabpanel">
-        {active === 'ligands' && (
-          <LigandsTable
-            formula={doc.formula}
-            selectedKey={selectedKey}
-            onFocus={onFocus}
-          />
-        )}
-        {active === 'helices' && (
-          <StructureTable
-            kind="helix"
-            rows={doc.helices}
-            extraColumns={[{ header: 'Kind', render: (helix) => helix.kind }]}
-            selectedKey={selectedKey}
-            onFocus={onFocus}
-          />
-        )}
-        {active === 'sheets' && (
-          <StructureTable
-            kind="sheet"
-            rows={doc.sheets}
-            selectedKey={selectedKey}
-            onFocus={onFocus}
-          />
-        )}
+        {renderTabBody()}
       </div>
     </div>
   );

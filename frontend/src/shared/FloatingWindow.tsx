@@ -1,3 +1,4 @@
+import { Button } from '@blueprintjs/core';
 import type { MouseEvent as ReactMouseEvent, ReactNode } from 'react';
 import { useCallback, useState } from 'react';
 
@@ -180,14 +181,14 @@ export default function FloatingWindow({
         onMouseDown={handleHeaderMouseDown}
       >
         <span className="floating-window-title">{title}</span>
-        <button
-          type="button"
+        <Button
+          icon="cross"
+          variant="minimal"
+          size="small"
           className="floating-window-close"
           onClick={onClose}
           aria-label="Close"
-        >
-          ×
-        </button>
+        />
       </div>
       <div className="floating-window-body">{children}</div>
       <div

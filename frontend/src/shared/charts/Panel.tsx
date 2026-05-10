@@ -1,3 +1,4 @@
+import { Card } from '@blueprintjs/core';
 import type { ReactNode } from 'react';
 
 import type { AsyncState } from '../useAsync.ts';
@@ -31,7 +32,7 @@ export default function Panel<TData>({
   description,
 }: PanelProps<TData>) {
   return (
-    <div className="panel">
+    <Card className="panel">
       <h3>{title}</h3>
       {description ? <p className="panel-description">{description}</p> : null}
       {state.status === 'loading' ? (
@@ -43,6 +44,6 @@ export default function Panel<TData>({
       ) : (
         children(state.data)
       )}
-    </div>
+    </Card>
   );
 }

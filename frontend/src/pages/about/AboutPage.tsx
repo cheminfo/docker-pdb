@@ -1,3 +1,5 @@
+import { Card } from '@blueprintjs/core';
+
 /**
  * About page mounted at `/about`. Explains what `pdb-quickview` is, links
  * to the upstream wwPDB resources it mirrors, and lists the citations the
@@ -21,7 +23,7 @@ export default function AboutPage() {
       </header>
 
       <h2>The Protein Data Bank</h2>
-      <div className="panel about-panel">
+      <Card className="panel about-panel">
         <p>
           The{' '}
           <a
@@ -51,10 +53,10 @@ export default function AboutPage() {
           license. We re-distribute it unchanged; we add a search index, a
           unified HTTP API, and pre-rendered thumbnails on top.
         </p>
-      </div>
+      </Card>
 
       <h2>Acknowledgements</h2>
-      <div className="panel about-panel">
+      <Card className="panel about-panel">
         <p>
           PDB <em>quick</em> View would not exist without the decades of work
           done by the wwPDB partner organizations, who curate, validate, and
@@ -119,10 +121,10 @@ export default function AboutPage() {
           to the wwPDB partner sites: they offer richer search, validation
           reports, and the authoritative version of every record.
         </p>
-      </div>
+      </Card>
 
       <h2>How to cite</h2>
-      <div className="panel about-panel">
+      <Card className="panel about-panel">
         <p>
           If you use data obtained through PDB <em>quick</em> View in a
           publication, you must cite the underlying wwPDB archive — not this
@@ -182,10 +184,10 @@ export default function AboutPage() {
           </a>
           .
         </p>
-      </div>
+      </Card>
 
       <h2>Tools we build on</h2>
-      <div className="panel about-panel">
+      <Card className="panel about-panel">
         <p>
           Beyond the data itself, this site relies on several outstanding
           open-source projects:
@@ -244,7 +246,7 @@ export default function AboutPage() {
           </a>
           .
         </p>
-      </div>
+      </Card>
     </div>
   );
 }

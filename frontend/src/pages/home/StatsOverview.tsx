@@ -1,3 +1,5 @@
+import { Card } from '@blueprintjs/core';
+
 import type { DatabaseInfo, RsyncHistoryDoc } from '../../shared/api/types.ts';
 import {
   formatBytes,
@@ -23,11 +25,11 @@ interface StatCardProps {
 
 function StatCard({ label, value, sub }: StatCardProps) {
   return (
-    <div className="stat-card">
+    <Card className="stat-card" compact>
       <div className="label">{label}</div>
       <div className="value">{value}</div>
       <div className="sub">{sub}</div>
-    </div>
+    </Card>
   );
 }
 

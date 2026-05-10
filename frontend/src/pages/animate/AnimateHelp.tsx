@@ -6,6 +6,8 @@
  * off every Selection.
  */
 
+import { HTMLTable } from '@blueprintjs/core';
+
 const SELECTION_EXAMPLES: Array<[string, string]> = [
   ['all', 'every atom'],
   ['none', 'no atoms'],
@@ -88,8 +90,15 @@ const SELECTION_METHODS: MethodEntry[] = [
   {
     signature: 'selection.hbonds.show() / .color(spec) / .diameter(value)',
     description:
-      'Compute backbone N…O hydrogen bonds within the selection (distance window 2.5–3.5 Å, peptide-bond neighbours excluded) and render them as Mol*-managed dashed lines. Defaults: yellow, `diameter` 0.3. `.hide()` toggles visibility.',
+      "Run Mol*'s chemistry-aware `computeInteractions` (donor type, acceptor type, geometric constraints — Kabsch-Sander-style) on a sub-structure built from the selection's atoms with `skipIntraContacts: false`, then render the H-bond pairs as Mol*-styled dashed cylinders. Catches backbone **and** side-chain H-bonds. Defaults: yellow, `diameter` 0.3. `.hide()` toggles visibility. **Tip:** narrow the selection to just the atoms you've drawn (e.g. `helix.select('backbone').hbonds.show()`) to avoid cylinders anchored on side-chain atoms that aren't visible.",
     example: "pdb.select('108-122:A').hbonds.show();",
+  },
+  {
+    signature: 'selection.contactsWith(other, options?)',
+    description:
+      "Compute and render contacts between two selections via Mol*'s chemistry-aware `extensions/interactions` pipeline (donor type, acceptor type, geometry). Coloured per kind: yellow = hydrogen-bond, light blue = ionic, gray = hydrophobic, etc. Pass `{ kinds: [...] }` to filter (default: every chemistry kind). Use for ligand binding sites — `selection.hbonds.show()` is the right choice for intra-chain backbone H-bonds.",
+    example:
+      "pdb.select('PLP').contactsWith(pdb.select('within 4 of PLP and not PLP'), { kinds: ['hydrogen-bond', 'hydrophobic'] });",
   },
   {
     signature:
@@ -153,21 +162,15 @@ const PDB_METHODS: MethodEntry[] = [
     example: "pdb.all.ribbon.color({ model: 'structure' });",
   },
   {
-    signature: 'pdb.ramachandran(options?)',
+    signature: 'pdb.ramachandranPdb()',
     description:
-      "2D overlay: φ × ψ + a 90°-rotated ω plot. Each point is colored green (trans, |ω|>150°), red (cis, |ω|<30°), or gray. Options: `{ position, highlight: string[] }` where each highlight entry is `'resNum:chainId'`.",
-    example:
-      "pdb.ramachandran({ position: 'bottom-right', highlight: ['29:A', '166:A'] });",
-  },
-  {
-    signature: 'pdb.clearRamachandran()',
-    description: 'Remove the Ramachandran overlay.',
-    example: 'pdb.clearRamachandran();',
+      "Build a synthetic PDB string with one Cα per residue placed at `(φ, ψ, ω)` in degrees, plus three axis chains `X` / `Y` / `Z` connected by `CONECT` records. Pass to `pdb.createModel('rama', { pdb: ... })` to swap the protein view for the dihedral-space cloud.",
+    example: "pdb.createModel('rama', { pdb: pdb.ramachandranPdb() });",
   },
   {
     signature: 'pdb.createModel(name, options?)',
     description:
-      "Create a named view. Clones the active model's PDB and op log; pass `{ pdb }` to load a synthetic PDB string instead. The new model becomes active and `pdb` follows it — channel calls record into this model. Returns the same `pdb` handle.",
+      "Create a named view. The active model's PDB is inherited unless `{ pdb }` overrides it. The new model's op log **starts empty** — re-paint anything you want visible. The new model becomes active and `pdb` follows it; channel calls record into this model. Returns the same `pdb` handle.",
     example: "pdb.createModel('rainbow');",
   },
   {
@@ -198,7 +201,7 @@ const MS_METHODS: MethodEntry[] = [
   {
     signature: 'ms.loadPDB(text)',
     description:
-      'Parse PDB text and return a `pdb` handle exposing `.select`, `.chains`, `.all`, `.ramachandran`, …',
+      'Parse PDB text and return a `pdb` handle exposing `.select`, `.chains`, `.all`, `.createModel`, …',
     example: 'const pdb = ms.loadPDB(text);',
   },
   {
@@ -240,6 +243,24 @@ const MS_METHODS: MethodEntry[] = [
     description:
       'Wipe every representation/measurement/echo. Called automatically before each Run.',
     example: 'ms.clear();',
+  },
+  {
+    signature: 'ms.reset()',
+    description:
+      "Restore the freshly-loaded view: clear every script-added representation and measurement, drop the persistent selection, and reset the camera to Mol*'s initial auto-frame (center, zoom, orientation). Same as the page's Reset button.",
+    example: 'ms.reset();',
+  },
+  {
+    signature: 'ms.hideDefaults() / ms.showDefaults()',
+    description:
+      "Toggle visibility of every component Mol* added through its default preset (polymer cartoon, ligand ball-and-stick, water spheres). Animate's own components are untouched. Call `hideDefaults()` at the start of a scene that needs full control of the canvas (e.g. truly hiding non-target helices).",
+    example: 'ms.hideDefaults();',
+  },
+  {
+    signature: 'ms.<kind>.show() / .hide()',
+    description:
+      'Hierarchical visibility aggregators. `ms.atoms` / `ms.bonds` / `ms.ribbon` / `ms.surface` / `ms.label` / `ms.hbonds` / `ms.distances` each toggle every cell of that kind across every selection without dropping color/size state — so `ms.hbonds.hide()` followed by `ms.hbonds.show()` restores the prior visual exactly.',
+    example: 'ms.hbonds.hide();',
   },
 ];
 
@@ -330,7 +351,7 @@ ms.spin('y');`}</pre>
           expression. Compose with <code>and</code>, <code>or</code>,{' '}
           <code>not</code>, parentheses, and <code>within X of …</code>.
         </p>
-        <table className="animate-help-table">
+        <HTMLTable className="animate-help-table" compact striped>
           <thead>
             <tr>
               <th>Expression</th>
@@ -347,7 +368,7 @@ ms.spin('y');`}</pre>
               </tr>
             ))}
           </tbody>
-        </table>
+        </HTMLTable>
       </section>
 
       <MethodSection
@@ -408,10 +429,21 @@ ms.spin('y');`}</pre>
             not ported. Use <code>{`selection.focus()`}</code> instead.
           </li>
           <li>
-            H-bond detection uses a simple geometric heuristic on backbone N/O
-            pairs (2.5–3.5 Å, |Δresidue| &gt; 1). It catches alpha-helix and
-            most beta-sheet H-bonds; non-backbone donors / acceptors are not
-            considered.
+            <code>selection.hbonds</code> drives Mol*&apos;s chemistry-aware
+            <code> computeInteractions</code> on a sub-structure built from the
+            selection&apos;s atoms with <code>skipIntraContacts: false</code>,
+            then translates the donor/acceptor pairs to{' '}
+            <code>CustomInteractions</code> schemas so{' '}
+            <code>InteractionsShape</code> renders them as dashed cylinders.
+            Reusing Mol*&apos;s detector means we get donor/acceptor typing,
+            geometric scoring, and side-chain donors / acceptors for free — no
+            naive N…O matching, no bifurcated artefacts.
+          </li>
+          <li>
+            <code>selection.contactsWith(other)</code> uses a different entry
+            point (<code>ComputeContacts</code>) that only emits inter-group
+            edges. Right tool for ligand binding sites; wrong tool for inside
+            one chain.
           </li>
           <li>
             <code>helix</code> / <code>sheet</code> selections rely on the HELIX

@@ -1,3 +1,4 @@
+import { Button, Card } from '@blueprintjs/core';
 import { useCallback, useEffect, useState } from 'react';
 import type { OnChangeMoleculeCallback } from 'react-ocl';
 import { CanvasMoleculeEditor } from 'react-ocl';
@@ -116,19 +117,19 @@ export default function MoleculesPage() {
       </header>
 
       <div className="molecules-layout">
-        <section className="panel molecules-editor-panel">
+        <Card className="panel molecules-editor-panel">
           <div className="molecules-editor-header">
             <h2>Query</h2>
-            <button
-              type="button"
+            <Button
+              icon="cross"
+              variant="minimal"
+              size="small"
               className="molecules-clear-button"
               onClick={handleClear}
               disabled={!queryIdCode}
               title="Clear query"
               aria-label="Clear query"
-            >
-              ×
-            </button>
+            />
           </div>
           <div className="molecules-editor-canvas">
             <CanvasMoleculeEditor onChange={handleEditorChange} />
@@ -143,9 +144,9 @@ export default function MoleculesPage() {
             </span>
           </div>
           {searchError && <p className="error">{searchError}</p>}
-        </section>
+        </Card>
 
-        <section className="panel molecules-results-panel">
+        <Card className="panel molecules-results-panel">
           <h2>
             {queryIdCode === null
               ? 'Most-referenced ligands'
@@ -156,9 +157,9 @@ export default function MoleculesPage() {
             selectedCode={selectedCode}
             onSelect={handleSelectLigand}
           />
-        </section>
+        </Card>
 
-        <section className="panel molecules-pdbs-panel">
+        <Card className="panel molecules-pdbs-panel">
           <h2>PDBs</h2>
           <div className="molecules-pdbs-panel-body">
             <LigandPdbsPanel
@@ -168,7 +169,7 @@ export default function MoleculesPage() {
               error={pdbsError}
             />
           </div>
-        </section>
+        </Card>
       </div>
     </div>
   );

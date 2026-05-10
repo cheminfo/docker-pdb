@@ -1,3 +1,4 @@
+import { SegmentedControl } from '@blueprintjs/core';
 import { useMemo, useState } from 'react';
 
 interface PdbHeaderProps {
@@ -14,7 +15,7 @@ interface PdbHeaderProps {
  * @returns Pre-formatted header element with a header/full toggle.
  */
 export default function PdbHeader({ pdb }: PdbHeaderProps) {
-  const [showFull, setShowFull] = useState(false);
+  const [view, setView] = useState<'header' | 'full'>('header');
   const headerOnly = useMemo(() => {
     const lines: string[] = [];
     for (const line of pdb.split(/\r?\n/)) {
@@ -28,24 +29,17 @@ export default function PdbHeader({ pdb }: PdbHeaderProps) {
     <>
       <div className="pdb-header-bar">
         <h3>PDB header</h3>
-        <div className="pdb-header-toggle">
-          <button
-            type="button"
-            className={`pdb-header-toggle-button${showFull ? '' : ' is-active'}`}
-            onClick={() => setShowFull(false)}
-          >
-            Header only
-          </button>
-          <button
-            type="button"
-            className={`pdb-header-toggle-button${showFull ? ' is-active' : ''}`}
-            onClick={() => setShowFull(true)}
-          >
-            Full PDB
-          </button>
-        </div>
+        <SegmentedControl
+          size="small"
+          value={view}
+          onValueChange={(next) => setView(next as 'header' | 'full')}
+          options={[
+            { label: 'Header only', value: 'header' },
+            { label: 'Full PDB', value: 'full' },
+          ]}
+        />
       </div>
-      <pre className="pdb-header">{showFull ? pdb : headerOnly}</pre>
+      <pre className="pdb-header">{view === 'full' ? pdb : headerOnly}</pre>
     </>
   );
 }

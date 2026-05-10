@@ -1,55 +1,62 @@
+import { Navbar, Tab, Tabs } from '@blueprintjs/core';
 import type { ReactNode } from 'react';
-import { NavLink } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 
 interface LayoutProps {
   children: ReactNode;
 }
 
+const NAV_TABS = [
+  { id: '/', label: 'Home' },
+  { id: '/browse', label: 'Browse' },
+  { id: '/animate', label: 'Animate' },
+  { id: '/molecules', label: 'Molecules' },
+  { id: '/stats', label: 'Stats' },
+  { id: '/omega', label: 'Omega' },
+  { id: '/api', label: 'API' },
+  { id: '/settings', label: 'Settings' },
+  { id: '/about', label: 'About' },
+] as const;
+
 /**
- * Application shell with a top navigation bar (brand, logo, page links).
+ * Application shell with a Blueprint Navbar (brand + tabs) and the routed page below it.
  * @param props - Component props.
  * @param props.children - Page content rendered below the nav bar.
  * @returns The shell element wrapping the active route.
  */
 export default function Layout({ children }: LayoutProps) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const activeTab =
+    NAV_TABS.find(
+      (tab) => tab.id !== '/' && location.pathname.startsWith(tab.id),
+    )?.id ?? '/';
+
   return (
     <div className="app-shell">
-      <nav className="topnav">
-        <div className="topnav-inner">
-          <NavLink to="/" end className="topnav-brand">
+      <Navbar className="topnav">
+        <Navbar.Group>
+          <Navbar.Heading className="topnav-brand">
             <img src="/logo.svg" alt="" className="topnav-logo" />
             <span>
               PDB <em>quick</em> View
             </span>
-          </NavLink>
-          <div className="topnav-links">
-            <NavLink to="/" end className="topnav-link">
-              Home
-            </NavLink>
-            <NavLink to="/browse" className="topnav-link">
-              Browse
-            </NavLink>
-            <NavLink to="/animate" className="topnav-link">
-              Animate
-            </NavLink>
-            <NavLink to="/molecules" className="topnav-link">
-              Molecules
-            </NavLink>
-            <NavLink to="/stats" className="topnav-link">
-              Stats
-            </NavLink>
-            <NavLink to="/omega" className="topnav-link">
-              Omega
-            </NavLink>
-            <NavLink to="/api" className="topnav-link">
-              API
-            </NavLink>
-            <NavLink to="/about" className="topnav-link">
-              About
-            </NavLink>
-          </div>
-        </div>
-      </nav>
+          </Navbar.Heading>
+          <Navbar.Divider />
+          <Tabs
+            id="topnav-tabs"
+            selectedTabId={activeTab}
+            onChange={(tabId) => {
+              void navigate(tabId as string);
+            }}
+            size="large"
+          >
+            {NAV_TABS.map((tab) => (
+              <Tab key={tab.id} id={tab.id} title={tab.label} />
+            ))}
+          </Tabs>
+        </Navbar.Group>
+      </Navbar>
       <main className="app-main">{children}</main>
     </div>
   );

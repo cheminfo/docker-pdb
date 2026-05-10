@@ -1,3 +1,4 @@
+import { HTMLTable } from '@blueprintjs/core';
 import { useEffect, useState } from 'react';
 import { MF } from 'react-mf';
 
@@ -49,7 +50,7 @@ export default function LigandsTable({
   const structures = useStructuresByCode(codes);
 
   return (
-    <table className="info-table">
+    <HTMLTable className="info-table" compact>
       <thead>
         <tr>
           <th className="focus-col" aria-label="Show in viewer" />
@@ -106,7 +107,7 @@ export default function LigandsTable({
           </tr>
         )}
       </tbody>
-    </table>
+    </HTMLTable>
   );
 }
 

@@ -1,3 +1,4 @@
+import { HTMLTable } from '@blueprintjs/core';
 import type { KeyboardEvent } from 'react';
 import { useEffect, useRef } from 'react';
 
@@ -83,7 +84,7 @@ export default function PdbTable({
       aria-activedescendant={selectedId ? `pdb-row-${selectedId}` : undefined}
       onKeyDown={handleKeyDown}
     >
-      <table className="pdb-table">
+      <HTMLTable className="pdb-table" interactive compact>
         <colgroup>
           <col className="col-id" />
           <col />
@@ -118,7 +119,7 @@ export default function PdbTable({
             );
           })}
         </tbody>
-      </table>
+      </HTMLTable>
       {rows.length === 0 && (
         <p className="placeholder pdb-table-empty">
           No entries match the current search.

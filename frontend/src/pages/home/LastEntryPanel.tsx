@@ -1,3 +1,4 @@
+import { Card } from '@blueprintjs/core';
 import { useCallback, useMemo } from 'react';
 
 import PdbViewer from '../../shared/PdbViewer.tsx';
@@ -41,7 +42,7 @@ export default function LastEntryPanel({ pdbId }: LastEntryPanelProps) {
 
   return (
     <div className="last-entry-grid">
-      <div className="last-entry-viewer panel">
+      <Card className="last-entry-viewer panel">
         {textState.status === 'loading' && (
           <p className="placeholder">Loading 3D structure…</p>
         )}
@@ -59,8 +60,8 @@ export default function LastEntryPanel({ pdbId }: LastEntryPanelProps) {
             background={DEFAULT_BACKGROUND}
           />
         )}
-      </div>
-      <div className="last-entry-info panel">
+      </Card>
+      <Card className="last-entry-info panel">
         {docState.status === 'loading' && (
           <p className="placeholder">Loading summary…</p>
         )}
@@ -72,7 +73,7 @@ export default function LastEntryPanel({ pdbId }: LastEntryPanelProps) {
         {docState.status === 'success' && (
           <PdbSummaryCard doc={docState.data} header={header} />
         )}
-      </div>
+      </Card>
     </div>
   );
 }

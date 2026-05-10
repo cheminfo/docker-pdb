@@ -1,3 +1,4 @@
+import { Button, Card, Checkbox, NumericInput } from '@blueprintjs/core';
 import { useMemo } from 'react';
 
 import DualRangeSlider from '../../shared/DualRangeSlider.tsx';
@@ -103,22 +104,21 @@ export default function FilterPanel({
   }
 
   return (
-    <div className="filter-panel panel">
+    <Card className="filter-panel panel">
       <div className="filter-panel-header">
         <h3>Filters</h3>
         <span className="filter-panel-count">
           {matchCount} / {totalCount}
         </span>
         {isActive && (
-          <button
-            type="button"
-            className="filter-reset"
+          <Button
+            icon="cross"
+            variant="minimal"
+            size="small"
             onClick={reset}
             title="Clear all filters"
             aria-label="Clear all filters"
-          >
-            ×
-          </button>
+          />
         )}
       </div>
 
@@ -134,17 +134,20 @@ export default function FilterPanel({
             return <p className="placeholder">No method data.</p>;
           }
           return visibleMethods.map(([method, count]) => (
-            <label key={method} className="filter-checkbox">
-              <input
-                type="checkbox"
-                checked={filters.methods.has(method)}
-                onChange={() => toggleMethod(method)}
-              />
-              <span className="filter-method-name" title={method}>
-                {prettyMethod(method)}
-              </span>
-              <span className="filter-method-count">{count}</span>
-            </label>
+            <Checkbox
+              key={method}
+              className="filter-checkbox"
+              checked={filters.methods.has(method)}
+              onChange={() => toggleMethod(method)}
+              labelElement={
+                <>
+                  <span className="filter-method-name" title={method}>
+                    {prettyMethod(method)}
+                  </span>
+                  <span className="filter-method-count">{count}</span>
+                </>
+              }
+            />
           ));
         })()}
       </div>
@@ -179,7 +182,7 @@ export default function FilterPanel({
         bounds={bounds.year}
         onChange={(range) => setRange('year', range)}
       />
-    </div>
+    </Card>
   );
 }
 
@@ -218,23 +221,23 @@ function RangeRow({ label, range, bounds, onChange }: RangeRowProps) {
         />
       )}
       <div className="filter-range">
-        <input
-          type="number"
-          className="filter-range-input"
+        <NumericInput
+          buttonPosition="none"
+          fill
           placeholder={String(bounds.min)}
           value={range.min ?? ''}
-          onChange={(event) =>
-            onChange({ ...range, min: parseValue(event.target.value) })
+          onValueChange={(_value, asString) =>
+            onChange({ ...range, min: parseValue(asString) })
           }
         />
         <span className="filter-range-sep">–</span>
-        <input
-          type="number"
-          className="filter-range-input"
+        <NumericInput
+          buttonPosition="none"
+          fill
           placeholder={String(bounds.max)}
           value={range.max ?? ''}
-          onChange={(event) =>
-            onChange({ ...range, max: parseValue(event.target.value) })
+          onValueChange={(_value, asString) =>
+            onChange({ ...range, max: parseValue(asString) })
           }
         />
       </div>
