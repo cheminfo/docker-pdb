@@ -1,8 +1,7 @@
-// Reset the local CouchDB to a small, deterministic set of PDB entries —
-// useful for development and as test fixtures. Drops the `pdb` and
-// `pdb-bio-assembly` databases, recreates them via `initCouchDB` (which
-// reinstalls views, Mango indexes, and security), then re-ingests every
-// entry in `SEED_IDS` from the rsynced files already on disk.
+// Reset the local sqlite database to a small, deterministic set of PDB
+// entries — useful for development and as test fixtures. Wipes every
+// pdb_* table and re-ingests every entry in `SEED_IDS` from the rsynced
+// files already on disk.
 //
 // Run inside the `node-pdb-sync` container so the rsync tree, the
 // pymol/graphicsmagick binaries, and `config.json` are all available:
@@ -14,11 +13,10 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import createDebug from 'debug';
-import Nano from 'nano';
 
 import * as common from './common.js';
 import getConfig from './config.js';
-import initDatabase from './initCouchDB.js';
+import { getLigandsDB } from './db/getDB.js';
 
 const debug = createDebug('pdb-sync:seed');
 
@@ -50,20 +48,25 @@ const SEED_IDS = [
   '3PGM', // 1993 X-ray phosphoglycerate mutase
 ];
 
-async function dropDatabases() {
-  const config = getConfig();
-  // eslint-disable-next-line new-cap -- nano factory is invoked as Nano(...)
-  const couch = Nano(config.couch.fullUrl);
-  for (const dbName of ['pdb', 'pdb-bio-assembly']) {
-    try {
-      // eslint-disable-next-line no-await-in-loop -- two sequential drops
-      await couch.db.destroy(dbName);
-      debug(`Dropped database: ${dbName}`);
-    } catch (error) {
-      if (error.statusCode !== 404) throw error;
-      debug(`Database ${dbName} did not exist, nothing to drop`);
-    }
+async function clearTables() {
+  const db = await getLigandsDB();
+  // Order matters: child tables first, then parents. pdb_ligands /
+  // pdb_ligand_instances also reference pdb_id and need wiping.
+  for (const table of [
+    'pdb_omega_pairs',
+    'pdb_residue_counts',
+    'pdb_chains',
+    'pdb_helices',
+    'pdb_sheets',
+    'pdb_formulas',
+    'pdb_ligands',
+    'pdb_ligand_instances',
+    'pdb_title_fts',
+    'pdb_entries',
+  ]) {
+    db.db.exec(`DELETE FROM ${table}`);
   }
+  debug('Wiped pdb_* tables');
 }
 
 function existingFiles(ids, root, fileFor) {
@@ -90,11 +93,8 @@ function bioAssemblyPath(root, id) {
 }
 
 async function main() {
-  debug(`Dropping pdb / pdb-bio-assembly databases`);
-  await dropDatabases();
-
-  debug(`Re-running initCouchDB (recreate DBs + views + indexes)`);
-  await initDatabase();
+  debug(`Wiping pdb_* tables`);
+  await clearTables();
 
   const config = getConfig();
 

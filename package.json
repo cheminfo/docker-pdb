@@ -1,7 +1,7 @@
 {
   "name": "pdb-quickview",
   "version": "1.1.1",
-  "description": "Searchable mirror of the wwPDB with precomputed PyMol thumbnails, served from CouchDB behind nginx.",
+  "description": "Searchable mirror of the wwPDB with precomputed PyMol thumbnails, served from SQLite behind nginx.",
   "type": "module",
   "private": true,
   "repository": {
@@ -17,7 +17,7 @@
     "pdb-parser",
     "pymol",
     "thumbnails",
-    "couchdb"
+    "sqlite"
   ],
   "author": "Daniel Kostro",
   "license": "MIT",
@@ -28,7 +28,6 @@
     "fastify": "^5.8.5",
     "glob": "^11.0.0",
     "gm": "^1.25.1",
-    "nano": "^10.1.4",
     "openchemlib": "^9.22.1",
     "openchemlib-utils": "^8.15.1",
     "pino": "^10.3.1",
@@ -45,11 +44,10 @@
   },
   "scripts": {
     "api": "node src/api/server.js",
-    "backfill-pdb-ligands": "node src/backfillPdbLigands.js",
     "cron": "node src/cron.js",
     "cron-ccd": "node src/ccd/cron.js",
     "dev": "docker compose -f compose.dev.yaml up -d && concurrently --names backend,frontend --prefix-colors blue,magenta \"npm:dev:backend\" \"npm:dev:frontend\"",
-    "dev:backend": "COUCHDB_HOST=127.0.0.1 DATA_DIR=./data node --watch --env-file-if-exists=.env src/dev.js",
+    "dev:backend": "DATA_DIR=./data node --watch --env-file-if-exists=.env src/dev.js",
     "dev:frontend": "npm --prefix frontend run dev",
     "dev:down": "docker compose -f compose.dev.yaml down",
     "eslint": "eslint src",
@@ -57,6 +55,7 @@
     "prettier": "prettier --check src",
     "prettier-write": "prettier --write src",
     "rebuild": "node src/rebuild.js",
+    "rebuild-db": "node src/rebuild.js",
     "seed": "node src/seed.js",
     "seed-ccd": "node src/ccd/seedCCD.js",
     "test": "npm run test-only && npm run eslint && npm run prettier",

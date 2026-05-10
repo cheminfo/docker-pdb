@@ -4,17 +4,35 @@ import { test, expect } from 'vitest';
 
 import { getInMemoryLigandsDB } from '../getDB.js';
 
-test('migrations create the ligands schema in an empty database', async () => {
+test('migrations create the full sqlite schema in an empty database', async () => {
   const db = await getInMemoryLigandsDB();
-  const tables = db.db
-    .prepare(
-      `SELECT name FROM sqlite_master WHERE type IN ('table','view')
-       AND name NOT LIKE 'sqlite_%' AND name <> 'schemaversion'
-       ORDER BY name`,
-    )
-    .all()
-    .map((row) => row.name);
-  expect(tables).toStrictEqual(['ligand_ss_index', 'ligands', 'pdb_ligands']);
+  const tables = new Set(
+    db.db
+      .prepare(
+        `SELECT name FROM sqlite_master WHERE type IN ('table','view')
+         AND name NOT LIKE 'sqlite_%' AND name <> 'schemaversion'
+         AND name NOT LIKE 'pdb_title_fts_%'`,
+      )
+      .all()
+      .map((row) => row.name),
+  );
+  for (const expected of [
+    'ligand_ss_index',
+    'ligands',
+    'pdb_chains',
+    'pdb_entries',
+    'pdb_formulas',
+    'pdb_helices',
+    'pdb_ligand_instances',
+    'pdb_ligands',
+    'pdb_omega_pairs',
+    'pdb_residue_counts',
+    'pdb_sheets',
+    'pdb_title_fts',
+    'rsync_history',
+  ]) {
+    expect(tables.has(expected), `missing table ${expected}`).toBe(true);
+  }
   db.close();
 });
 

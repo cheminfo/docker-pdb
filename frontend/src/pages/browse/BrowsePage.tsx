@@ -34,9 +34,10 @@ import { emptyFilterState, filtersToFindParams } from './filters.ts';
 
 /**
  * Page mounted at `/browse`. Drives every list update from a single
- * server-side Mango (`/find`) query: filter sidebar + free-text query →
- * `findDocuments`. Stats and method counts come from CouchDB reduce views,
- * so the page never has to load the whole database into memory.
+ * server-side query: filter sidebar + free-text query → `findDocuments`
+ * (`GET /v1/pdbs?...`). Stats and method counts come from grouped SQL
+ * queries on the same backend, so the page never has to load the whole
+ * database into memory.
  * @returns Browse page React element.
  */
 export default function BrowsePage() {

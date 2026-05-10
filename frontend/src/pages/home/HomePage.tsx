@@ -72,7 +72,7 @@ export default function HomePage() {
         </h1>
         <p>
           A self-hosted, fast read-only mirror of the worldwide Protein Data
-          Bank — every entry parsed once into CouchDB and rendered once into
+          Bank — every entry parsed once into SQLite and rendered once into
           PyMol thumbnails so structure metadata loads instantly.
         </p>
       </header>

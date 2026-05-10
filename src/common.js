@@ -1,59 +1,69 @@
+import { existsSync, statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { gunzip } from 'node:zlib';
 
 import createDebug from 'debug';
-import Nano from 'nano';
 
 import getConfig from './config.js';
-import { replacePdbLigands } from './db/insertPdbLigands.js';
+import { getLigandsDB } from './db/getDB.js';
+import { replacePdbLigandInstancesSync } from './db/insertPdbLigandInstances.js';
+import { markAssemblySync, upsertPdbEntrySync } from './db/upsertPdbEntry.js';
 import { parse as parsePdb } from './util/pdbParser.js';
-import pymol from './util/pymol.js';
+import pymol, { pymolImagePath } from './util/pymol.js';
 
 const ungzip = promisify(gunzip);
 const MAX_BUFFER_LENGTH = 150 * 1024 * 1024;
 
 const debug = createDebug('pdb-sync:common');
 const config = getConfig();
-// eslint-disable-next-line new-cap -- nano factory is invoked as Nano(...)
-const nano = Nano(config.couch.fullUrl);
 
+/**
+ * Extract the 4-character PDB id from a `pdb<id>.ent.gz` or `<id>.pdb1.gz`
+ * filename. Always lowercased; callers uppercase as needed.
+ * @param {string} filename - Path or basename containing the PDB id.
+ * @returns {string} Lowercased PDB id (or empty string if it cannot be parsed).
+ */
 export function getIdFromFileName(filename) {
   return filename
     .replace(/^.*\/pdb([^.]*)\.ent\.gz/, '$1')
     .replace(/^.*\/([^.]*)\.pdb1.gz/, '$1');
 }
 
+/**
+ * Parse a single asymmetrical-unit `.ent.gz` file and persist its parsed
+ * metadata to sqlite. The original gzipped file stays on disk and is the
+ * single source of truth for the PDB binary; the API server streams it
+ * back on demand.
+ * @param {string} filename - Path to the gzipped `.ent` file.
+ * @returns {Promise<void>}
+ */
 export async function processPdb(filename) {
   debug(`Process: ${filename}`);
   const id = getIdFromFileName(filename).toUpperCase();
+  if (id.length !== 4) {
+    debug(`Skipping ${filename}: cannot extract PDB id`);
+    return;
+  }
   const data = await readFile(filename);
   const buffer = await ungzip(data);
+  const parsed = parsePdb(buffer.toString());
 
-  const pdbEntry = parsePdb(buffer.toString());
-  pdbEntry._id = id;
-  pdbEntry._attachments = {
-    [`${id}.pdb`]: {
-      // eslint-disable-next-line camelcase -- CouchDB attachment field
-      content_type: 'chemical/x-pdb',
-      data: buffer.toString('Base64'),
-    },
-  };
-  await saveToCouchDB(pdbEntry, nano.db.use(config.asymetrical.couch.database));
-
-  // Mirror non-water ligand codes into the SQLite link table so the
-  // substructure-search API can resolve a ligand back to its PDBs.
-  // CouchDB remains the source of truth for the PDB itself.
-  try {
-    await replacePdbLigands(id, pdbEntry.formula || []);
-  } catch (error) {
-    debug('Failed to update pdb_ligands for', id, error);
-  }
+  const db = await getLigandsDB();
+  upsertPdbEntrySync(db, id, parsed, { rawSize: buffer.length });
+  replacePdbLigandInstancesSync(db, id, parsed.ligandInstances || []);
+  debug('Entry saved:', id);
 }
 
+/**
+ * Process a list of asymmetrical-unit files sequentially. Errors on one file
+ * do not stop processing of the remaining files.
+ * @param {string[]} files - Paths to gzipped `.ent.gz` files.
+ * @returns {Promise<void>}
+ */
 export async function processPdbs(files) {
-  /* eslint-disable no-await-in-loop -- intentional sequential CouchDB writes */
+  /* eslint-disable no-await-in-loop -- intentional sequential sqlite writes */
   for (const file of files) {
     try {
       await processPdb(file);
@@ -64,83 +74,99 @@ export async function processPdbs(files) {
   /* eslint-enable no-await-in-loop */
 }
 
+/**
+ * Render and persist PyMol bio-assembly thumbnails for `filename`. The
+ * decompressed `.pdb1` file is not stored anywhere — the API server gunzips
+ * the `.gz` archive on the fly. Pre-existing PNGs at the same size are kept,
+ * which keeps `npm run rebuild-db` fast to re-run.
+ * @param {string} filename - Path to the gzipped `.pdb1` bio-assembly file.
+ * @returns {Promise<void>}
+ */
+export async function processPdbAssembly(filename) {
+  const id = getIdFromFileName(filename).toUpperCase();
+  if (id.length !== 4) {
+    debug(`Skipping ${filename}: cannot extract PDB id`);
+    return;
+  }
+  debug('Process pdb assembly:', id);
+
+  const data = await readFile(filename);
+  const buffer = await ungzip(data);
+
+  if (buffer.length >= MAX_BUFFER_LENGTH) {
+    debug(`Skipping ${id}: assembly too large (${buffer.length} bytes)`);
+    return;
+  }
+
+  const sizes = config.pymol ?? [];
+  /* eslint-disable no-await-in-loop -- pymol is heavy; render sequentially */
+  for (const size of sizes) {
+    const target = pymolImagePath(config.pymolDir, id, size.width, size.height);
+    try {
+      await pymol(id, buffer, target, size);
+    } catch (error) {
+      debug(
+        `pymol render failed for ${id} ${size.width}x${size.height}:`,
+        error.toString(),
+      );
+    }
+  }
+  /* eslint-enable no-await-in-loop */
+
+  const db = await getLigandsDB();
+  markAssemblySync(db, id, buffer.length);
+}
+
+/**
+ * Process a list of bio-assembly files sequentially. Errors on one file do
+ * not stop the remaining files.
+ * @param {string[]} files - Paths to `.pdb1.gz` files.
+ * @returns {Promise<void>}
+ */
 export async function processPdbAssemblies(files) {
-  /* eslint-disable no-await-in-loop -- intentional sequential pymol invocations */
+  /* eslint-disable no-await-in-loop -- pymol is heavy; render sequentially */
   for (const file of files) {
-    await processPdbAssembly(file);
+    try {
+      await processPdbAssembly(file);
+    } catch (error) {
+      debug('Exception for file:', file, error);
+    }
   }
   /* eslint-enable no-await-in-loop */
 }
 
-export async function processPdbAssembly(filename) {
-  const id = getIdFromFileName(filename).toUpperCase();
-  debug('Process pdb assembly: ', id);
-  const idLowerCase = id.toLowerCase();
-  const code = idLowerCase.slice(1, 3);
-
-  const bioFilename = join(
-    config.bioAssembly.rsync.destination,
-    code,
-    `${idLowerCase}.pdb1.gz`,
+/**
+ * Resolve the canonical on-disk path for the gzipped asymmetrical-unit file
+ * of a given PDB id. Returns `null` when the file is not present.
+ * @param {string} pdbId - PDB id (any case).
+ * @returns {{ path: string, size: number } | null} Resolved path + size, or null.
+ */
+export function findAsymUnitFile(pdbId) {
+  const lower = pdbId.toLowerCase();
+  const path = join(
+    config.asymetrical.rsync.destination,
+    lower.slice(1, 3),
+    `pdb${lower}.ent.gz`,
   );
-  const pdbEntry = { _id: id, _attachments: {} };
-  debug('generate pymol subunits', bioFilename);
-  try {
-    await doPymol(bioFilename, pdbEntry, {
-      pdb: nano.db.use(config.bioAssembly.couch.database),
-    });
-  } catch (error) {
-    debug(
-      `An error occurred while processing biological assembly ${id}`,
-      error.toString(),
-    );
-  }
+  if (!existsSync(path)) return null;
+  const size = statSync(path).size;
+  return { path, size };
 }
 
-async function saveToCouchDB(entry, pdb) {
-  try {
-    const header = await pdb.head(entry._id);
-    entry._rev = header.etag.replaceAll('"', '');
-  } catch (error) {
-    if (error.statusCode === 404) {
-      debug('Entry not found in database: ', entry._id);
-    } else {
-      throw new Error(`saveToCouchDB error: ${error.message}`);
-    }
-  }
-
-  await pdb.insert(entry);
-  debug('Entry saved:', entry._id);
-  return entry._id;
-}
-
-async function doPymol(filename, pdbEntry, options = {}) {
-  debug('Unzip file:', filename);
-  const data = await readFile(filename);
-  const buffer = await ungzip(data);
-
-  let buffers = await pymol(pdbEntry._id, buffer, config.pymol);
-  debug('Add image(s) and pdb as inline attachment');
-  if (!Array.isArray(buffers)) {
-    buffers = [buffers];
-  }
-  for (let i = 0; i < buffers.length; i++) {
-    pdbEntry._attachments[
-      `${config.pymol[i].width}x${config.pymol[i].height}.png`
-    ] = {
-      // eslint-disable-next-line camelcase -- CouchDB attachment field
-      content_type: 'image/png',
-      data: buffers[i].toString('Base64'),
-    };
-  }
-  if (buffer.length < MAX_BUFFER_LENGTH) {
-    pdbEntry._attachments[`${pdbEntry._id}.pdb1`] = {
-      // eslint-disable-next-line camelcase -- CouchDB attachment field
-      content_type: 'chemical/x-pdb',
-      data: buffer.toString('Base64'),
-    };
-  } else {
-    debug(`Not adding ${pdbEntry._id}.pdb1 to database (file is too big)`);
-  }
-  return saveToCouchDB(pdbEntry, options.pdb);
+/**
+ * Resolve the canonical on-disk path for the gzipped bio-assembly file of a
+ * given PDB id. Returns `null` when the file is not present.
+ * @param {string} pdbId - PDB id (any case).
+ * @returns {{ path: string, size: number } | null} Resolved path + size, or null.
+ */
+export function findAssemblyFile(pdbId) {
+  const lower = pdbId.toLowerCase();
+  const path = join(
+    config.bioAssembly.rsync.destination,
+    lower.slice(1, 3),
+    `${lower}.pdb1.gz`,
+  );
+  if (!existsSync(path)) return null;
+  const size = statSync(path).size;
+  return { path, size };
 }

@@ -6,7 +6,7 @@ import { formatInteger } from '../../shared/format.ts';
 import type { PdbHeaderInfo } from './parsePdbHeader.ts';
 
 interface PdbSummaryCardProps {
-  /** Parsed CouchDB document for the entry (title, formula, chains, ...). */
+  /** Parsed PDB document for the entry (title, formula, chains, ...). */
   doc: PdbDoc;
   /** Fields extracted client-side from the raw PDB header text. */
   header: PdbHeaderInfo;
@@ -15,10 +15,10 @@ interface PdbSummaryCardProps {
 /**
  * Compact information card describing one PDB entry: title, source organism,
  * experimental method, chain composition, and ligand list. Built from the
- * parsed CouchDB document plus a few extra fields (`source`, `classification`)
+ * parsed PDB document plus a few extra fields (`source`, `classification`)
  * extracted from the raw PDB header text.
  * @param props - Component props.
- * @param props.doc - Parsed CouchDB document for the entry.
+ * @param props.doc - Parsed PDB document for the entry.
  * @param props.header - Fields extracted from the raw PDB header text.
  * @returns Summary card React element.
  */

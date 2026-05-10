@@ -3,19 +3,32 @@
 # directory (typically created by the host as root), then drops to the
 # unprivileged `app` user before exec'ing the command. Mirrors the pattern
 # used by the official couchdb image.
+#
+# IMPORTANT: chown WITHOUT -R. We only need to make each subdirectory
+# itself writable by `app` (so it can create files inside). Existing
+# files inside data/pdb/ and data/pdb-assembly/ — possibly hundreds of
+# gigabytes of rsynced .gz archives owned by app from a previous run —
+# must NOT be re-chowned every container restart. Recursive chown over
+# the rsynced tree took 30+ minutes on a populated install and stalled
+# the boot sequence.
 set -e
 
 mkdir -p \
   /app/data/pdb \
   /app/data/pdb-assembly \
+  /app/data/pymol \
   /app/data/logs/pdb \
   /app/data/logs/bioAssembly \
   /app/data/sqlite3 \
   /app/data/ccd
-chown -R app:app \
+chown app:app \
+  /app/data \
   /app/data/pdb \
   /app/data/pdb-assembly \
+  /app/data/pymol \
   /app/data/logs \
+  /app/data/logs/pdb \
+  /app/data/logs/bioAssembly \
   /app/data/sqlite3 \
   /app/data/ccd
 

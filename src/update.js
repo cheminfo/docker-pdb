@@ -1,5 +1,5 @@
 // Synchronizes the rsynced PDB directory tree and ingests each file into
-// CouchDB as soon as it lands on disk (rather than at the end of rsync).
+// sqlite as soon as it lands on disk (rather than at the end of rsync).
 // Local files are never deleted, even when removed upstream.
 // Requires `rsync` to be installed.
 
@@ -12,19 +12,16 @@ import { parseArgs, promisify } from 'node:util';
 
 import { watch } from 'chokidar';
 import createDebug from 'debug';
-import Nano from 'nano';
 import Rsync from 'rsync';
 
 import * as common from './common.js';
 import getConfig from './config.js';
+import { recordRsyncHistory } from './db/upsertPdbEntry.js';
 
 const execFileAsync = promisify(execFile);
 
 const debug = createDebug('update');
 const config = getConfig();
-// eslint-disable-next-line new-cap -- nano factory is invoked as Nano(...)
-const nano = Nano(config.couch.fullUrl);
-const rsyncHistoryDb = nano.db.use('rsync-history');
 
 // Time chokidar waits with no size change before considering a file fully
 // written. rsync writes via temp+rename, so 2s is comfortably safe.
@@ -43,7 +40,7 @@ const { values: argv } = parseArgs({
 
 /**
  * Run an rsync pass against the wwPDB asymmetrical-unit and/or
- * biological-assembly archives, ingesting each file into CouchDB as soon as
+ * biological-assembly archives, ingesting each file into sqlite as soon as
  * it has been fully written. Without CLI flags both archives are synced.
  */
 export default async function update() {
@@ -82,7 +79,7 @@ export default async function update() {
 
 /**
  * Run rsync against `source -> destination` and ingest each `.gz` file into
- * CouchDB as soon as it has finished being written. Files removed upstream
+ * sqlite as soon as it has finished being written. Files removed upstream
  * are left untouched on disk (we do not pass `--delete` to rsync).
  * @param {string} source - rsync source spec (e.g. `host::module/path/`).
  * @param {string} destination - Local directory to sync into.
@@ -91,7 +88,7 @@ export default async function update() {
  * @param {string | undefined} historyDir - Optional directory to write a JSON
  *   summary of changes (`{deleted, updated}`) for this rsync run.
  * @param {'asymUnit' | 'bioAssembly'} type - Archive label used when recording
- *   the run in the `rsync-history` CouchDB database.
+ *   the run in the `rsync_history` sqlite table.
  */
 async function doRsync(
   source,
@@ -131,7 +128,7 @@ async function doRsync(
     }
   });
 
-  /* eslint-disable no-await-in-loop -- intentional sequential CouchDB writes */
+  /* eslint-disable no-await-in-loop -- intentional sequential sqlite writes */
   const workerDone = (async () => {
     while (true) {
       if (queue.length === 0) {
@@ -217,15 +214,25 @@ async function doRsync(
   debug('All queued files processed');
 
   const bytesOnDisk = await getDirectorySize(destination);
+  const finishedAt = new Date().toISOString();
+  const lastEntryId =
+    changed.updated.length > 0 ? changed.updated.toSorted().at(-1) : null;
 
-  await recordRsyncRun({
-    type,
-    startedAt,
-    finishedAt: new Date().toISOString(),
-    updated: changed.updated,
-    deleted: changed.deleted,
-    bytesOnDisk,
-  });
+  try {
+    await recordRsyncHistory({
+      type,
+      startedAt,
+      finishedAt,
+      durationMs: Date.parse(finishedAt) - Date.parse(startedAt),
+      updatedCount: changed.updated.length,
+      deletedCount: changed.deleted.length,
+      lastEntryId,
+      bytesOnDisk,
+    });
+    debug(`Recorded rsync-history row (${type}, ${finishedAt})`);
+  } catch (error) {
+    debug('Failed to record rsync-history row', error);
+  }
 }
 
 /**
@@ -244,37 +251,5 @@ async function getDirectorySize(directory) {
   } catch (error) {
     debug('Failed to compute directory size for', directory, error);
     return null;
-  }
-}
-
-/**
- * Append one document to the `rsync-history` database describing this rsync
- * run (timestamps, counts, and the lexicographically-largest updated PDB id
- * — used by the home page to preview the most recently imported entry).
- * Failures are logged and swallowed: a CouchDB blip must not abort the cron
- * loop or break the next rsync cycle.
- * @param {{type: 'asymUnit' | 'bioAssembly', startedAt: string,
- *   finishedAt: string, updated: string[], deleted: string[],
- *   bytesOnDisk: number | null}} run - Run summary.
- */
-async function recordRsyncRun(run) {
-  const lastEntryId =
-    run.updated.length > 0 ? run.updated.toSorted().at(-1) : null;
-  const doc = {
-    _id: run.finishedAt,
-    type: run.type,
-    startedAt: run.startedAt,
-    finishedAt: run.finishedAt,
-    durationMs: Date.parse(run.finishedAt) - Date.parse(run.startedAt),
-    updatedCount: run.updated.length,
-    deletedCount: run.deleted.length,
-    lastEntryId,
-    bytesOnDisk: run.bytesOnDisk,
-  };
-  try {
-    await rsyncHistoryDb.insert(doc);
-    debug(`Recorded rsync-history doc ${doc._id} (${run.type})`);
-  } catch (error) {
-    debug('Failed to record rsync-history doc', error);
   }
 }

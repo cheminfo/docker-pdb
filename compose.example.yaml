@@ -9,29 +9,9 @@ services:
     env_file:
       - .env
     depends_on:
-      - couchdb
       - pdb-api
     restart: unless-stopped
     pids_limit: 256
-    ulimits:
-      core: 0
-    logging:
-      driver: json-file
-      options:
-        max-size: '10m'
-        max-file: '3'
-
-  couchdb:
-    image: docker.io/couchdb:3.4
-    environment:
-      COUCHDB_USER: admin
-      COUCHDB_PASSWORD: ${COUCHDB_ADMIN_PASSWORD}
-    volumes:
-      - ./data/couchdb:/opt/couchdb/data
-    env_file:
-      - .env
-    restart: unless-stopped
-    pids_limit: 4096
     ulimits:
       core: 0
     logging:
@@ -45,8 +25,6 @@ services:
     #   docker compose up -d --build
     image: ghcr.io/cheminfo/pdb-quickview:latest
     build: .
-    depends_on:
-      - couchdb
     volumes:
       - ./data:/app/data
     env_file:
@@ -65,10 +43,10 @@ services:
     command: npm run cron
 
   pdb-api:
-    # Lightweight Fastify server backing the substructure-search API. Reads
-    # the SQLite ligands database written by node-pdb-sync; on first start
-    # it also seeds the database from the wwPDB Chemical Component
-    # Dictionary if the `ligands` table is empty.
+    # Fastify server backing the entire HTTP API (substructure search,
+    # parsed PDB metadata, stats aggregates, raw file streaming). On first
+    # start it seeds data/sqlite3/ligands.db from the wwPDB Chemical
+    # Component Dictionary if the `ligands` table is empty.
     # Use the released image by default. To build locally instead, run:
     #   docker compose up -d --build
     image: ghcr.io/cheminfo/pdb-quickview:latest

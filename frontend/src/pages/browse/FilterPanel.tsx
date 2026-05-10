@@ -18,7 +18,7 @@ interface FilterPanelProps {
   totalCount: number;
   /** Methods present in the database, with the doc count for each. */
   methodCounts: Array<[string, number]>;
-  /** DB-wide stats from CouchDB used to size the slider tracks. */
+  /** DB-wide stats used to size the slider tracks. */
   stats?: RangeStats;
   /** Current filter state. */
   filters: FilterState;

@@ -2,6 +2,7 @@ import type {
   CouchStatsResponse,
   CouchStatsValue,
   DatabaseInfo,
+  DatabaseInfoResponse,
   GroupedStatsResponse,
   LigandDetailResponse,
   LigandPdbsResponse,
@@ -12,7 +13,7 @@ import type {
   PdbDoc,
   PdbViewResponse,
   RsyncHistoryDoc,
-  RsyncHistoryViewResponse,
+  RsyncHistoryResponse,
   ViewResponse,
 } from './types.ts';
 
@@ -29,129 +30,132 @@ async function fetchJson<TResponse>(url: string): Promise<TResponse> {
   return response.json() as Promise<TResponse>;
 }
 
-/**
- * Fetch CouchDB info for the `pdb` database (counts, disk size).
- * @returns Promise resolving to the database info document.
- */
-export function fetchPdbInfo(): Promise<DatabaseInfo> {
-  return fetchJson<DatabaseInfo>('/pdb/');
+let databaseInfoPromise: Promise<DatabaseInfoResponse> | null = null;
+function getDatabaseInfo(): Promise<DatabaseInfoResponse> {
+  if (!databaseInfoPromise) {
+    databaseInfoPromise = fetchJson<DatabaseInfoResponse>('/v1/database/info');
+  }
+  return databaseInfoPromise;
 }
 
 /**
- * Fetch CouchDB info for the `pdb-bio-assembly` database.
- * @returns Promise resolving to the database info document.
+ * Fetch counts and disk size for the asymmetric-unit archive.
+ * @returns Promise resolving to the database info subset.
  */
-export function fetchAssemblyInfo(): Promise<DatabaseInfo> {
-  return fetchJson<DatabaseInfo>('/assembly/');
+export async function fetchPdbInfo(): Promise<DatabaseInfo> {
+  const info = await getDatabaseInfo();
+  return info.pdb;
 }
 
 /**
- * Fetch the grouped `byYear` reduce view from `_design/stats`.
+ * Fetch counts and disk size for the bio-assembly archive.
+ * @returns Promise resolving to the database info subset.
+ */
+export async function fetchAssemblyInfo(): Promise<DatabaseInfo> {
+  const info = await getDatabaseInfo();
+  return info.assembly;
+}
+
+/**
+ * Fetch the grouped `byYear` reduce: number of entries deposited per year.
  * @returns Promise resolving to the rows of the view, keyed by year.
  */
 export function fetchByYear(): Promise<ViewResponse<number>> {
-  return fetchJson<ViewResponse<number>>('/stats/byYear?group=true');
+  return fetchJson<ViewResponse<number>>('/v1/stats/byYear');
 }
 
 /**
- * Fetch the grouped `byExperiment` reduce view from `_design/stats`.
- * @returns Promise resolving to the rows of the view, keyed by experimental method.
+ * Fetch the grouped `byExperiment` reduce: number of entries per experimental method.
+ * @returns Promise resolving to the rows of the view, keyed by method name.
  */
 export function fetchByExperiment(): Promise<ViewResponse<string>> {
-  return fetchJson<ViewResponse<string>>('/stats/byExperiment?group=true');
+  return fetchJson<ViewResponse<string>>('/v1/stats/byExperiment');
 }
 
 /**
- * Fetch the curated `jsmol` view: PDB entries pre-filtered for student work
+ * Fetch the curated `jsmol` list: PDB entries pre-filtered for student work
  * (100–500 residues, ≥1 long helix, ≥1 long sheet, a small ligand). Returns
  * the full parsed document for each entry so the UI can filter and display
  * client-side.
  * @returns Promise resolving to the rows of the view with documents inlined.
  */
 export function fetchJsmolList(): Promise<PdbViewResponse> {
-  return fetchJson<PdbViewResponse>('/view/jsmol?include_docs=true');
+  return fetchJson<PdbViewResponse>('/v1/pdbs/jsmol');
 }
 
 /**
- * Fetch the grouped `aminoAcidFreq` reduce view: total residue count for each
+ * Fetch the grouped `aminoAcidFreq` reduce: total residue count for each
  * of the 20 standard amino-acid 3-letter codes across the whole DB.
  * @returns Promise resolving to a row per amino-acid code.
  */
 export function fetchAminoAcidFreq(): Promise<ViewResponse<string>> {
-  return fetchJson<ViewResponse<string>>('/stats/aminoAcidFreq?group=true');
+  return fetchJson<ViewResponse<string>>('/v1/stats/aminoAcidFreq');
 }
 
 /**
- * Fetch the grouped `nucleicBaseFreq` reduce view: total residue count for
+ * Fetch the grouped `nucleicBaseFreq` reduce: total residue count for
  * each DNA / RNA base across the whole DB.
  * @returns Promise resolving to a row per base code.
  */
 export function fetchNucleicBaseFreq(): Promise<ViewResponse<string>> {
-  return fetchJson<ViewResponse<string>>('/stats/nucleicBaseFreq?group=true');
+  return fetchJson<ViewResponse<string>>('/v1/stats/nucleicBaseFreq');
 }
 
 /**
- * Fetch the grouped `moleculeType` reduce view: number of entries per
+ * Fetch the grouped `moleculeType` reduce: number of entries per
  * molecule-type bucket (`protein`, `nucleic`, `hybrid`, `other`).
  * @returns Promise resolving to a row per molecule type.
  */
 export function fetchMoleculeType(): Promise<ViewResponse<string>> {
-  return fetchJson<ViewResponse<string>>('/stats/moleculeType?group=true');
+  return fetchJson<ViewResponse<string>>('/v1/stats/moleculeType');
 }
 
 /**
- * Fetch the grouped `modifiedResiduesHist` reduce view: number of entries
- * having exactly N modified residues, keyed by N.
+ * Fetch the grouped `modifiedResiduesHist` reduce: number of entries having
+ * exactly N modified residues, keyed by N.
  * @returns Promise resolving to a row per modified-residue count.
  */
 export function fetchModifiedResiduesHist(): Promise<ViewResponse<number>> {
-  return fetchJson<ViewResponse<number>>(
-    '/stats/modifiedResiduesHist?group=true',
-  );
+  return fetchJson<ViewResponse<number>>('/v1/stats/modifiedResiduesHist');
 }
 
 /**
- * Fetch the grouped `helixKindHist` reduce view: number of helices per PDB
- * `kind` code (1 = right-handed alpha, 5 = 3-10, etc.).
+ * Fetch the grouped `helixKindHist` reduce: number of helices per `kind` code.
  * @returns Promise resolving to a row per helix kind code.
  */
 export function fetchHelixKindHist(): Promise<ViewResponse<number>> {
-  return fetchJson<ViewResponse<number>>('/stats/helixKindHist?group=true');
+  return fetchJson<ViewResponse<number>>('/v1/stats/helixKindHist');
 }
 
 /**
- * Fetch the grouped `helixLengthHist` reduce view: number of helices of each
- * residue-length value.
+ * Fetch the grouped `helixLengthHist` reduce: number of helices per length.
  * @returns Promise resolving to a row per helix length.
  */
 export function fetchHelixLengthHist(): Promise<ViewResponse<number>> {
-  return fetchJson<ViewResponse<number>>('/stats/helixLengthHist?group=true');
+  return fetchJson<ViewResponse<number>>('/v1/stats/helixLengthHist');
 }
 
 /**
- * Fetch the grouped `sheetLengthHist` reduce view: number of beta-sheet
- * strands of each residue-length value.
+ * Fetch the grouped `sheetLengthHist` reduce: number of beta strands per length.
  * @returns Promise resolving to a row per sheet strand length.
  */
 export function fetchSheetLengthHist(): Promise<ViewResponse<number>> {
-  return fetchJson<ViewResponse<number>>('/stats/sheetLengthHist?group=true');
+  return fetchJson<ViewResponse<number>>('/v1/stats/sheetLengthHist');
 }
 
 /**
- * Fetch the grouped `helicesVsSheets` reduce view: number of entries with each
+ * Fetch the grouped `helicesVsSheets` reduce: number of entries with each
  * `[nbHelices, nbSheets]` pair, used to render a 2-D heatmap.
  * @returns Promise resolving to a row per `[nbHelices, nbSheets]` pair.
  */
 export function fetchHelicesVsSheets(): Promise<
   ViewResponse<[number, number]>
 > {
-  return fetchJson<ViewResponse<[number, number]>>(
-    '/stats/helicesVsSheets?group=true',
-  );
+  return fetchJson<ViewResponse<[number, number]>>('/v1/stats/helicesVsSheets');
 }
 
 /**
- * Fetch the grouped `secondaryStructurePresence` reduce view: number of
+ * Fetch the grouped `secondaryStructurePresence` reduce: number of
  * entries in each presence bucket (`none`, `helices-only`, `sheets-only`,
  * `mixed`).
  * @returns Promise resolving to a row per presence bucket.
@@ -160,105 +164,99 @@ export function fetchSecondaryStructurePresence(): Promise<
   ViewResponse<string>
 > {
   return fetchJson<ViewResponse<string>>(
-    '/stats/secondaryStructurePresence?group=true',
+    '/v1/stats/secondaryStructurePresence',
   );
 }
 
 /**
- * Fetch the grouped `residuesHistogram` reduce view: number of entries whose
+ * Fetch the grouped `residuesHistogram` reduce: number of entries whose
  * total residue count falls into each pre-defined bucket (lower bound).
  * @returns Promise resolving to a row per residues-count bucket.
  */
 export function fetchResiduesHistogram(): Promise<ViewResponse<number>> {
-  return fetchJson<ViewResponse<number>>('/stats/residuesHistogram?group=true');
+  return fetchJson<ViewResponse<number>>('/v1/stats/residuesHistogram');
 }
 
 /**
- * Fetch the grouped `chainsHistogram` reduce view: number of entries with
+ * Fetch the grouped `chainsHistogram` reduce: number of entries with
  * exactly N chains, keyed by N.
  * @returns Promise resolving to a row per chains count.
  */
 export function fetchChainsHistogram(): Promise<ViewResponse<number>> {
-  return fetchJson<ViewResponse<number>>('/stats/chainsHistogram?group=true');
+  return fetchJson<ViewResponse<number>>('/v1/stats/chainsHistogram');
 }
 
 /**
- * Fetch the (un-grouped) `residuesPerChainStats` reduce view: min / max / mean
+ * Fetch the (un-grouped) `residuesPerChainStats` reduce: min / max / mean
  * residues-per-chain across all entries.
  * @returns Promise resolving to the `_stats` value.
  */
 export function fetchResiduesPerChainStats(): Promise<CouchStatsResponse> {
-  return fetchJson<CouchStatsResponse>('/stats/residuesPerChainStats');
+  return fetchJson<CouchStatsResponse>('/v1/stats/residuesPerChainStats');
 }
 
 /**
- * Fetch the grouped `ligandFrequency` reduce view: total occurrence count of
+ * Fetch the grouped `ligandFrequency` reduce: total occurrence count of
  * each non-water ligand (HET code) across the whole DB.
  * @returns Promise resolving to a row per ligand label.
  */
 export function fetchLigandFrequency(): Promise<ViewResponse<string>> {
-  return fetchJson<ViewResponse<string>>('/stats/ligandFrequency?group=true');
+  return fetchJson<ViewResponse<string>>('/v1/stats/ligandFrequency');
 }
 
 /**
- * Fetch the grouped `ligandMwHistogram` reduce view: number of ligand
+ * Fetch the grouped `ligandMwHistogram` reduce: number of ligand
  * occurrences per molecular-weight bucket (lower bound, in g/mol).
  * @returns Promise resolving to a row per MW bucket.
  */
 export function fetchLigandMwHistogram(): Promise<ViewResponse<number>> {
-  return fetchJson<ViewResponse<number>>('/stats/ligandMwHistogram?group=true');
+  return fetchJson<ViewResponse<number>>('/v1/stats/ligandMwHistogram');
 }
 
 /**
- * Fetch the grouped `ligandsByYear` reduce view: per-year `_stats` of the
+ * Fetch the grouped `ligandsByYear` reduce: per-year `_stats` of the
  * number of (non-water) ligands per entry.
  * @returns Promise resolving to a row per year.
  */
 export function fetchLigandsByYear(): Promise<GroupedStatsResponse<number>> {
-  return fetchJson<GroupedStatsResponse<number>>(
-    '/stats/ligandsByYear?group=true',
-  );
+  return fetchJson<GroupedStatsResponse<number>>('/v1/stats/ligandsByYear');
 }
 
 /**
- * Fetch the grouped `iepHistogram` reduce view: number of entries per
+ * Fetch the grouped `iepHistogram` reduce: number of entries per
  * isoelectric-point bucket (0.5-wide bins, keyed by lower bound).
  * @returns Promise resolving to a row per IEP bucket.
  */
 export function fetchIepHistogram(): Promise<ViewResponse<number>> {
-  return fetchJson<ViewResponse<number>>('/stats/iepHistogram?group=true');
+  return fetchJson<ViewResponse<number>>('/v1/stats/iepHistogram');
 }
 
 /**
- * Fetch the grouped `ecClasses` reduce view: number of entries having at
+ * Fetch the grouped `ecClasses` reduce: number of entries having at
  * least one chain in each of the 7 top-level Enzyme-Commission classes
  * (1 oxidoreductases, 2 transferases, …, 7 translocases).
  * @returns Promise resolving to a row per EC top-level class.
  */
 export function fetchEcClasses(): Promise<ViewResponse<string>> {
-  return fetchJson<ViewResponse<string>>('/stats/ecClasses?group=true');
+  return fetchJson<ViewResponse<string>>('/v1/stats/ecClasses');
 }
 
 /**
- * Fetch the grouped `residuesByYear` reduce view: per-year `_stats` of the
+ * Fetch the grouped `residuesByYear` reduce: per-year `_stats` of the
  * total number of residues per entry.
  * @returns Promise resolving to a row per year.
  */
 export function fetchResiduesByYear(): Promise<GroupedStatsResponse<number>> {
-  return fetchJson<GroupedStatsResponse<number>>(
-    '/stats/residuesByYear?group=true',
-  );
+  return fetchJson<GroupedStatsResponse<number>>('/v1/stats/residuesByYear');
 }
 
 /**
- * Fetch the grouped `methodByYear` reduce view: number of entries per
+ * Fetch the grouped `methodByYear` reduce: number of entries per
  * `[year, experiment]` pair, used to render a stacked-by-method timeline.
  * @returns Promise resolving to a row per `[year, experiment]` pair.
  */
 export function fetchMethodByYear(): Promise<ViewResponse<[number, string]>> {
-  return fetchJson<ViewResponse<[number, string]>>(
-    '/stats/methodByYear?group=true',
-  );
+  return fetchJson<ViewResponse<[number, string]>>('/v1/stats/methodByYear');
 }
 
 /** DB-wide min/max/avg statistics for the numeric filter fields. */
@@ -271,18 +269,16 @@ export interface RangeStats {
 }
 
 /**
- * Fetch DB-wide min/max/count statistics for every numeric filter field. Each
- * value comes from a `_stats` reduce view in `_design/stats` and reflects the
- * exact range of values currently stored in the database.
+ * Fetch DB-wide min/max/count statistics for every numeric filter field.
  * @returns Promise resolving to one `CouchStatsValue` per field.
  */
 export async function fetchRangeStats(): Promise<RangeStats> {
   const [helices, sheets, ligands, residues, year] = await Promise.all([
-    fetchJson<CouchStatsResponse>('/stats/helicesStats'),
-    fetchJson<CouchStatsResponse>('/stats/sheetsStats'),
-    fetchJson<CouchStatsResponse>('/stats/ligandsStats'),
-    fetchJson<CouchStatsResponse>('/stats/residuesStats'),
-    fetchJson<CouchStatsResponse>('/stats/yearStats'),
+    fetchJson<CouchStatsResponse>('/v1/stats/helicesStats'),
+    fetchJson<CouchStatsResponse>('/v1/stats/sheetsStats'),
+    fetchJson<CouchStatsResponse>('/v1/stats/ligandsStats'),
+    fetchJson<CouchStatsResponse>('/v1/stats/residuesStats'),
+    fetchJson<CouchStatsResponse>('/v1/stats/yearStats'),
   ]);
   return {
     helices: helices.rows[0]?.value ?? emptyStats(),
@@ -303,7 +299,7 @@ function emptyStats(): CouchStatsValue {
  * @returns Promise resolving to the PDB file as a string.
  */
 export async function fetchPdbText(pdbId: string): Promise<string> {
-  const response = await fetch(`/pdb/${pdbId}/${pdbId}.pdb`);
+  const response = await fetch(`/v1/pdbs/${encodeURIComponent(pdbId)}/raw`);
   if (!response.ok) {
     throw new Error(`${response.status} ${response.statusText}`);
   }
@@ -311,49 +307,41 @@ export async function fetchPdbText(pdbId: string): Promise<string> {
 }
 
 /**
- * Fetch the parsed CouchDB document for a given PDB entry. Returns the same
- * record produced by the ingestion parser (title, year, experiment, formula,
- * chains, etc.), without attachments.
+ * Fetch the parsed metadata document for a given PDB entry.
  * @param pdbId - 4-character PDB identifier (e.g. `4YYR`).
  * @returns Promise resolving to the parsed PDB document.
  */
 export function fetchPdbDoc(pdbId: string): Promise<PdbDoc> {
-  return fetchJson<PdbDoc>(`/pdb/${pdbId}`);
+  return fetchJson<PdbDoc>(`/v1/pdbs/${encodeURIComponent(pdbId)}`);
 }
 
 /**
- * Fetch the most recent rsync-history record for the asymmetric-unit archive,
- * which carries the timestamp, the count of imported files, and the id of the
- * latest imported entry to be previewed on the home page.
- * @returns Promise resolving to the most recent run, or `null` if no run has
- *   been recorded yet.
+ * Fetch the most recent rsync-history record for the asymmetric-unit archive.
+ * @returns Promise resolving to the most recent run, or `null` if none exists.
  */
 export async function fetchLastAsymRsync(): Promise<RsyncHistoryDoc | null> {
-  const response = await fetchJson<RsyncHistoryViewResponse>(
-    '/rsync-history/_design/history/_view/asymByDate?descending=true&limit=1&include_docs=true',
+  const response = await fetchJson<RsyncHistoryResponse>(
+    '/v1/rsync-history?type=asymUnit&limit=1',
   );
-  return response.rows[0]?.doc ?? null;
+  return response.rows[0] ?? null;
 }
 
 /**
- * Fetch the most recent rsync-history record for the biological-assembly
- * archive. Used on the home page to surface the on-disk size of the raw
- * `.pdb1.gz` files alongside the asymmetric-unit numbers.
- * @returns Promise resolving to the most recent run, or `null` if no run has
- *   been recorded yet.
+ * Fetch the most recent rsync-history record for the bio-assembly archive.
+ * @returns Promise resolving to the most recent run, or `null` if none exists.
  */
 export async function fetchLastBioAssemblyRsync(): Promise<RsyncHistoryDoc | null> {
-  const response = await fetchJson<RsyncHistoryViewResponse>(
-    '/rsync-history/_design/history/_view/bioAssemblyByDate?descending=true&limit=1&include_docs=true',
+  const response = await fetchJson<RsyncHistoryResponse>(
+    '/v1/rsync-history?type=bioAssembly&limit=1',
   );
-  return response.rows[0]?.doc ?? null;
+  return response.rows[0] ?? null;
 }
 
 /* ------------------------------------------------------------------------ *
- * Mango / `_find` query layer
+ * /v1/pdbs search (replaces CouchDB Mango `_find`)
  * ------------------------------------------------------------------------ */
 
-/** A simple optional [min, max] range used to build Mango selectors. */
+/** A simple optional [min, max] range used to build search queries. */
 export interface NumericRange {
   min: number | null;
   max: number | null;
@@ -369,100 +357,54 @@ export interface FindParams {
   residues?: NumericRange;
   year?: NumericRange;
   /**
-   * Free-text query matched against `title` via case-insensitive regex.
-   * Whitespace splits the query into tokens; every token must match
-   * (anywhere, in any order).
+   * Free-text query matched against the `title` FTS5 column. Whitespace
+   * splits the query into AND-ed tokens.
    */
   query?: string;
 }
 
-/** Response of a `_find` query. */
+/** Response of a `_find`-style query. */
 export interface FindResponse<TDoc> {
   docs: TDoc[];
-  bookmark?: string;
-  warning?: string;
 }
 
 const PAGE_LIMIT = 200;
 
-/**
- * Build a Mango selector from a `FindParams` object. Only fields with
- * actual constraints are included so CouchDB can pick the best index.
- * @param params - Filter parameters.
- * @returns Mango selector object suitable for `_find`.
- */
-function buildSelector(params: FindParams): Record<string, unknown> {
-  const selector: Record<string, unknown> = {};
-  if (params.methods && params.methods.length > 0) {
-    selector.experiment = { $in: params.methods };
-  }
-  addRange(selector, 'nbHelices', params.helices);
-  addRange(selector, 'nbSheets', params.sheets);
-  addRange(selector, 'nbLigands', params.ligands);
-  addRange(selector, 'nbResidues', params.residues);
-  addRange(selector, 'year', params.year);
-  const trimmedQuery = params.query?.trim();
-  if (trimmedQuery) {
-    const tokens = trimmedQuery.split(/\s+/);
-    if (tokens.length === 1) {
-      selector.title = { $regex: `(?i)${escapeRegex(trimmedQuery)}` };
-    } else {
-      selector.$and = tokens.map((token) => ({
-        title: { $regex: `(?i)${escapeRegex(token)}` },
-      }));
-    }
-  }
-  // Mango requires *some* selector. When nothing else is set, force a
-  // wildcard so the query still runs.
-  if (Object.keys(selector).length === 0) {
-    selector._id = { $gt: null };
-  }
-  return selector;
-}
-
-function addRange(
-  selector: Record<string, unknown>,
+function appendRange(
+  params: URLSearchParams,
   field: string,
   range: NumericRange | undefined,
-) {
+): void {
   if (!range) return;
-  const constraints: Record<string, number> = {};
-  if (typeof range.min === 'number') constraints.$gte = range.min;
-  if (typeof range.max === 'number') constraints.$lte = range.max;
-  if (Object.keys(constraints).length > 0) selector[field] = constraints;
-}
-
-function escapeRegex(value: string): string {
-  return value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+  if (typeof range.min === 'number') {
+    params.set(`${field}Min`, String(range.min));
+  }
+  if (typeof range.max === 'number') {
+    params.set(`${field}Max`, String(range.max));
+  }
 }
 
 /**
- * Run a Mango `_find` query against the `pdb` database. Returns up to
- * `PAGE_LIMIT` docs and the bookmark needed to fetch the next page.
+ * Run a search query against the parsed-PDB metadata. Returns up to
+ * `PAGE_LIMIT` docs in id order.
  * @param params - Filter parameters.
- * @param bookmark - Optional bookmark from a previous `findDocuments` call.
- * @returns Promise resolving to the matching docs and a paging bookmark.
+ * @returns Promise resolving to the matching docs.
  */
 export async function findDocuments<TDoc>(
   params: FindParams,
-  bookmark?: string,
 ): Promise<FindResponse<TDoc>> {
-  const body = {
-    selector: buildSelector(params),
-    limit: PAGE_LIMIT,
-    bookmark,
-    // Sort by `_id` so pages are stable; CouchDB skips this if no matching
-    // index covers it, which is fine — the bookmark handles ordering.
-  };
-  const response = await fetch('/find', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!response.ok) {
-    throw new Error(`${response.status} ${response.statusText}`);
+  const queryParams = new URLSearchParams();
+  queryParams.set('limit', String(PAGE_LIMIT));
+  if (params.methods && params.methods.length > 0) {
+    queryParams.set('methods', params.methods.join(','));
   }
-  return response.json() as Promise<FindResponse<TDoc>>;
+  appendRange(queryParams, 'helices', params.helices);
+  appendRange(queryParams, 'sheets', params.sheets);
+  appendRange(queryParams, 'ligands', params.ligands);
+  appendRange(queryParams, 'residues', params.residues);
+  appendRange(queryParams, 'year', params.year);
+  if (params.query?.trim()) queryParams.set('q', params.query.trim());
+  return fetchJson<FindResponse<TDoc>>(`/v1/pdbs?${queryParams.toString()}`);
 }
 
 /**
@@ -471,74 +413,33 @@ export async function findDocuments<TDoc>(
  *   `[nbCis, nbTrans, nbTwisted, nbPeptideBonds]` tuple summed over every entry.
  */
 export function fetchOmegaSummary(): Promise<OmegaSummaryResponse> {
-  return fetchJson<OmegaSummaryResponse>('/stats/omegaSummary');
+  return fetchJson<OmegaSummaryResponse>('/v1/stats/omegaSummary');
 }
 
 /**
  * Fetch ω-bond totals broken down by deposition year.
- * @returns Promise resolving to one row per year, value =
- *   `[nbCis, nbTrans, nbTwisted, nbPeptideBonds]` summed for that year.
+ * @returns Promise resolving to one row per year.
  */
 export function fetchOmegaByYear(): Promise<OmegaByYearResponse> {
-  return fetchJson<OmegaByYearResponse>('/stats/omegaByYear?group_level=1');
+  return fetchJson<OmegaByYearResponse>('/v1/stats/omegaByYear');
 }
 
 /**
  * Fetch the per-pair `[nbCis, nbTotal]` tuples for every observed
  * `[residue1, residue2]` peptide bond, optionally restricted to a year range.
- * The heatmap divides cis/total to obtain P(cis) per pair.
- * @param yearRange - Optional `[minYear, maxYear]` inclusive bounds. When
- *   omitted, the unrestricted `pairFrequency` view is queried.
+ * @param yearRange - Optional `[minYear, maxYear]` inclusive bounds.
  * @returns Promise resolving to one row per pair.
  */
 export function fetchPairFrequency(
   yearRange?: [number, number],
 ): Promise<PairFrequencyResponse> {
   if (!yearRange) {
-    return fetchJson<PairFrequencyResponse>('/stats/pairFrequency?group=true');
+    return fetchJson<PairFrequencyResponse>('/v1/stats/pairFrequency');
   }
-  const [minYear, maxYear] = yearRange;
-  const start = encodeURIComponent(JSON.stringify([minYear]));
-  const end = encodeURIComponent(JSON.stringify([maxYear, {}, {}]));
-  return fetchAndCollapsePairsByYear(
-    `/stats/pairFrequencyByYear?group_level=3&start_key=${start}&end_key=${end}`,
+  const [fromYear, toYear] = yearRange;
+  return fetchJson<PairFrequencyResponse>(
+    `/v1/stats/pairFrequency?fromYear=${fromYear}&toYear=${toYear}`,
   );
-}
-
-/**
- * Fetch the `pairFrequencyByYear` view at `group_level=3` and collapse the
- * `[year, r1, r2]` keys to `[r1, r2]` summed across years, so the caller sees
- * the same shape as the unrestricted `pairFrequency` view.
- * @param url - View URL (must already contain `group_level=3` and key bounds).
- * @returns Pair-frequency response keyed by `[r1, r2]`.
- */
-async function fetchAndCollapsePairsByYear(
-  url: string,
-): Promise<PairFrequencyResponse> {
-  const raw = await fetchJson<{
-    rows: Array<{
-      key: [number, string, string];
-      value: [number, number];
-    }>;
-  }>(url);
-  const collapsed = new Map<string, [number, number]>();
-  for (const row of raw.rows) {
-    const [, residue1, residue2] = row.key;
-    const mapKey = `${residue1}\t${residue2}`;
-    const [cis, total] = row.value;
-    const previous = collapsed.get(mapKey);
-    if (previous) {
-      previous[0] += cis;
-      previous[1] += total;
-    } else {
-      collapsed.set(mapKey, [cis, total]);
-    }
-  }
-  const rows = Array.from(collapsed.entries()).map(([mapKey, value]) => {
-    const [residue1, residue2] = mapKey.split('\t') as [string, string];
-    return { key: [residue1, residue2] as [string, string], value };
-  });
-  return { rows };
 }
 
 /**
@@ -559,8 +460,6 @@ export function fetchLigandSearch(
 
 /**
  * Fetch the canonical structure rows for a specific list of ligand codes.
- * Used by the browse-page ligand table to render a 2D structure column
- * with a single round-trip per PDB.
  * @param codes - 3-letter chemical-component codes.
  * @returns Matching ligands (order is not guaranteed).
  */

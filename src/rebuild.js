@@ -1,5 +1,7 @@
-// Rebuilds the database based on the rsynced directory.
-// Resends attachments and values computed by the parser.
+// Rebuilds the sqlite database from the already-rsynced directory. The raw
+// `.gz` archives under `data/pdb/` and `data/pdb-assembly/` are the only
+// source of truth, so a fresh sqlite file (or a wiped one) can be fully
+// reconstructed without re-downloading anything from the wwPDB.
 
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,6 +12,7 @@ import { glob } from 'glob';
 
 import * as common from './common.js';
 import getConfig from './config.js';
+import { getLigandsDB } from './db/getDB.js';
 
 const debug = createDebug('pdb-sync:rebuild');
 const config = getConfig();
@@ -85,13 +88,25 @@ function getAssemblyFiles() {
   return getFiles(config.bioAssembly.rsync.destination + pattern);
 }
 
+/**
+ * Rebuild every asymmetrical-unit row from the local `data/pdb/` tree.
+ * Idempotent: replaces existing rows in-place.
+ * @returns {Promise<void>}
+ */
 export async function pdb() {
+  await getLigandsDB();
   const files = await getPdbFiles();
   debug(`Pdb database: about to process ${files.length} files.`);
   await common.processPdbs(files);
 }
 
+/**
+ * Rebuild every biological-assembly row (and re-render PyMol PNGs that are
+ * missing on disk) from the local `data/pdb-assembly/` tree.
+ * @returns {Promise<void>}
+ */
 export async function assembly() {
+  await getLigandsDB();
   const files = await getAssemblyFiles();
   debug(`Pdb bio assembly database: about to process ${files.length} files.`);
   await common.processPdbAssemblies(files);

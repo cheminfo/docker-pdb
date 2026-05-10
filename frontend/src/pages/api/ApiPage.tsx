@@ -13,8 +13,8 @@ export default function ApiPage() {
         <h1>HTTP API</h1>
         <p>
           All endpoints are read-only (<code>GET</code>/<code>HEAD</code>) and
-          proxied to CouchDB by nginx. CORS is open so any browser can hit them
-          directly.
+          served by the Fastify backend. CORS is open so any browser can hit
+          them directly.
         </p>
       </header>
       <EndpointList />

@@ -8,6 +8,8 @@ let compounds;
 let compoundsArray;
 let helices;
 let sheets;
+let ligandInstances;
+let ligandInstanceMap;
 
 const aa = {
   ALA: true,
@@ -143,6 +145,8 @@ export function parse(pdb) {
   helices = [];
   sheets = [];
   compoundsArray = [];
+  ligandInstances = [];
+  ligandInstanceMap = new Map();
   lines = pdb.split(/[\r\n]/);
   result = {
     chain: {},
@@ -150,6 +154,7 @@ export function parse(pdb) {
     formula: [],
     helices,
     sheets,
+    ligandInstances,
     nbModifiedResidues: 0,
   };
 
@@ -180,6 +185,8 @@ export function parse(pdb) {
       addSheet(line);
     } else if (field === 'MODRES') {
       addModres();
+    } else if (field === 'HETATM') {
+      addHetatm(line);
     }
   }
 
@@ -191,6 +198,41 @@ export function parse(pdb) {
 
 function addModres() {
   result.nbModifiedResidues++;
+}
+
+/**
+ * Parse a single HETATM record and append its coordinates to the matching
+ * ligand-instance bucket keyed by (resName, chain, resSeq, iCode). Water
+ * is skipped (matches the existing FORMUL filter), and only the primary
+ * conformation is kept — atoms with an alternate-location indicator other
+ * than blank or `A` are ignored.
+ * @param {string} line - Raw HETATM line from the PDB.
+ */
+function addHetatm(line) {
+  const code = line.slice(17, 20).trim();
+  if (!code || code === 'HOH') return;
+  const altLoc = line.slice(16, 17);
+  if (altLoc !== ' ' && altLoc !== '' && altLoc !== 'A') return;
+  const x = Number.parseFloat(line.slice(30, 38));
+  const y = Number.parseFloat(line.slice(38, 46));
+  const z = Number.parseFloat(line.slice(46, 54));
+  if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return;
+
+  const chain = line.slice(21, 22).trim();
+  const resSeq = Number.parseInt(line.slice(22, 26), 10);
+  if (!Number.isFinite(resSeq)) return;
+  const iCode = line.slice(26, 27).trim();
+  const name = line.slice(12, 16).trim();
+  const element = line.slice(76, 78).trim();
+
+  const key = `${code}|${chain}|${resSeq}|${iCode}`;
+  let instance = ligandInstanceMap.get(key);
+  if (!instance) {
+    instance = { code, chain, resSeq, iCode, atoms: [] };
+    ligandInstanceMap.set(key, instance);
+    ligandInstances.push(instance);
+  }
+  instance.atoms.push({ name, element, x, y, z });
 }
 
 function addHelix(line) {

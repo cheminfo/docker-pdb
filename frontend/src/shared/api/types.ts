@@ -1,36 +1,34 @@
-/* eslint-disable @typescript-eslint/naming-convention -- CouchDB API uses snake_case field names */
+/* eslint-disable @typescript-eslint/naming-convention -- a few legacy CouchDB-shaped fields are preserved for chart compatibility */
 
-/** CouchDB database info subset returned by `GET /pdb/` and `GET /assembly/`. */
+/** Counts and disk size for one of the two archives, exposed by `/v1/database/info`. */
 export interface DatabaseInfo {
-  /** Number of documents in the database. */
+  /** Number of entries in the archive. */
   doc_count?: number;
-  /**
-   * Total disk space used by the database in bytes (CouchDB <3.0 field).
-   * @default undefined
-   */
-  disk_size?: number;
-  /**
-   * Sizes object exposed by CouchDB ≥3.0.
-   * @default undefined
-   */
+  /** Sizes object (file = total bytes on disk). */
   sizes?: {
     /** Total file size on disk in bytes. */
     file?: number;
   };
 }
 
-/** A single row returned by a CouchDB reduce view with `?group=true`. */
+/** Combined response of `GET /v1/database/info`. */
+export interface DatabaseInfoResponse {
+  pdb: DatabaseInfo;
+  assembly: DatabaseInfo;
+}
+
+/** A single row returned by a grouped stats query. */
 export interface ViewRow<TKey> {
   key: TKey;
   value: number;
 }
 
-/** Response wrapper returned by CouchDB view queries. */
+/** Response wrapper for grouped stats queries. */
 export interface ViewResponse<TKey> {
   rows: Array<ViewRow<TKey>>;
 }
 
-/** Value object returned by CouchDB's built-in `_stats` reduce. */
+/** `_stats`-shaped reduce result. */
 export interface CouchStatsValue {
   sum: number;
   count: number;
@@ -39,12 +37,12 @@ export interface CouchStatsValue {
   sumsqr: number;
 }
 
-/** Response of a `_stats` reduce view called without `?group=true`. */
+/** Response of an un-grouped `_stats` query. */
 export interface CouchStatsResponse {
   rows: Array<{ key: null; value: CouchStatsValue }>;
 }
 
-/** Response of a `_stats` reduce view with `?group=true`, keyed by `TKey`. */
+/** Response of a grouped `_stats` query, keyed by `TKey`. */
 export interface GroupedStatsResponse<TKey> {
   rows: Array<{ key: TKey; value: CouchStatsValue }>;
 }
@@ -83,10 +81,9 @@ export interface PdbChain {
   iep?: number;
 }
 
-/** Parsed PDB document stored in CouchDB. */
+/** Parsed PDB document hydrated from sqlite by `/v1/pdbs/:id`. */
 export interface PdbDoc {
   _id: string;
-  _rev: string;
   title: string;
   year?: number;
   experiment?: string;
@@ -102,7 +99,7 @@ export interface PdbDoc {
   residueStats?: Record<string, number>;
 }
 
-/** A row of `_view/jsmol?include_docs=true`. */
+/** A row of `/v1/pdbs/jsmol`. */
 export interface PdbViewRow {
   id: string;
   key: null;
@@ -110,7 +107,7 @@ export interface PdbViewRow {
   doc: PdbDoc;
 }
 
-/** Response of `_view/jsmol?include_docs=true`. */
+/** Response of `/v1/pdbs/jsmol`. */
 export interface PdbViewResponse {
   total_rows: number;
   offset: number;
@@ -118,44 +115,41 @@ export interface PdbViewResponse {
 }
 
 /**
- * Tuple emitted by the `omegaSummary` / `omegaByYear` views:
+ * Tuple emitted by the omega summary / by-year endpoints:
  * `[nbCis, nbTrans, nbTwisted, nbPeptideBonds]`.
  */
 export type OmegaTuple = [number, number, number, number];
 
-/** Response of the `omegaSummary` view (one row, key = null). */
+/** Response of `/v1/stats/omegaSummary`. */
 export interface OmegaSummaryResponse {
   rows: Array<{ key: null; value: OmegaTuple }>;
 }
 
-/** Response of the `omegaByYear` view, grouped on the year. */
+/** Response of `/v1/stats/omegaByYear`. */
 export interface OmegaByYearResponse {
   rows: Array<{ key: number; value: OmegaTuple }>;
 }
 
 /**
- * Response of `pairFrequency` (and the by-year collapsed variant), grouped by
- * `[residue1, residue2]`. Value is a `[nbCis, nbTotal]` tuple summed across
- * every document — the heatmap divides them to obtain P(cis) per pair.
+ * Response of `/v1/stats/pairFrequency`. Value is a `[nbCis, nbTotal]` tuple
+ * summed across every entry — heatmaps divide them to obtain P(cis) per pair.
  */
 export interface PairFrequencyResponse {
   rows: Array<{ key: [string, string]; value: [number, number] }>;
 }
 
-/** Response of `twistedPairFrequency`, grouped by `[residue1, residue2]`. */
+/** Response of `/v1/stats/twistedPairFrequency`. */
 export interface PairCountResponse {
   rows: Array<{ key: [string, string]; value: number }>;
 }
 
-/** A single rsync-run document stored in the `rsync-history` database. */
+/** A single rsync-run row exposed by `/v1/rsync-history`. */
 export interface RsyncHistoryDoc {
-  _id: string;
-  _rev: string;
   /** Which archive was rsynced. */
   type: 'asymUnit' | 'bioAssembly';
   /** ISO timestamp when the rsync started. */
   startedAt: string;
-  /** ISO timestamp when the rsync finished (matches `_id`). */
+  /** ISO timestamp when the rsync finished. */
   finishedAt: string;
   /** Total rsync duration in milliseconds. */
   durationMs: number;
@@ -171,26 +165,15 @@ export interface RsyncHistoryDoc {
   lastEntryId: string | null;
   /**
    * Total apparent size of the rsynced archive directory at the end of the
-   * run, in bytes. `null` (or missing on older docs) when `du` failed or the
-   * field had not yet been recorded.
+   * run, in bytes, or `null` when `du` failed.
    * @default null
    */
   bytesOnDisk?: number | null;
 }
 
-/** A row of `_design/history/_view/asymByDate?include_docs=true`. */
-export interface RsyncHistoryRow {
-  id: string;
-  key: string;
-  value: null;
-  doc: RsyncHistoryDoc;
-}
-
-/** Response of `_design/history/_view/*ByDate?include_docs=true`. */
-export interface RsyncHistoryViewResponse {
-  total_rows: number;
-  offset: number;
-  rows: RsyncHistoryRow[];
+/** Response of `/v1/rsync-history`. */
+export interface RsyncHistoryResponse {
+  rows: RsyncHistoryDoc[];
 }
 
 /** One ligand row returned by the substructure-search API. */

@@ -21,8 +21,8 @@ import SheetLengthChart from './SheetLengthChart.tsx';
 
 /**
  * Page rendered at `/stats`: 20 charts grouped into five sections that mine
- * the parsed-PDB metadata stored in CouchDB. Each chart fetches its own
- * grouped reduce view from `/stats/<view>?group=true`.
+ * the parsed-PDB metadata stored in SQLite. Each chart fetches its own
+ * aggregated view from `/v1/stats/<view>`.
  * @returns Stats-page React element.
  */
 export default function StatsPage() {
@@ -31,10 +31,10 @@ export default function StatsPage() {
       <header>
         <h1>Statistics</h1>
         <p>
-          Twenty charts mining the parsed-PDB metadata stored in CouchDB —
+          Twenty charts mining the parsed-PDB metadata stored in SQLite —
           composition, secondary structure, size, ligands, biochemistry, and
-          deposition trends. Each chart is computed by a CouchDB reduce view and
-          updates as new entries land.
+          deposition trends. Each chart is computed by a single grouped SQL
+          query and updates as new entries land.
         </p>
       </header>
 

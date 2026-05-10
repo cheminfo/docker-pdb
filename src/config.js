@@ -7,38 +7,29 @@ const config = JSON.parse(
 
 let fullConfig = null;
 
+/**
+ * Load the runtime configuration: rsync destinations, PyMol render sizes,
+ * and the on-disk PyMol output directory. The CouchDB section was removed
+ * when the project switched to sqlite-only.
+ *
+ * `DATA_DIR` overrides every absolute path under `data/` so the same image
+ * can run with `data/` mounted at any location.
+ * @returns {object} Resolved configuration.
+ */
 export default function getConfig() {
   if (fullConfig) return fullConfig;
 
-  if (process.env.COUCHDB_ADMIN_PASSWORD) {
-    config.couch.password = process.env.COUCHDB_ADMIN_PASSWORD;
-  }
-  if (process.env.COUCHDB_HOST) {
-    const url = new URL(config.couch.url);
-    url.hostname = process.env.COUCHDB_HOST;
-    config.couch.url = url.toString();
-  }
-  if (process.env.COUCHDB_PORT) {
-    config.couch.port = Number(process.env.COUCHDB_PORT);
-  }
-
-  const couchUrl = new URL(config.couch.url);
-  if (!couchUrl.username && config.couch.user && config.couch.password) {
-    couchUrl.username = config.couch.user;
-    couchUrl.password = config.couch.password;
-  }
-  if (!couchUrl.port && config.couch.port) {
-    couchUrl.port = String(config.couch.port);
-  }
-  config.couch.fullUrl = couchUrl.toString();
-
+  let dataDir = '/app/data';
   if (process.env.DATA_DIR) {
-    const dataDir = process.env.DATA_DIR.replace(/\/$/, '');
-    config.asymetrical.rsync.destination = `${dataDir}/pdb`;
-    config.asymetrical.rsync.historyDir = `${dataDir}/logs/pdb`;
-    config.bioAssembly.rsync.destination = `${dataDir}/pdb-assembly`;
-    config.bioAssembly.rsync.historyDir = `${dataDir}/logs/bioAssembly`;
+    dataDir = process.env.DATA_DIR.replace(/\/$/, '');
   }
+
+  config.dataDir = dataDir;
+  config.asymetrical.rsync.destination = `${dataDir}/pdb`;
+  config.asymetrical.rsync.historyDir = `${dataDir}/logs/pdb`;
+  config.bioAssembly.rsync.destination = `${dataDir}/pdb-assembly`;
+  config.bioAssembly.rsync.historyDir = `${dataDir}/logs/bioAssembly`;
+  config.pymolDir = `${dataDir}/pymol`;
 
   if (config.asymetrical.rsync?.destination) {
     config.asymetrical.rsync.destination = `${config.asymetrical.rsync.destination.replace(/\/$/, '')}/`;

@@ -14,9 +14,9 @@ export interface PdbHeaderInfo {
 
 /**
  * Extract a small set of human-readable header fields from the raw PDB text.
- * The parsed CouchDB document already exposes `title`, `experiment`, `year`,
- * `chain`, and `formula`; this helper covers the few fields that aren't
- * stored in CouchDB but are useful in the home-page summary card.
+ * The parsed sqlite document already exposes `title`, `experiment`, `year`,
+ * `chain`, and `formula`; this helper covers the few fields that are not
+ * persisted in sqlite but are useful in the home-page summary card.
  * @param pdb - Raw PDB-format text.
  * @returns Extracted header fields (`sourceOrganisms` is always defined).
  */

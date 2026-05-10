@@ -1,14 +1,5 @@
 {
-  "couch": {
-    "url": "http://couchdb",
-    "password": "",
-    "user": "admin",
-    "port": 5984
-  },
   "asymetrical": {
-    "couch": {
-      "database": "pdb"
-    },
     "rsync": {
       "source": "rsync.wwpdb.org::ftp_data/structures/divided/pdb/",
       "port": 33444,
@@ -17,9 +8,6 @@
     }
   },
   "bioAssembly": {
-    "couch": {
-      "database": "pdb-bio-assembly"
-    },
     "rsync": {
       "source": "rsync.wwpdb.org::ftp_data/biounit/coordinates/divided/",
       "port": 33444,

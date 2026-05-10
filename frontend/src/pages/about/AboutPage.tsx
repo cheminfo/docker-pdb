@@ -14,7 +14,7 @@ export default function AboutPage() {
         </h1>
         <p>
           A self-hosted, fast, read-only mirror of the worldwide Protein Data
-          Bank. Every entry is parsed once into CouchDB and rendered once into
+          Bank. Every entry is parsed once into SQLite and rendered once into
           PyMol thumbnails so structure metadata and previews are served
           straight from disk — no on-the-fly rendering, no upstream lookup.
         </p>
@@ -213,13 +213,14 @@ export default function AboutPage() {
           </li>
           <li>
             <a
-              href="https://couchdb.apache.org/"
+              href="https://www.sqlite.org/"
               target="_blank"
               rel="noopener noreferrer"
             >
-              Apache CouchDB
+              SQLite
             </a>{' '}
-            — the document store that holds parsed entries and attachments.
+            — the embedded database that holds every parsed entry, ligand
+            fingerprint, and rsync run.
           </li>
           <li>
             <a

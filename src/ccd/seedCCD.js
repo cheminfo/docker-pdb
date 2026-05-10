@@ -41,17 +41,34 @@ export const ccdGzPath = join(ccdDir, 'components.cif.gz');
  * Single-atom entries (ions like NA, CL, ZN) and entries OCL cannot
  * encode (unknown elements, malformed bonds) are skipped — they cannot
  * be the target of a substructure search anyway.
- * @param {{ force?: boolean }} [options] - Pass `force: true` to re-download the CCD archive even if a cached copy exists.
+ * @param {{ force?: boolean }} [options] - Pass `force: true` to re-download the CCD archive AND re-run the import even if the table already looks populated.
  * @returns {Promise<{ imported: number, skipped: number }>} Counts of successfully imported and skipped CCD entries.
  */
 export async function seedCCD({ force = false } = {}) {
+  const db = await getLigandsDB();
+
+  // Fast path: when not forced, skip the multi-minute re-import if the
+  // table is already populated. Container restarts and the per-startup
+  // `npm run seed-ccd` in compose would otherwise re-import ~30k rows
+  // every boot. The weekly cron-ccd container always passes force=true
+  // so the periodic refresh still runs.
+  if (!force) {
+    const row = db.statement(`SELECT COUNT(*) AS n FROM ligands`).get();
+    if ((row?.n ?? 0) >= 1000) {
+      logger.info(
+        { ligandCount: row.n },
+        'Ligands table already populated — skipping CCD seed (pass --force to re-import)',
+      );
+      return { imported: 0, skipped: 0 };
+    }
+  }
+
   if (force || !existsSync(ccdGzPath)) {
     await downloadCcd();
   } else {
     logger.info({ path: ccdGzPath }, 'Reusing cached CCD archive');
   }
 
-  const db = await getLigandsDB();
   const insertLigand = db.statement(
     `INSERT INTO ligands (code, name, formula, type, id_code, coordinates, mf, mw, nb_atoms, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, cast(unixepoch('subsec') * 1000 as integer))

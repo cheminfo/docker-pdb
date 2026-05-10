@@ -1,7 +1,7 @@
 # pdb-quickview
 
 A self-hosted, **fast** read-only mirror of the [worldwide Protein Data
-Bank](https://www.wwpdb.org/). Every entry is parsed once into CouchDB and
+Bank](https://www.wwpdb.org/). Every entry is parsed once into SQLite and
 rendered once into PyMol thumbnails (100/200/400 px), so structure metadata
 and previews are served straight from disk — no on-the-fly rendering, no
 upstream lookup.
@@ -9,25 +9,35 @@ upstream lookup.
 ## What you get
 
 - **Searchable index** — every PDB entry is parsed and indexed by number of
-  residues, residue percentages, molecular weight, isoelectric point, etc.
+  residues, residue percentages, molecular weight, isoelectric point,
+  ligand composition, etc. Free-text title search uses SQLite FTS5;
+  ligand substructure search uses an OpenChemLib fingerprint screen
+  followed by exact verification.
 - **Precomputed thumbnails** — three sizes per entry, rendered once with
   PyMol so the homepage loads instantly.
 - **Mirror of the raw files** — both asymmetric units and biological
   assemblies are kept on disk, kept up-to-date by a daily `rsync` against
-  `rsync.wwpdb.org`.
-- **Small React dashboard** — homepage at `/` with database statistics and
-  a thumbnail gallery, built from [`frontend/`](./frontend) into
+  `rsync.wwpdb.org`. The raw `.gz` files are the single source of truth:
+  the sqlite index can be wiped and rebuilt from them with `npm run
+  rebuild-db`, no re-download required.
+- **Small React dashboard** — homepage at `/` with database statistics
+  and a thumbnail gallery, built from [`frontend/`](./frontend) into
   [`nginx/www/`](./nginx/www).
 
 ## Architecture
 
-Three containers wired together by `docker compose`:
+Three core containers, plus a CCD-refresh sidecar, wired together by
+`docker compose`:
 
-| Container       | Role                                                                                    |
-| --------------- | --------------------------------------------------------------------------------------- |
-| `nginx-proxy`   | Public read-only entry point (`/pdb`, `/assembly`, `/view`, `/stats`) + homepage SPA    |
-| `couchdb`       | Stores parsed PDB documents + rendered thumbnails as attachments                        |
-| `node-pdb-sync` | Daily cron: `rsync` the wwPDB tree, parse new files, render PyMol images, write to DB   |
+| Container       | Role                                                                                              |
+| --------------- | ------------------------------------------------------------------------------------------------- |
+| `nginx-proxy`   | Public read-only entry point (proxies `/v1/...` to `pdb-api`) + serves the homepage SPA           |
+| `node-pdb-sync` | Daily cron: `rsync` the wwPDB tree, parse new files, render PyMol images, write to sqlite        |
+| `pdb-api`       | Fastify server: parsed metadata, stats aggregates, raw file streaming, substructure search        |
+| `pdb-api-cron`  | Weekly cron: refreshes `data/sqlite3/ligands.db` from the wwPDB Chemical Component Dictionary     |
+
+All persistent state lives in `data/sqlite3/ligands.db` (parsed metadata,
+ligand fingerprints, rsync history) plus the rsynced `.gz` archives.
 
 ## Deployment
 
@@ -36,7 +46,6 @@ deployment to `compose.yaml`, then start the stack.
 
 ```sh
 cp .env.example .env
-# edit .env, in particular COUCHDB_ADMIN_PASSWORD
 ```
 
 By default, every example pulls the released image
@@ -89,15 +98,20 @@ docker compose pull && docker compose up -d
 
 ## HTTP API
 
-All endpoints are read-only (`GET`/`HEAD`) and proxied to CouchDB by nginx:
+All endpoints are read-only (`GET`/`HEAD`) and served by the Fastify
+backend. Common ones:
 
-| Path                                                    | What it returns                                   |
-| ------------------------------------------------------- | ------------------------------------------------- |
-| `/pdb/{id}`                                             | Parsed asymmetric-unit document for entry `{id}`  |
-| `/pdb/{id}/{size}.png`                                  | Rendered thumbnail attachment (`100`, `200`, `400`) |
-| `/assembly/{id}`                                        | Parsed biological-assembly document               |
-| `/view/{view-name}?key=...`                             | A CouchDB view defined in `src/couch/pdbViews.json` |
-| `/stats/{view-name}`                                    | A stats view from `src/couch/pdbStatsViews.json`  |
+| Path                                            | What it returns                                            |
+| ----------------------------------------------- | ---------------------------------------------------------- |
+| `/v1/database/info`                             | Entry counts and decompressed bytes per archive            |
+| `/v1/pdbs/{id}`                                 | Parsed metadata for entry `{id}` (chains, helices, …)      |
+| `/v1/pdbs/{id}/raw`                             | Raw `.pdb` text for entry `{id}` (gunzipped on the fly)    |
+| `/v1/assemblies/{id}/raw`                       | Raw `.pdb1` text for the bio-assembly                      |
+| `/v1/assemblies/{id}/image/{size}`              | Rendered PyMol thumbnail (`100x100`, `200x200`, `400x400`) |
+| `/v1/pdbs?q=...&methods=...&yearMin=...`        | Search parsed metadata (FTS5 title + range filters)        |
+| `/v1/stats/{view}`                              | Aggregated statistics (e.g. `byYear`, `aminoAcidFreq`, …)  |
+| `/v1/ligands?substructure={idCode}`             | OpenChemLib substructure search over the CCD               |
+| `/v1/rsync-history?type=asymUnit&limit=10`      | Recent rsync runs                                          |
 
 ## Persistent data
 
@@ -105,14 +119,36 @@ Everything writable lives under `./data/`:
 
 ```
 data/
-  couchdb/             # CouchDB database files
-  pdb/                 # rsynced PDB asymmetric units
-  pdb-assembly/        # rsynced biological assemblies
-  logs/                # rsync change logs
+  pdb/                  # rsynced PDB asymmetric units (*.ent.gz)
+  pdb-assembly/         # rsynced biological assemblies (*.pdb1.gz)
+  pymol/<sub>/<id>/     # PyMol-rendered thumbnails (mirrors RCSB layout)
+  sqlite3/              # ligands.db (parsed metadata, fingerprints, rsync history)
+  ccd/                  # cached components.cif.gz from wwPDB
+  logs/                 # rsync change logs
 ```
 
 The first sync downloads the entire wwPDB tree and renders every thumbnail
 — this can take **days**. Subsequent daily cycles only process the diff.
+
+### Rebuild the database from local files
+
+If the sqlite index ever needs to be regenerated (corruption, schema
+upgrade, restoring from a partial backup), wipe `data/sqlite3/ligands.db`
+and run:
+
+```sh
+docker compose exec node-pdb-sync npm run rebuild-db
+```
+
+This re-parses every `.ent.gz` and `.pdb1.gz` already on disk and rebuilds
+all metadata tables. PyMol PNGs that already exist under
+`data/pymol/<sub>/<id>/` are reused; missing ones are re-rendered. **No
+data is re-downloaded from the wwPDB.**
+
+The cron container also runs this automatically on boot whenever the
+sqlite database is empty but the rsync directories already contain files
+— so a fresh deploy that inherits a populated `data/` directory does the
+right thing without any manual intervention.
 
 ## Local development
 
@@ -120,38 +156,35 @@ The first sync downloads the entire wwPDB tree and renders every thumbnail
 
 ```sh
 npm install
-npm run dev        # bring up CouchDB + seed a few local PDBs
-npm run dev:down   # stop the dev CouchDB container
+npm run dev        # bring up the dev nginx-proxy + pdb-api containers
+npm run dev:down   # stop the dev backend
 ```
 
 `npm run dev` brings up two containers via
 [`compose.dev.yaml`](./compose.dev.yaml):
 
-- **CouchDB** on `127.0.0.1:5984` — the database itself.
+- **pdb-api** — the Fastify backend, mounting `./data:/app/data`.
 - **nginx-proxy** on `127.0.0.1:12346` — exposes the same HTTP API
-  surface as production (`/pdb`, `/assembly`, `/view`, `/stats`,
-  `/find`), so the Vite dev server below can talk to it transparently.
+  surface as production (`/v1/...`), so the Vite dev server below can
+  talk to it transparently.
 
 It then runs [`src/dev.js`](./src/dev.js) under `node --watch`: the
-script initializes both databases (design docs, Mango indexes,
-public-read security) and ingests up to `DEV_SEED_LIMIT` (default 20)
-`.ent.gz` files already present under `data/pdb/`, so the API is
-queryable in seconds:
+script applies migrations on `data/sqlite3/ligands.db` and ingests up to
+`DEV_SEED_LIMIT` (default 20) `.ent.gz` files already present under
+`data/pdb/`, so the API is queryable in seconds:
 
 ```sh
-curl http://127.0.0.1:12346/pdb/_all_docs
-curl http://127.0.0.1:12346/pdb/100D
-curl -X POST http://127.0.0.1:12346/find \
-  -H 'Content-Type: application/json' \
-  -d '{"selector":{"experiment":"X-RAY DIFFRACTION"},"limit":3}'
+curl http://127.0.0.1:12346/v1/database/info
+curl http://127.0.0.1:12346/v1/pdbs/100D
+curl 'http://127.0.0.1:12346/v1/pdbs?methods=X-RAY+DIFFRACTION&limit=3'
 ```
 
-Editing any file under `src/` re-runs the seed (idempotent — existing
-documents are revved). The full rsync pipeline and pymol-rendered
-biological assemblies are skipped; if you need them locally you will need
-`pymol`, `graphicsmagick`, and `rsync`, and should run `npm run cron` (or
-`npm run rebuild` / `npm run update`) instead. Tests that depend on
-`pymol` are skipped unless `HAS_PYMOL=1` is set.
+Editing any file under `src/` re-runs the seed (idempotent — existing rows
+are upserted). The full rsync pipeline and pymol-rendered biological
+assemblies are skipped; if you need them locally you will need `pymol`,
+`graphicsmagick`, and `rsync`, and should run `npm run cron` (or `npm run
+rebuild-db` / `npm run update`) instead. Tests that depend on `pymol` are
+skipped unless `HAS_PYMOL=1` is set.
 
 ```sh
 npm run test       # tests + lint + format
@@ -163,8 +196,8 @@ npm run test-only  # vitest with coverage
 ```sh
 cd frontend
 npm install
-npm run dev        # vite dev server, proxies /pdb /assembly /view /stats /find
-                   # to PDB_API_URL (default http://localhost:12345)
+npm run dev        # vite dev server, proxies /v1 to PDB_API_URL
+                   #                   (default http://localhost:12345)
 npm run build      # type-check + vite build → ../nginx/www
 npm run test       # check-types + eslint + prettier
 ```

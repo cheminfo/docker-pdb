@@ -31,31 +31,16 @@ function StatCard({ label, value, sub }: StatCardProps) {
   );
 }
 
-function getDiskSize(info: DatabaseInfo): number {
-  return info.disk_size ?? info.sizes?.file ?? 0;
+function getDecompressedSize(info: DatabaseInfo): number {
+  return info.sizes?.file ?? 0;
 }
 
 /**
- * Build the "X CouchDB · Y raw" sub-line for an archive card. Falls back to
- * `–` for the raw side when no rsync has recorded an on-disk size yet.
- * @param couchBytes - Disk space used by the CouchDB database.
- * @param rawBytes - Total size of the raw `.gz` archive on disk, or `null`.
- * @returns Formatted breakdown for the stat card's sub-line.
- */
-function formatStorageBreakdown(
-  couchBytes: number,
-  rawBytes: number | null | undefined,
-): string {
-  return `${formatBytes(couchBytes)} CouchDB · ${formatBytes(rawBytes ?? undefined)} raw`;
-}
-
-/**
- * Render the overview cards (counts, per-archive storage breakdown, separate
- * CouchDB and raw-archive disk totals, and the timestamp of the latest
- * asym-unit rsync run).
+ * Render the overview cards (entry counts, raw + decompressed disk usage,
+ * and the timestamp of the latest asym-unit rsync run).
  * @param props - Component props.
- * @param props.pdb - CouchDB info for the `pdb` database.
- * @param props.assembly - CouchDB info for the `pdb-bio-assembly` database.
+ * @param props.pdb - Counts and decompressed-byte total for the asym archive.
+ * @param props.assembly - Counts and decompressed-byte total for the bio-assembly archive.
  * @param props.lastAsymRsync - Most recent asym-unit rsync run, or `null`.
  * @param props.lastBioAssemblyRsync - Most recent bio-assembly rsync run, or `null`.
  * @returns Stats grid React element.
@@ -68,11 +53,10 @@ export default function StatsOverview({
 }: StatsOverviewProps) {
   const pdbCount = pdb.doc_count ?? 0;
   const assemblyCount = assembly.doc_count ?? 0;
-  const pdbCouch = getDiskSize(pdb);
-  const assemblyCouch = getDiskSize(assembly);
+  const pdbDecompressed = getDecompressedSize(pdb);
+  const assemblyDecompressed = getDecompressedSize(assembly);
   const pdbRaw = lastAsymRsync?.bytesOnDisk ?? null;
   const assemblyRaw = lastBioAssemblyRsync?.bytesOnDisk ?? null;
-  const totalCouch = pdbCouch + assemblyCouch;
   const totalRaw = (pdbRaw ?? 0) + (assemblyRaw ?? 0);
 
   return (
@@ -80,17 +64,12 @@ export default function StatsOverview({
       <StatCard
         label="PDB entries"
         value={formatInteger(pdbCount)}
-        sub={formatStorageBreakdown(pdbCouch, pdbRaw)}
+        sub={`${formatBytes(pdbDecompressed)} parsed · ${formatBytes(pdbRaw ?? undefined)} raw`}
       />
       <StatCard
         label="Bio-assembly entries"
         value={formatInteger(assemblyCount)}
-        sub={formatStorageBreakdown(assemblyCouch, assemblyRaw)}
-      />
-      <StatCard
-        label="CouchDB on disk"
-        value={formatBytes(totalCouch)}
-        sub="pdb + pdb-bio-assembly"
+        sub={`${formatBytes(assemblyDecompressed)} parsed · ${formatBytes(assemblyRaw ?? undefined)} raw`}
       />
       <StatCard
         label="Raw archives on disk"
