@@ -128,17 +128,20 @@ function extent(values: number[]): { min: number; max: number } {
 
 /**
  * Convert a `FilterState` (UI-friendly) plus a free-text query into a
- * `FindParams` object (Mango-friendly). Only fields with active constraints
- * are included so CouchDB can pick the smallest covering index.
+ * `FindParams` object. The text input is auto-routed: if it contains a `:`
+ * (e.g. `year:>=2024 nb_helices:>5`) it goes to the `smart` parameter
+ * (smart-sqlite3-filter), otherwise to `query` (FTS5 title search).
  * @param filters - Current filter state.
- * @param query - Free-text search query (whitespace-split tokens; every
- *   token is matched against `title` case-insensitively, AND across tokens).
+ * @param query - Search input. Plain words → FTS5 title; field expressions
+ *   (containing `:`) → smart-sqlite3-filter against `pdb_entries`.
  * @returns Parameters ready to pass to `findDocuments`.
  */
 export function filtersToFindParams(
   filters: FilterState,
   query: string,
 ): FindParams {
+  const trimmed = query.trim();
+  const isSmart = trimmed.includes(':');
   return {
     methods: filters.methods.size > 0 ? [...filters.methods] : undefined,
     helices: hasRange(filters.helices) ? filters.helices : undefined,
@@ -146,7 +149,8 @@ export function filtersToFindParams(
     ligands: hasRange(filters.ligands) ? filters.ligands : undefined,
     residues: hasRange(filters.residues) ? filters.residues : undefined,
     year: hasRange(filters.year) ? filters.year : undefined,
-    query: query.trim() || undefined,
+    query: !isSmart && trimmed ? trimmed : undefined,
+    smart: isSmart && trimmed ? trimmed : undefined,
   };
 }
 

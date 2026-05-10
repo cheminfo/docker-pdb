@@ -1,13 +1,18 @@
+import { search } from 'smart-sqlite3-filter';
+
 import { readPdbDoc } from '../../db/readPdbEntry.js';
 import { addRangeWhere } from '../util/addRangeWhere.js';
 import { clampLimit } from '../util/clampLimit.js';
 
 const FIND_PAGE_LIMIT = 200;
+const SMART_FILTER_LIMIT = 50_000;
 
 /**
  * Register `GET /v1/pdbs` — search/paginate the PDB-entry table with optional
- * filters (experiment, helix/sheet/ligand/residue/year ranges) and an FTS5
- * title query. Replaces the legacy CouchDB Mango `/find` endpoint.
+ * filters (experiment, helix/sheet/ligand/residue/year ranges), an FTS5 title
+ * query (`q`), and a smart-sqlite3-filter expression (`smart`) for ad-hoc
+ * field queries (e.g. `year:>=2024 nb_helices:>5 title:~kinase`). Replaces the
+ * legacy CouchDB Mango `/find` endpoint.
  * @param {import('fastify').FastifyInstance} fastify - Fastify instance.
  * @param {import('../../db/getDB.js').LigandsDB} db - Open ligands database.
  */
@@ -69,6 +74,24 @@ export function registerGetPdbsRoute(fastify, db) {
       useFts = true;
     }
 
+    const smart = typeof query.smart === 'string' ? query.smart.trim() : '';
+    let useSmart = false;
+    if (smart) {
+      // Resolve smart-filter to a list of candidate ids, then AND-intersect
+      // with the rest of the WHERE clause.
+      const rows = search(smart, db.db, {
+        tableName: 'pdb_entries',
+        limit: SMART_FILTER_LIMIT,
+        orderBy: 'id',
+      });
+      if (rows.length === 0) {
+        return reply.send({ docs: [], fts: useFts, smart: true });
+      }
+      where.push(`id IN (${rows.map(() => '?').join(',')})`);
+      for (const row of rows) params.push(row.id);
+      useSmart = true;
+    }
+
     const sql = `SELECT id FROM pdb_entries
                  ${where.length > 0 ? `WHERE ${where.join(' AND ')}` : ''}
                  ORDER BY id
@@ -83,6 +106,6 @@ export function registerGetPdbsRoute(fastify, db) {
       const doc = readPdbDoc(db, id);
       if (doc) docs.push(doc);
     }
-    return reply.send({ docs, fts: useFts });
+    return reply.send({ docs, fts: useFts, smart: useSmart });
   });
 }

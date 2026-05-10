@@ -31,7 +31,8 @@
     "openchemlib-utils": "^8.15.1",
     "pino": "^10.3.1",
     "postgrator": "^8.0.0",
-    "rsync": "^0.6.1"
+    "rsync": "^0.6.1",
+    "smart-sqlite3-filter": "^0.8.0"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^3.2.4",

@@ -407,6 +407,13 @@ export interface FindParams {
    * splits the query into AND-ed tokens.
    */
   query?: string;
+  /**
+   * smart-sqlite3-filter expression evaluated against the `pdb_entries`
+   * table — supports field-scoped operators (e.g. `year:>=2024
+   * nb_helices:>5 title:~kinase`). Composes with the structured filters
+   * and `query` (FTS5) via AND-intersection.
+   */
+  smart?: string;
 }
 
 /** Response of a `_find`-style query. */
@@ -450,6 +457,7 @@ export async function findDocuments<TDoc>(
   appendRange(queryParams, 'residues', params.residues);
   appendRange(queryParams, 'year', params.year);
   if (params.query?.trim()) queryParams.set('q', params.query.trim());
+  if (params.smart?.trim()) queryParams.set('smart', params.smart.trim());
   return fetchJson<FindResponse<TDoc>>(`/v1/pdbs?${queryParams.toString()}`);
 }
 
