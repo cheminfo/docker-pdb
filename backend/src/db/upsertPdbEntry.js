@@ -16,6 +16,9 @@ import { getLigandsDB } from './getDB.js';
  * @param {number} [options.rawSize] - Decompressed size of the .ent file.
  * @param {number} [options.assemblySize] - Decompressed size of the .pdb1.
  * @param {boolean} [options.hasAssembly] - True when a bio-assembly file exists.
+ * @param {boolean} [options.skipTransaction] - When true, the function does not
+ *   wrap the writes in its own BEGIN/COMMIT — the caller has already opened
+ *   an outer transaction (used by the batched rebuild path).
  * @returns {Promise<void>}
  */
 export async function upsertPdbEntry(pdbId, parsed, options = {}) {
@@ -33,6 +36,9 @@ export async function upsertPdbEntry(pdbId, parsed, options = {}) {
  * @param {number} [options.rawSize] - Decompressed size of the .ent file.
  * @param {number} [options.assemblySize] - Decompressed size of the .pdb1.
  * @param {boolean} [options.hasAssembly] - True when a bio-assembly file exists.
+ * @param {boolean} [options.skipTransaction] - When true, the function does not
+ *   wrap the writes in its own BEGIN/COMMIT — the caller has already opened
+ *   an outer transaction (used by the batched rebuild path).
  * @returns {void}
  */
 export function upsertPdbEntrySync(db, pdbId, parsed, options = {}) {
@@ -149,8 +155,9 @@ export function upsertPdbEntrySync(db, pdbId, parsed, options = {}) {
     ? options.assemblySize
     : null;
   const hasAssembly = options.hasAssembly ? 1 : 0;
+  const skipTransaction = Boolean(options.skipTransaction);
 
-  db.db.exec('BEGIN');
+  if (!skipTransaction) db.db.exec('BEGIN');
   try {
     upsertEntry.run(
       pdbId,
@@ -262,9 +269,9 @@ export function upsertPdbEntrySync(db, pdbId, parsed, options = {}) {
       insertFts.run(pdbId, parsed.title);
     }
 
-    db.db.exec('COMMIT');
+    if (!skipTransaction) db.db.exec('COMMIT');
   } catch (error) {
-    db.db.exec('ROLLBACK');
+    if (!skipTransaction) db.db.exec('ROLLBACK');
     throw error;
   }
 }

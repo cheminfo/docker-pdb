@@ -182,6 +182,49 @@ h2 {
   padding: 18px 20px;
 }
 
+/* ---------- Seeding banner ----------------------------------------------- */
+
+.seeding-banner {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+  padding: 8px 24px;
+  font-size: 13px;
+  flex: 0 0 auto;
+}
+
+.seeding-banner-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.seeding-banner-label {
+  font-weight: 600;
+}
+
+.seeding-banner-counter {
+  font-variant-numeric: tabular-nums;
+  color: color-mix(in srgb, var(--accent) 80%, var(--text));
+}
+
+.seeding-banner-track {
+  margin-top: 6px;
+  height: 4px;
+  width: 100%;
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.seeding-banner-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.4s ease-out;
+}
+
 /* ---------- Settings page ------------------------------------------------ */
 
 .settings-page header p {

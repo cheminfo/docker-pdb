@@ -24,9 +24,19 @@ export async function replacePdbLigandInstances(pdbId, instances) {
  * @param {import('./getDB.js').LigandsDB} db - Open ligands database.
  * @param {string} pdbId - 4-character PDB identifier.
  * @param {Array<{ code: string, chain: string, resSeq: number, iCode?: string, atoms: Array<{ name: string, element: string, x: number, y: number, z: number }> }>} instances - The `ligandInstances` array produced by `parsePdb`.
+ * @param {object} [options] - Tuning options.
+ * @param {boolean} [options.skipTransaction] - When true, the function does not
+ *   wrap the writes in its own BEGIN/COMMIT — the caller has already opened
+ *   an outer transaction (used by the batched rebuild path).
  * @returns {number} Number of rows inserted.
  */
-export function replacePdbLigandInstancesSync(db, pdbId, instances) {
+export function replacePdbLigandInstancesSync(
+  db,
+  pdbId,
+  instances,
+  options = {},
+) {
+  const skipTransaction = Boolean(options.skipTransaction);
   const deleteAll = db.statement(
     `DELETE FROM pdb_ligand_instances WHERE pdb_id = ?`,
   );
@@ -36,7 +46,7 @@ export function replacePdbLigandInstancesSync(db, pdbId, instances) {
      VALUES (?, ?, ?, ?, ?, ?)`,
   );
 
-  db.db.exec('BEGIN');
+  if (!skipTransaction) db.db.exec('BEGIN');
   try {
     deleteAll.run(pdbId);
     let inserted = 0;
@@ -53,10 +63,10 @@ export function replacePdbLigandInstancesSync(db, pdbId, instances) {
       );
       inserted++;
     }
-    db.db.exec('COMMIT');
+    if (!skipTransaction) db.db.exec('COMMIT');
     return inserted;
   } catch (error) {
-    db.db.exec('ROLLBACK');
+    if (!skipTransaction) db.db.exec('ROLLBACK');
     throw error;
   }
 }

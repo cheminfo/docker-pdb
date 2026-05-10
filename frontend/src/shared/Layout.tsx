@@ -2,6 +2,8 @@ import { Navbar, Tab, Tabs } from '@blueprintjs/core';
 import type { ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
+import SeedingBanner from './SeedingBanner.tsx';
+
 interface LayoutProps {
   children: ReactNode;
 }
@@ -57,6 +59,7 @@ export default function Layout({ children }: LayoutProps) {
           </Tabs>
         </Navbar.Group>
       </Navbar>
+      <SeedingBanner />
       <main className="app-main">{children}</main>
     </div>
   );

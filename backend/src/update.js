@@ -39,11 +39,25 @@ const { values: argv } = parseArgs({
 });
 
 /**
+ * @typedef {object} RsyncProgress
+ * @property {'rsync-asym' | 'rsync-assembly'} phase - Which archive is active.
+ * @property {number} processed - Files ingested so far in this phase.
+ * @property {string | undefined} lastEntryId - PDB id of the most recently
+ *   ingested file (uppercased), surfaced for live UI display.
+ */
+
+/**
  * Run an rsync pass against the wwPDB asymmetrical-unit and/or
  * biological-assembly archives, ingesting each file into sqlite as soon as
  * it has been fully written. Without CLI flags both archives are synced.
+ * @param {object} [options] - Tuning options.
+ * @param {(progress: { phase: 'rsync-asym' | 'rsync-assembly' }) => void | Promise<void>} [options.onPhase]
+ *   Called once at the start of each archive phase.
+ * @param {(progress: RsyncProgress) => void | Promise<void>} [options.onProgress]
+ *   Called after each file is ingested. Consumers should throttle if they
+ *   need to bound write amplification (e.g. only persist every Ns).
  */
-export default async function update() {
+export default async function update(options = {}) {
   let asymUnit = argv['pdb-asym-unit'];
   let bioAssembly = argv['pdb-bio-assembly'];
   if (!asymUnit && !bioAssembly) {
@@ -52,6 +66,7 @@ export default async function update() {
   }
   if (asymUnit) {
     debug('Updating asymmetrical units...');
+    await options.onPhase?.({ phase: 'rsync-asym' });
     await doRsync(
       config.asymetrical.rsync.source,
       config.asymetrical.rsync.destination,
@@ -59,12 +74,16 @@ export default async function update() {
       common.processPdb,
       config.asymetrical.rsync.historyDir,
       'asymUnit',
+      options.onProgress
+        ? (entry) => options.onProgress({ phase: 'rsync-asym', ...entry })
+        : undefined,
     );
     debug('Done updating asymmetrical units...');
   }
 
   if (bioAssembly) {
     debug('Updating biological assemblies...');
+    await options.onPhase?.({ phase: 'rsync-assembly' });
     await doRsync(
       config.bioAssembly.rsync.source,
       config.bioAssembly.rsync.destination,
@@ -72,6 +91,9 @@ export default async function update() {
       common.processPdbAssembly,
       config.bioAssembly.rsync.historyDir,
       'bioAssembly',
+      options.onProgress
+        ? (entry) => options.onProgress({ phase: 'rsync-assembly', ...entry })
+        : undefined,
     );
     debug('Done updating biological assemblies...');
   }
@@ -89,6 +111,8 @@ export default async function update() {
  *   summary of changes (`{deleted, updated}`) for this rsync run.
  * @param {'asymUnit' | 'bioAssembly'} type - Archive label used when recording
  *   the run in the `rsync_history` sqlite table.
+ * @param {((progress: { processed: number, lastEntryId: string | undefined }) => void | Promise<void>) | undefined} [onProgress]
+ *   Optional callback fired after each file is ingested.
  */
 async function doRsync(
   source,
@@ -97,6 +121,7 @@ async function doRsync(
   processFile,
   historyDir,
   type,
+  onProgress,
 ) {
   await mkdir(destination, { recursive: true });
   const startedAt = new Date().toISOString();
@@ -128,6 +153,7 @@ async function doRsync(
     }
   });
 
+  let processed = 0;
   /* eslint-disable no-await-in-loop -- intentional sequential sqlite writes */
   const workerDone = (async () => {
     while (true) {
@@ -139,6 +165,13 @@ async function doRsync(
       const file = queue.shift();
       try {
         await processFile(file);
+        processed++;
+        if (onProgress) {
+          await onProgress({
+            processed,
+            lastEntryId: common.getIdFromFileName(file).toUpperCase(),
+          });
+        }
       } catch (error) {
         debug('Process error', file, error);
       }

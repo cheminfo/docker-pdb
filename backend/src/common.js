@@ -37,9 +37,13 @@ export function getIdFromFileName(filename) {
  * single source of truth for the PDB binary; the API server streams it
  * back on demand.
  * @param {string} filename - Path to the gzipped `.ent` file.
+ * @param {object} [options] - Tuning options.
+ * @param {boolean} [options.skipTransaction] - When true, the inner sqlite
+ *   writes assume the caller has already opened an outer transaction. Used
+ *   by the batched rebuild path so 100 files share a single fsync.
  * @returns {Promise<void>}
  */
-export async function processPdb(filename) {
+export async function processPdb(filename, options = {}) {
   debug(`Process: ${filename}`);
   const id = getIdFromFileName(filename).toUpperCase();
   if (id.length !== 4) {
@@ -50,9 +54,15 @@ export async function processPdb(filename) {
   const buffer = await ungzip(data);
   const parsed = parsePdb(buffer.toString());
 
+  const skipTransaction = Boolean(options.skipTransaction);
   const db = await getLigandsDB();
-  upsertPdbEntrySync(db, id, parsed, { rawSize: buffer.length });
-  replacePdbLigandInstancesSync(db, id, parsed.ligandInstances || []);
+  upsertPdbEntrySync(db, id, parsed, {
+    rawSize: buffer.length,
+    skipTransaction,
+  });
+  replacePdbLigandInstancesSync(db, id, parsed.ligandInstances || [], {
+    skipTransaction,
+  });
   debug('Entry saved:', id);
 }
 

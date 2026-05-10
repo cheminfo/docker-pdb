@@ -107,6 +107,23 @@ export async function markRunning(kind, payload) {
 }
 
 /**
+ * Merge `partial` into the existing running marker so the API can report live
+ * progress (`phase`, `processed`, `total`, `lastEntryId`, …) without losing the
+ * fields written by `markRunning`. Silently returns when no marker exists —
+ * progress callbacks fired after `clearRunning` should not resurrect it.
+ * @param {'rsync' | 'ccd'} kind - Which cron is reporting progress.
+ * @param {object} partial - Fields to merge into the marker payload.
+ */
+export async function updateRunning(kind, partial) {
+  const current = readRunning(kind);
+  if (!current) return;
+  await writeFile(
+    getRunningPath(kind),
+    JSON.stringify({ ...current, ...partial }),
+  );
+}
+
+/**
  * Delete the running marker once the cron iteration finishes (success or
  * failure). Wrap the cron body in try/finally so this always fires.
  * @param {'rsync' | 'ccd'} kind - Which cron just finished.

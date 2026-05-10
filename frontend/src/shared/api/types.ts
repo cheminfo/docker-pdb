@@ -184,6 +184,13 @@ export interface SyncTriggerInfo {
   source: string;
 }
 
+/** Sub-phase of a long-running sync, surfaced for live progress display. */
+export type SyncPhase =
+  | 'rebuild-asym'
+  | 'rebuild-assembly'
+  | 'rsync-asym'
+  | 'rsync-assembly';
+
 /** A running marker, present while the cron container is actively working. */
 export interface SyncRunningInfo {
   /** ISO timestamp when the cron loop started this iteration. */
@@ -194,6 +201,21 @@ export interface SyncRunningInfo {
   pid: number;
   /** Archives included in this rsync run, when applicable. */
   scope?: Array<'asymUnit' | 'bioAssembly'>;
+  /**
+   * Current sub-phase of the run. `rebuild-*` phases run on first boot when
+   * the on-disk archive exists but `pdb_entries` is empty; `rsync-*` phases
+   * run during the periodic wwPDB rsync. Absent on legacy markers.
+   */
+  phase?: SyncPhase;
+  /** Files (or rows) processed so far in the current phase. */
+  processed?: number;
+  /**
+   * Total work for the current phase. Set during rebuild (the file list is
+   * known up-front); omitted during rsync (rsync writes files as it goes).
+   */
+  total?: number;
+  /** Most recently processed PDB id, surfaced for the live banner. */
+  lastEntryId?: string;
 }
 
 /** Live state of the rsync cron. */
