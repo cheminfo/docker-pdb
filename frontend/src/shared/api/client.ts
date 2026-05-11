@@ -32,12 +32,14 @@ async function fetchJson<TResponse>(url: string): Promise<TResponse> {
   return response.json() as Promise<TResponse>;
 }
 
-let databaseInfoPromise: Promise<DatabaseInfoResponse> | null = null;
-function getDatabaseInfo(): Promise<DatabaseInfoResponse> {
-  if (!databaseInfoPromise) {
-    databaseInfoPromise = fetchJson<DatabaseInfoResponse>('/v1/database/info');
-  }
-  return databaseInfoPromise;
+/**
+ * Fetch counts and disk size for both archives. Always issues a fresh
+ * `/v1/database/info` request — the home page needs the *current* count
+ * during the initial seed, not a stale promise memoised at module load.
+ * @returns Promise resolving to the combined database info response.
+ */
+export function fetchDatabaseInfo(): Promise<DatabaseInfoResponse> {
+  return fetchJson<DatabaseInfoResponse>('/v1/database/info');
 }
 
 /**
@@ -45,7 +47,7 @@ function getDatabaseInfo(): Promise<DatabaseInfoResponse> {
  * @returns Promise resolving to the database info subset.
  */
 export async function fetchPdbInfo(): Promise<DatabaseInfo> {
-  const info = await getDatabaseInfo();
+  const info = await fetchDatabaseInfo();
   return info.pdb;
 }
 
@@ -54,7 +56,7 @@ export async function fetchPdbInfo(): Promise<DatabaseInfo> {
  * @returns Promise resolving to the database info subset.
  */
 export async function fetchAssemblyInfo(): Promise<DatabaseInfo> {
-  const info = await getDatabaseInfo();
+  const info = await fetchDatabaseInfo();
   return info.assembly;
 }
 

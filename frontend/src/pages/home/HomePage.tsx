@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+
 import {
   fetchAssemblyInfo,
   fetchByExperiment,
@@ -5,6 +7,7 @@ import {
   fetchLastAsymRsync,
   fetchLastBioAssemblyRsync,
   fetchPdbInfo,
+  fetchSyncStatus,
 } from '../../shared/api/client.ts';
 import Panel from '../../shared/charts/Panel.tsx';
 import { useAsync } from '../../shared/useAsync.ts';
@@ -23,15 +26,64 @@ function fetchOverview() {
   ]);
 }
 
+/** Re-fetch the overview every 5 s while a sync is running. */
+const POLL_INTERVAL_RUNNING_MS = 5_000;
+/** Idle: still poll once a minute so a sync that starts later is noticed. */
+const POLL_INTERVAL_IDLE_MS = 60_000;
+
 /**
  * Top-level page rendered at `/`: project headline, statistics grid, and the
  * year + experimental-method charts.
  * @returns Home page React element.
  */
 export default function HomePage() {
-  const overview = useAsync(fetchOverview);
-  const byYear = useAsync(fetchByYear);
-  const byExperiment = useAsync(fetchByExperiment);
+  // Bumping `refreshKey` makes the three `useAsync` calls below re-fire
+  // without flashing back to "Loading…" — used to keep the home page in
+  // step with the live `pdb_entries` count while the initial seed runs.
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let wasRunning = false;
+
+    const tick = () => {
+      if (cancelled) return;
+      fetchSyncStatus().then(
+        (status) => {
+          if (cancelled) return;
+          const isRunning = Boolean(status.rsync.running || status.ccd.running);
+          if (isRunning) {
+            setRefreshKey((k) => k + 1);
+            wasRunning = true;
+          } else if (wasRunning) {
+            // Final refetch right after a sync finishes so the page shows
+            // the post-run totals instead of the throttled-final value.
+            setRefreshKey((k) => k + 1);
+            wasRunning = false;
+          }
+          timer = setTimeout(
+            tick,
+            isRunning ? POLL_INTERVAL_RUNNING_MS : POLL_INTERVAL_IDLE_MS,
+          );
+        },
+        () => {
+          if (cancelled) return;
+          timer = setTimeout(tick, POLL_INTERVAL_IDLE_MS);
+        },
+      );
+    };
+
+    tick();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, []);
+
+  const overview = useAsync(fetchOverview, refreshKey);
+  const byYear = useAsync(fetchByYear, refreshKey);
+  const byExperiment = useAsync(fetchByExperiment, refreshKey);
 
   return (
     <div className="container">
