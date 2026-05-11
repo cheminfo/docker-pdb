@@ -1,8 +1,8 @@
 #!/bin/sh
 # Runs as root so it can fix permissions on the bind-mounted /app/data
 # directory (typically created by the host as root), then drops to the
-# unprivileged `app` user before exec'ing the command. Mirrors the pattern
-# used by the official couchdb image.
+# unprivileged `app` user before exec'ing the command. Standard
+# entrypoint + gosu pattern used by many official Docker images.
 #
 # IMPORTANT: chown WITHOUT -R. We only need to make each subdirectory
 # itself writable by `app` (so it can create files inside). Existing

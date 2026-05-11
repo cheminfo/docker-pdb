@@ -9,8 +9,7 @@ let fullConfig = null;
 
 /**
  * Load the runtime configuration: rsync destinations, PyMol render sizes,
- * and the on-disk PyMol output directory. The CouchDB section was removed
- * when the project switched to sqlite-only.
+ * and the on-disk PyMol output directory.
  *
  * `DATA_DIR` overrides every absolute path under `data/` so the same image
  * can run with `data/` mounted at any location.

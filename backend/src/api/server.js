@@ -10,11 +10,10 @@ import { v1 } from './v1/v1.js';
  * (rather than registered globally) so tests can inject an in-memory DB
  * and run requests with `app.inject()` instead of opening a port.
  *
- * The API replaces every CouchDB-proxied path that the frontend used to
- * call. Everything is served from sqlite + the on-disk rsync tree under
- * `/v1/...`. Four legacy paths are kept as aliases so existing third-party
- * callers keep working: `/pdb/<id>`, `/assembly/<id>/<size>`,
- * `/stats/<view>`, and `/view/jsmol`.
+ * Everything is served from sqlite + the on-disk rsync tree under `/v1/...`.
+ * Four legacy paths are kept as aliases so existing third-party callers keep
+ * working: `/pdb/<id>`, `/assembly/<id>/<size>`, `/stats/<view>`, and
+ * `/view/jsmol`.
  * @param {{ db: import('../db/getDB.js').LigandsDB, logger?: boolean }} options - Wiring options.
  * @returns {Promise<import('fastify').FastifyInstance>} A Fastify app ready to listen or be injected.
  */

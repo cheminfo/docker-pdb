@@ -187,7 +187,7 @@ test('upsertPdbEntrySync is idempotent — re-runs replace rows in place', async
   db.close();
 });
 
-test('readPdbDoc reconstructs the legacy CouchDB doc shape', async () => {
+test('readPdbDoc reconstructs the full PdbDoc shape', async () => {
   const db = await getInMemoryLigandsDB();
   upsertPdbEntrySync(db, '1TST', SAMPLE, { rawSize: 4096 });
 

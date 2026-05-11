@@ -49,7 +49,7 @@ export default function BrowsePage() {
   const [filters, setFilters] = useState<FilterState>(emptyFilterState);
   const [pickedId, setPickedId] = useState<string | undefined>(undefined);
 
-  // Debounce the inputs so the keyword box doesn't fire one Mango query per
+  // Debounce the inputs so the keyword box doesn't fire one search query per
   // keystroke and slider drags are smooth.
   const debouncedQuery = useDebouncedValue(query, 250);
   const debouncedFilters = useDebouncedValue(filters, 250);

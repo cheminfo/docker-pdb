@@ -11,8 +11,8 @@ const SMART_FILTER_LIMIT = 50_000;
  * Register `GET /v1/pdbs` — search/paginate the PDB-entry table with optional
  * filters (experiment, helix/sheet/ligand/residue/year ranges), an FTS5 title
  * query (`q`), and a smart-sqlite3-filter expression (`smart`) for ad-hoc
- * field queries (e.g. `year:>=2024 nb_helices:>5 title:~kinase`). Replaces the
- * legacy CouchDB Mango `/find` endpoint.
+ * field queries (e.g. `year:>=2024 nb_helices:>5 title:~kinase`). Also serves
+ * the legacy `/find` alias.
  * @param {import('fastify').FastifyInstance} fastify - Fastify instance.
  * @param {import('../../db/getDB.js').LigandsDB} db - Open ligands database.
  */

@@ -4,4 +4,3 @@ data/
 frontend/playwright-report/
 frontend/test-results/
 nginx/www/
-src/couch/

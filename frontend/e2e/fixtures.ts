@@ -123,9 +123,9 @@ function fulfillJson(route: Route, body: unknown) {
 }
 
 /**
- * Install all CouchDB-proxy mocks the frontend relies on so e2e tests do not
- * need a real backend. Call once at the start of each test (or via a beforeEach
- * hook) before navigating with `page.goto`.
+ * Install all API mocks the frontend relies on so e2e tests do not need a real
+ * backend. Call once at the start of each test (or via a beforeEach hook)
+ * before navigating with `page.goto`.
  * @param page - Playwright page instance for the test.
  */
 export async function mockApi(page: Page): Promise<void> {

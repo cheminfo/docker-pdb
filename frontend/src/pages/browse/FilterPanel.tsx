@@ -31,7 +31,7 @@ interface FilterPanelProps {
  * Filter sidebar (leftmost browse column). Hosts the keyword search input,
  * a multi-select on experimental method, and dual-range sliders for the
  * numeric filters. The state lives in the parent so all controls drive a
- * single Mango query.
+ * single `/v1/pdbs` search query.
  * @param props - Component props.
  * @param props.query - Current free-text query.
  * @param props.onQueryChange - Called when the search input changes.

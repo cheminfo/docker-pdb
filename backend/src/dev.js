@@ -1,5 +1,5 @@
-// Local-development entrypoint: ensures the sqlite database is initialized
-// and seeds the exact same deterministic set of PDB entries every time, so
+// Local-development seed: ensures the sqlite database is initialized and
+// seeds the exact same deterministic set of PDB entries every time, so
 // `npm run dev` always produces the same database for every developer.
 //
 // Each id in SEED_IDS is resolved against (1) the optional local rsync tree
@@ -8,8 +8,8 @@
 // The fixture copy guarantees a working `npm run dev` on a fresh checkout
 // without any rsync — and pins the data so the database is reproducible.
 //
-// Started by `npm run dev`, which points this script at the local data/
-// directory via DATA_DIR=./data.
+// Run once via `npm run dev:seed` (invoked by the root `npm run dev`
+// before it starts the Fastify API + Vite dev server).
 //
 // Skips the multi-day rsync from rsync.wwpdb.org and skips pymol-rendered
 // biological assemblies (which require a local pymol/graphicsmagick install).

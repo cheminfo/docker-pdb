@@ -1,8 +1,7 @@
 import { readPdbDoc } from '../../db/readPdbEntry.js';
 
 /**
- * Register `GET /v1/pdbs/jsmol` — entries that match the legacy CouchDB
- * `_design/query/jsmol` filter:
+ * Register `GET /v1/pdbs/jsmol` — entries matching the JSmol-friendly filter:
  *  - 100 ≤ nbResidues ≤ 500
  *  - nbModifiedResidues = 0
  *  - nbSheets > 5  AND max sheet length ≥ 10
@@ -42,7 +41,7 @@ export function registerGetJsmolPdbsRoute(fastify, db) {
       }
     }
     return reply.send({
-      // eslint-disable-next-line camelcase -- legacy CouchDB-shaped key
+      // eslint-disable-next-line camelcase -- legacy snake_case response shape preserved for backward compatibility
       total_rows: rows.length,
       offset: 0,
       rows,

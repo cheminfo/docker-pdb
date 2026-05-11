@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/naming-convention -- a few legacy CouchDB-shaped fields are preserved for chart compatibility */
+/* eslint-disable @typescript-eslint/naming-convention -- a few snake_case fields are preserved for backward compatibility with third-party API callers */
 
 /** Counts and disk size for one of the two archives, exposed by `/v1/database/info`. */
 export interface DatabaseInfo {
@@ -29,7 +29,7 @@ export interface ViewResponse<TKey> {
 }
 
 /** `_stats`-shaped reduce result. */
-export interface CouchStatsValue {
+export interface StatsValue {
   sum: number;
   count: number;
   min: number;
@@ -38,13 +38,13 @@ export interface CouchStatsValue {
 }
 
 /** Response of an un-grouped `_stats` query. */
-export interface CouchStatsResponse {
-  rows: Array<{ key: null; value: CouchStatsValue }>;
+export interface StatsResponse {
+  rows: Array<{ key: null; value: StatsValue }>;
 }
 
 /** Response of a grouped `_stats` query, keyed by `TKey`. */
 export interface GroupedStatsResponse<TKey> {
-  rows: Array<{ key: TKey; value: CouchStatsValue }>;
+  rows: Array<{ key: TKey; value: StatsValue }>;
 }
 
 /** A helix annotation parsed from a PDB file. */

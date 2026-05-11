@@ -2,8 +2,7 @@ import { readPdbDoc } from '../../db/readPdbEntry.js';
 
 /**
  * Register `GET /v1/pdbs/:id` — fetch a parsed PDB document. Also exposes the
- * legacy `/pdb/:id` alias preserved for third-party callers that still talk
- * to the old CouchDB-shaped URL.
+ * legacy `/pdb/:id` alias preserved for third-party callers.
  * @param {import('fastify').FastifyInstance} fastify - Fastify instance.
  * @param {import('../../db/getDB.js').LigandsDB} db - Open ligands database.
  */

@@ -15,7 +15,8 @@ const BUCKETS: Array<[number, string]> = [
 
 /**
  * Render a histogram of ligand molecular weights (g/mol). Buckets are
- * pre-defined in the CouchDB map and mirrored here to label the X-axis.
+ * pre-defined in the backend `ligandMwHistogram` query and mirrored here to
+ * label the X-axis.
  * @returns Panel React element with the chart.
  */
 export default function LigandMwChart() {

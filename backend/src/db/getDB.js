@@ -10,7 +10,15 @@ const logger = pino({ name: 'ligands-db' });
 /** Log a warning for queries taking longer than this (in milliseconds). */
 const SLOW_QUERY_THRESHOLD_MS = 10;
 
-const dataDir = join(import.meta.dirname, '..', '..', 'data');
+// `DATA_DIR` env wins so tests can isolate to a tmp dir. The default —
+// three `..` from `backend/src/db/` — lands at the repo root, where the
+// `data/` directory lives (and is bind-mounted to `/app/data` in Docker).
+// Two `..` (the pre-workspace-refactor layout) would write the DB to
+// `backend/data/`, which is *inside* the image instead of on the volume —
+// every container would then read and write its own throwaway sqlite file.
+const dataDir = process.env.DATA_DIR
+  ? process.env.DATA_DIR.replace(/\/$/, '')
+  : join(import.meta.dirname, '..', '..', '..', 'data');
 const sqliteDir = join(dataDir, 'sqlite');
 const dbPath = join(sqliteDir, 'ligands.db');
 const slowQueryLogPath = join(sqliteDir, 'slow-queries.log');

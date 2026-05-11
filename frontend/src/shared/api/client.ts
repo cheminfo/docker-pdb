@@ -1,6 +1,4 @@
 import type {
-  CouchStatsResponse,
-  CouchStatsValue,
   DatabaseInfo,
   DatabaseInfoResponse,
   GroupedStatsResponse,
@@ -14,6 +12,8 @@ import type {
   PdbViewResponse,
   RsyncHistoryDoc,
   RsyncHistoryResponse,
+  StatsResponse,
+  StatsValue,
   SyncStatusResponse,
   SyncTriggerResponse,
   ViewResponse,
@@ -195,8 +195,8 @@ export function fetchChainsHistogram(): Promise<ViewResponse<number>> {
  * residues-per-chain across all entries.
  * @returns Promise resolving to the `_stats` value.
  */
-export function fetchResiduesPerChainStats(): Promise<CouchStatsResponse> {
-  return fetchJson<CouchStatsResponse>('/v1/stats/residuesPerChainStats');
+export function fetchResiduesPerChainStats(): Promise<StatsResponse> {
+  return fetchJson<StatsResponse>('/v1/stats/residuesPerChainStats');
 }
 
 /**
@@ -265,24 +265,24 @@ export function fetchMethodByYear(): Promise<ViewResponse<[number, string]>> {
 
 /** DB-wide min/max/avg statistics for the numeric filter fields. */
 export interface RangeStats {
-  helices: CouchStatsValue;
-  sheets: CouchStatsValue;
-  ligands: CouchStatsValue;
-  residues: CouchStatsValue;
-  year: CouchStatsValue;
+  helices: StatsValue;
+  sheets: StatsValue;
+  ligands: StatsValue;
+  residues: StatsValue;
+  year: StatsValue;
 }
 
 /**
  * Fetch DB-wide min/max/count statistics for every numeric filter field.
- * @returns Promise resolving to one `CouchStatsValue` per field.
+ * @returns Promise resolving to one `StatsValue` per field.
  */
 export async function fetchRangeStats(): Promise<RangeStats> {
   const [helices, sheets, ligands, residues, year] = await Promise.all([
-    fetchJson<CouchStatsResponse>('/v1/stats/helicesStats'),
-    fetchJson<CouchStatsResponse>('/v1/stats/sheetsStats'),
-    fetchJson<CouchStatsResponse>('/v1/stats/ligandsStats'),
-    fetchJson<CouchStatsResponse>('/v1/stats/residuesStats'),
-    fetchJson<CouchStatsResponse>('/v1/stats/yearStats'),
+    fetchJson<StatsResponse>('/v1/stats/helicesStats'),
+    fetchJson<StatsResponse>('/v1/stats/sheetsStats'),
+    fetchJson<StatsResponse>('/v1/stats/ligandsStats'),
+    fetchJson<StatsResponse>('/v1/stats/residuesStats'),
+    fetchJson<StatsResponse>('/v1/stats/yearStats'),
   ]);
   return {
     helices: helices.rows[0]?.value ?? emptyStats(),
@@ -293,7 +293,7 @@ export async function fetchRangeStats(): Promise<RangeStats> {
   };
 }
 
-function emptyStats(): CouchStatsValue {
+function emptyStats(): StatsValue {
   return { sum: 0, count: 0, min: 0, max: 0, sumsqr: 0 };
 }
 
@@ -386,7 +386,7 @@ export async function triggerSync(
 }
 
 /* ------------------------------------------------------------------------ *
- * /v1/pdbs search (replaces CouchDB Mango `_find`)
+ * /v1/pdbs search
  * ------------------------------------------------------------------------ */
 
 /** A simple optional [min, max] range used to build search queries. */

@@ -19,7 +19,13 @@ const logger = pino({ name: 'seed-ccd' });
 const CCD_URL =
   'https://files.wwpdb.org/pub/pdb/data/monomers/components.cif.gz';
 
-const dataDir = join(import.meta.dirname, '..', '..', 'data');
+// `DATA_DIR` env wins so tests can isolate to a tmp dir. The default —
+// three `..` from `backend/src/ccd/` — lands at the repo root, where the
+// bind-mounted `data/` directory lives. Two `..` would write the cache
+// to `backend/data/` inside the image (lost on every container restart).
+const dataDir = process.env.DATA_DIR
+  ? process.env.DATA_DIR.replace(/\/$/, '')
+  : join(import.meta.dirname, '..', '..', '..', 'data');
 const ccdDir = join(dataDir, 'ccd');
 
 /** Path to the cached compressed CCD archive on the data volume. */

@@ -2,9 +2,8 @@ import { pairFrequency } from '../util/statsQueries.js';
 
 /**
  * Register `GET /v1/stats/pairFrequency` — residue-pair co-occurrence counts,
- * optionally restricted to an `[fromYear, toYear]` window. Mirrors the
- * legacy CouchDB `pairFrequencyByYear` view via the `/stats/pairFrequency`
- * alias.
+ * optionally restricted to an `[fromYear, toYear]` window. Also serves the
+ * legacy `/stats/pairFrequency` alias.
  * @param {import('fastify').FastifyInstance} fastify - Fastify instance.
  * @param {import('../../db/getDB.js').LigandsDB} db - Open ligands database.
  */

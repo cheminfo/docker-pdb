@@ -1,11 +1,12 @@
-// Pure SQL re-implementations of the CouchDB `_design/stats` reduce views.
-// Every helper returns the same response shape the frontend already expects
-// (`{ rows: [{ key, value }] }` for grouped reduce views, `{ rows: [{ key:
-// null, value: { sum, count, min, max, sumsqr } }] }` for `_stats` reduces),
-// so the chart components do not need to change when we drop CouchDB.
+// SQL implementations of the `/v1/stats/<view>` aggregate endpoints. Each
+// helper returns one of two response envelopes preserved for backward
+// compatibility with third-party API callers:
+//   * grouped reduce  → `{ rows: [{ key, value }] }`
+//   * un-grouped stats → `{ rows: [{ key: null, value: { sum, count, min,
+//     max, sumsqr } }] }`
 //
 // Each named export below is a thin wrapper around a single grouped SQL
-// query and shares the same `(db: LigandsDB) => CouchView` signature; per-
+// query and shares the same `(db: LigandsDB) => StatsView` signature; per-
 // function JSDoc would just restate the function name, so we disable the
 // require-jsdoc rule for the whole file.
 
@@ -40,8 +41,8 @@ const LIGAND_MW_BINS = [100, 250, 500, 1000, 2000, 5000];
 const HELIX_SHEET_LENGTH_LIMIT = 200;
 
 /**
- * Wrap a sequence of `[key, value]` pairs into the CouchDB grouped-reduce
- * envelope expected by the chart components.
+ * Wrap a sequence of `[key, value]` pairs into the grouped-reduce envelope
+ * expected by the chart components.
  * @param {Array<[unknown, number]>} pairs - Key/value pairs.
  * @returns {{ rows: Array<{ key: unknown, value: number }> }} Wrapped response.
  */
@@ -52,9 +53,9 @@ function asGroupedRows(pairs) {
 }
 
 /**
- * Strip every column except `key` and `value` and wrap into the CouchDB
- * grouped-reduce envelope. Convenience for SQL queries that already alias
- * the columns to `key` and `value`.
+ * Strip every column except `key` and `value` and wrap into the grouped-reduce
+ * envelope. Convenience for SQL queries that already alias the columns to
+ * `key` and `value`.
  * @param {Array<{ key: unknown, value: number }>} rows - SQL rows.
  * @returns {{ rows: Array<{ key: unknown, value: number }> }} Wrapped response.
  */
@@ -66,10 +67,7 @@ function rowsAsGroupedRows(rows) {
  * Build a histogram by lower-bound bucketing. Each row contributes 1 to the
  * bucket whose lower bound is the largest entry in `bins` strictly less than
  * or equal to the value (`0` for the first bucket). Empty buckets are
- * dropped, and the result is wrapped in the CouchDB grouped-reduce envelope.
- *
- * Mirrors the shape of the legacy `histogram(<column>, [<bins>])` reduce
- * views from the original CouchDB design docs.
+ * dropped, and the result is wrapped in the grouped-reduce envelope.
  * @param {object[]} rows - Rows yielding the values to bucket.
  * @param {number[]} bins - Strictly-increasing upper bounds (last bin's upper bound is `Infinity`).
  * @param {(row: unknown) => number} valueOf - Extract the numeric value to bucket from each row.
@@ -103,7 +101,7 @@ function histogram(rows, bins, valueOf) {
  * Compute a `_stats` reduce result over a single integer column.
  * @param {import('../db/getDB.js').LigandsDB} db - Open database.
  * @param {string} sql - Query that selects one numeric column called `v`.
- * @returns {{ rows: [{ key: null, value: { sum: number, count: number, min: number, max: number, sumsqr: number } }] }} CouchDB-shaped envelope.
+ * @returns {{ rows: [{ key: null, value: { sum: number, count: number, min: number, max: number, sumsqr: number } }] }} Stats envelope.
  */
 function computeStats(db, sql) {
   const row = db
@@ -596,7 +594,7 @@ export function twistedPairFrequency(db) {
   };
 }
 
-/** Mapping from CouchDB stats-view names to their SQL implementations. */
+/** Mapping from `/v1/stats/<view>` names to their SQL implementations. */
 export const STATS_HANDLERS = {
   byYear,
   byExperiment,

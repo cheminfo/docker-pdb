@@ -18,7 +18,7 @@ const BUCKETS: Array<[number, string]> = [
 /**
  * Render a histogram of total residues per entry using fixed log-ish
  * buckets (`<50`, `50–99`, …, `≥10000`). Mirrors the bucket boundaries used
- * inside the CouchDB map function.
+ * by the backend `residuesHistogram` query.
  * @returns Panel React element with the chart.
  */
 export default function ResiduesHistogramChart() {

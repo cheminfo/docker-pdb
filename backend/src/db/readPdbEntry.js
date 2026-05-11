@@ -1,12 +1,8 @@
 /**
  * Read API helpers that hydrate a `pdb_entries` row (and its child tables)
- * back into the document shape the frontend expects.
- *
- * Kept deliberately close to the legacy CouchDB document layout so that
- * removing CouchDB does not force a parallel frontend rewrite — the same
- * `PdbDoc` interface is satisfied, except the `_rev` and `_attachments`
- * fields are no longer carried (the raw .pdb file is streamed directly
- * from disk by the API server).
+ * back into the `PdbDoc` shape the frontend and third-party callers expect.
+ * The raw .pdb file is no longer attached to the document; it is streamed
+ * directly from disk by the API server.
  */
 
 /**

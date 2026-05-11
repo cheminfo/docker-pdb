@@ -101,8 +101,7 @@ export interface FilterBounds {
 
 /**
  * Compute the [min, max] of each numeric field across the documents. Used as
- * a fallback when DB-wide stats from CouchDB's `_stats` reduce are not
- * available.
+ * a fallback when DB-wide `_stats` aggregates are not available.
  * @param docs - Documents to inspect.
  * @returns Bounds object with one entry per filterable field.
  */

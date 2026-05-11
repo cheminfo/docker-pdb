@@ -154,52 +154,46 @@ right thing without any manual intervention.
 
 ## Local development
 
-### Backend (`backend/src/`)
+`npm run dev` runs entirely from Node — no docker, no nginx — so it works
+on any machine with Node ≥ 22 installed.
 
 ```sh
 npm install
-npm run dev        # bring up the dev nginx-proxy + pdb-api containers
-npm run dev:down   # stop the dev backend
+npm run dev        # seed sqlite, then run the Fastify API + Vite dev server
 ```
 
-`npm run dev` brings up two containers via
-[`compose.dev.yaml`](./compose.dev.yaml):
+Under the hood it:
 
-- **pdb-api** — the Fastify backend, mounting `./data:/app/data`.
-- **nginx-proxy** on `127.0.0.1:12346` — exposes the same HTTP API
-  surface as production (`/v1/...`), so the Vite dev server below can
-  talk to it transparently.
-
-It then runs [`backend/src/dev.js`](./backend/src/dev.js) under `node --watch`: the
-script applies migrations on `data/sqlite/ligands.db` and ingests up to
-`DEV_SEED_LIMIT` (default 20) `.ent.gz` files already present under
-`data/pdb/`, so the API is queryable in seconds:
+1. Runs [`backend/src/dev.js`](./backend/src/dev.js) once to apply migrations
+   on `data/sqlite/ligands.db` and seed a deterministic set of PDB entries
+   from [`backend/fixtures/pdb/`](./backend/fixtures/pdb) (or from your
+   local rsync tree under `data/pdb/`, if you have one).
+2. Starts the Fastify API on `http://localhost:3000` under `node --watch`,
+   so backend file changes restart the server.
+3. Starts the Vite dev server (frontend), which proxies every `/v1/...`
+   call to the API:
 
 ```sh
-curl http://127.0.0.1:12346/v1/database/info
-curl http://127.0.0.1:12346/v1/pdbs/100D
-curl 'http://127.0.0.1:12346/v1/pdbs?methods=X-RAY+DIFFRACTION&limit=3'
+curl http://localhost:3000/v1/database/info
+curl http://localhost:3000/v1/pdbs/100D
+curl 'http://localhost:3000/v1/pdbs?methods=X-RAY+DIFFRACTION&limit=3'
 ```
 
-Editing any file under `backend/src/` re-runs the seed (idempotent — existing rows
-are upserted). The full rsync pipeline and pymol-rendered biological
-assemblies are skipped; if you need them locally you will need `pymol`,
-`graphicsmagick`, and `rsync`, and should run `npm run cron` (or `npm run
-rebuild` / `npm run update`) instead. Tests that depend on `pymol` are
-skipped unless `HAS_PYMOL=1` is set.
+The full rsync pipeline and pymol-rendered biological assemblies are
+skipped; if you need them locally you will need `pymol`, `graphicsmagick`,
+and `rsync`, and should run `npm run cron` (or `npm run rebuild` /
+`npm run update`) instead. Tests that depend on `pymol` are skipped
+unless `HAS_PYMOL=1` is set.
 
 ```sh
 npm run test       # tests + lint + format
 npm run test-only  # vitest with coverage
 ```
 
-### Frontend (`frontend/`)
+### Frontend-only commands
 
 ```sh
 cd frontend
-npm install
-npm run dev        # vite dev server, proxies /v1 to PDB_API_URL
-                   #                   (default http://localhost:12346)
 npm run build      # type-check + vite build → ../nginx/www
 npm run test       # check-types + eslint + prettier
 ```
@@ -209,17 +203,17 @@ under `frontend/src/`, rebuild and commit both the source change and the
 updated assets so a `git pull && docker compose up -d` on the deploy host
 picks up the new homepage without needing Node installed.
 
-To point the Vite dev server at a **production stack** running on a
-non-default port (`http://localhost:12346` is the dev-backend default):
+To point the Vite dev server at a different backend (e.g. a production
+stack on the local network):
 
 ```sh
-PDB_API_URL=http://127.0.0.1:12345 npm run dev
+PDB_API_URL=http://127.0.0.1:12345 npm run dev -w frontend
 ```
 
 Or at a remote stack:
 
 ```sh
-PDB_API_URL=https://pdb.cheminfo.org npm run dev
+PDB_API_URL=https://pdb.cheminfo.org npm run dev -w frontend
 ```
 
 ## SELinux
