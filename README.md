@@ -50,7 +50,7 @@ cp .env.example .env
 ```
 
 By default, every example pulls the released image
-`ghcr.io/cheminfo/docker-pdb:latest`. To build the image locally instead,
+`ghcr.io/cheminfo/pdb-quickview:latest`. To build the image locally instead,
 add `--build`:
 
 ```sh

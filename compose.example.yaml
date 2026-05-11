@@ -2,7 +2,7 @@ services:
   node-pdb-sync:
     # Use the released image by default. To build locally instead, run:
     #   docker compose up -d --build
-    image: ghcr.io/cheminfo/docker-pdb:latest
+    image: ghcr.io/cheminfo/pdb-quickview:latest
     build: .
     volumes:
       - ./data:/app/data
@@ -30,7 +30,7 @@ services:
     # if the `ligands` table is empty.
     # Use the released image by default. To build locally instead, run:
     #   docker compose up -d --build
-    image: ghcr.io/cheminfo/docker-pdb:latest
+    image: ghcr.io/cheminfo/pdb-quickview:latest
     build: .
     ports:
       - '127.0.0.1:${PUBLIC_PORT}:3000'
@@ -60,7 +60,7 @@ services:
     # Chemical Component Dictionary (weekly upstream cadence). Idle most
     # of the time. Independent of pdb-api: on a fresh deploy pdb-api
     # writes the initial copy and this cron sleeps until next week.
-    image: ghcr.io/cheminfo/docker-pdb:latest
+    image: ghcr.io/cheminfo/pdb-quickview:latest
     build: .
     volumes:
       - ./data:/app/data
