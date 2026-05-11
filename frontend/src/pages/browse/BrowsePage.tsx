@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router';
 
 import type { FocusSpec, PdbViewerHandle } from '../../shared/PdbViewer.tsx';
 import PdbViewer from '../../shared/PdbViewer.tsx';
+import type { OrderKey } from '../../shared/api/client.ts';
 import {
   fetchByExperiment,
   fetchPdbText,
@@ -35,6 +36,7 @@ import {
   filterStateFromUrl,
   filterStateToUrl,
   filtersToFindParams,
+  makeRandomSeed,
 } from './filters.ts';
 
 /**
@@ -62,27 +64,49 @@ export default function BrowsePage() {
   const [query, setQuery] = useState(initial.query);
   const [smart, setSmart] = useState(initial.smart);
   const [filters, setFilters] = useState<FilterState>(initial.filters);
+  const [order, setOrder] = useState<OrderKey>(initial.order);
+  const [seed, setSeed] = useState<number>(initial.seed);
   const [pickedId, setPickedId] = useState<string | undefined>(undefined);
+
+  // Selecting `random` from the empty default mints a fresh seed so the URL
+  // captures a specific shuffle; everything else clears the seed back to 0.
+  const handleOrderChange = useCallback((next: OrderKey) => {
+    setOrder(next);
+    setSeed(next === 'random' ? makeRandomSeed() : 0);
+  }, []);
+
+  const shuffleSeed = useCallback(() => {
+    setOrder('random');
+    setSeed(makeRandomSeed());
+  }, []);
 
   // Push state changes into the URL so deep-links from the stats page work and
   // the back button restores the previous filter combination.
   useEffect(() => {
-    const next = filterStateToUrl(filters, query, smart);
+    const next = filterStateToUrl(filters, query, smart, order, seed);
     const current = searchParams.toString();
     if (next.toString() !== current) {
       setSearchParams(next, { replace: true });
     }
-  }, [filters, query, smart, searchParams, setSearchParams]);
+  }, [filters, query, smart, order, seed, searchParams, setSearchParams]);
 
   // Debounce the inputs so the keyword box doesn't fire one search query per
-  // keystroke and slider drags are smooth.
+  // keystroke and slider drags are smooth. Order/seed are not user-typed so
+  // they bypass the debounce — the list updates immediately on selection.
   const debouncedQuery = useDebouncedValue(query, 250);
   const debouncedSmart = useDebouncedValue(smart, 250);
   const debouncedFilters = useDebouncedValue(filters, 250);
 
   const findParams = useMemo(
-    () => filtersToFindParams(debouncedFilters, debouncedQuery, debouncedSmart),
-    [debouncedFilters, debouncedQuery, debouncedSmart],
+    () =>
+      filtersToFindParams(
+        debouncedFilters,
+        debouncedQuery,
+        debouncedSmart,
+        order,
+        seed,
+      ),
+    [debouncedFilters, debouncedQuery, debouncedSmart, order, seed],
   );
 
   const findTask = useCallback(
@@ -129,6 +153,9 @@ export default function BrowsePage() {
           stats={stats.status === 'success' ? stats.data : undefined}
           filters={filters}
           onChange={setFilters}
+          order={order}
+          onOrderChange={handleOrderChange}
+          onShuffle={shuffleSeed}
         />
         <div className="browse-list-col">
           <Card className="browse-list panel">

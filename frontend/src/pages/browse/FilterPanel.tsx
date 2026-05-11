@@ -1,13 +1,20 @@
-import { Button, Card, Checkbox, NumericInput, Tag } from '@blueprintjs/core';
+import {
+  Button,
+  Card,
+  Checkbox,
+  HTMLSelect,
+  NumericInput,
+  Tag,
+} from '@blueprintjs/core';
 import { useMemo } from 'react';
 
 import DualRangeSlider from '../../shared/DualRangeSlider.tsx';
 import SmartFilterBuilder from '../../shared/SmartFilterBuilder/index.ts';
-import type { RangeStats } from '../../shared/api/client.ts';
+import type { OrderKey, RangeStats } from '../../shared/api/client.ts';
 
 import SearchBox from './SearchBox.tsx';
 import type { FilterBounds, FilterState, RangeFilter } from './filters.ts';
-import { buildPdbFields, emptyFilterState } from './filters.ts';
+import { ORDER_OPTIONS, buildPdbFields, emptyFilterState } from './filters.ts';
 
 const HELIX_KIND_LABELS: Record<number, string> = {
   1: 'α right',
@@ -60,6 +67,12 @@ interface FilterPanelProps {
   filters: FilterState;
   /** Called whenever the user changes any filter control. */
   onChange: (filters: FilterState) => void;
+  /** Currently-selected result ordering. */
+  order: OrderKey;
+  /** Called when the user picks a different order (incl. random). */
+  onOrderChange: (order: OrderKey) => void;
+  /** Roll a fresh random seed (only meaningful when `order === 'random'`). */
+  onShuffle: () => void;
 }
 
 /**
@@ -78,6 +91,9 @@ interface FilterPanelProps {
  * @param props.stats - DB-wide numeric stats; defines slider bounds.
  * @param props.filters - Current filter state.
  * @param props.onChange - Called whenever a filter control changes.
+ * @param props.order - Currently-selected result ordering key.
+ * @param props.onOrderChange - Called when the user picks a different order.
+ * @param props.onShuffle - Roll a fresh random seed for the `random` ordering.
  * @returns Filter panel React element.
  */
 export default function FilterPanel({
@@ -91,6 +107,9 @@ export default function FilterPanel({
   stats,
   filters,
   onChange,
+  order,
+  onOrderChange,
+  onShuffle,
 }: FilterPanelProps) {
   const bounds = useMemo<FilterBounds>(() => {
     if (stats) {
@@ -176,6 +195,32 @@ export default function FilterPanel({
       </div>
 
       <SearchBox value={query} onChange={onQueryChange} />
+
+      <div className="filter-group">
+        <div className="filter-group-label">Sort by</div>
+        <div className="filter-order-row">
+          <HTMLSelect
+            fill
+            value={order}
+            onChange={(event) =>
+              onOrderChange(event.currentTarget.value as OrderKey)
+            }
+            options={ORDER_OPTIONS.map((option) => ({
+              value: option.key,
+              label: option.label,
+            }))}
+          />
+          {order === 'random' && (
+            <Button
+              icon="random"
+              variant="minimal"
+              onClick={onShuffle}
+              title="Pick a new random shuffle"
+              aria-label="Shuffle"
+            />
+          )}
+        </div>
+      </div>
 
       {hasChartFilter && (
         <div className="filter-group">

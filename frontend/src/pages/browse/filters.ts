@@ -383,10 +383,24 @@ export function filterStateFromUrl(search: URLSearchParams): {
   if (ecClass && /^[1-7]$/.test(ecClass)) filters.ecClass = ecClass;
   const ligandCode = search.get('ligandCode');
   if (ligandCode) filters.ligandCode = ligandCode;
+  const orderRaw = search.get('order') as OrderKey | null;
+  const order: OrderKey =
+    orderRaw && ORDER_KEYS.has(orderRaw) ? orderRaw : DEFAULT_ORDER;
+  const seedParsed = Number.parseInt(search.get('seed') ?? '', 10);
+  // A seed is only meaningful for `random`. When the URL lands on `random`
+  // without one (e.g. someone typed `?order=random` by hand) generate one so
+  // the result is at least defined; the next render will write it back out.
+  const seed = Number.isFinite(seedParsed)
+    ? seedParsed
+    : order === 'random'
+      ? makeRandomSeed()
+      : 0;
   return {
     filters,
     query: search.get('q') ?? '',
     smart: search.get('smart') ?? '',
+    order,
+    seed,
   };
 }
 
@@ -403,17 +417,21 @@ function readRange(
 
 /**
  * Inverse of {@link filterStateFromUrl}: serialize a `FilterState` (+ free
- * text inputs) into a `URLSearchParams`. Empty / null fields are omitted so
- * the resulting URL stays compact.
+ * text inputs and ordering) into a `URLSearchParams`. Empty / null / default
+ * fields are omitted so the resulting URL stays compact.
  * @param filters - Current filter state.
  * @param query - Free-text title query.
  * @param smart - smart-sqlite3-filter expression.
+ * @param order - Result ordering key.
+ * @param seed - Integer seed; only written when `order === 'random'`.
  * @returns A fresh `URLSearchParams` (no `?` prefix).
  */
 export function filterStateToUrl(
   filters: FilterState,
   query: string,
   smart: string,
+  order: OrderKey,
+  seed: number,
 ): URLSearchParams {
   const params = new URLSearchParams();
   if (filters.methods.size > 0) {
@@ -432,6 +450,9 @@ export function filterStateToUrl(
   if (filters.ligandCode) params.set('ligandCode', filters.ligandCode);
   if (query.trim()) params.set('q', query.trim());
   if (smart.trim()) params.set('smart', smart.trim());
+  // Omit the default — every other order key reflects in the URL.
+  if (order !== DEFAULT_ORDER) params.set('order', order);
+  if (order === 'random') params.set('seed', String(seed));
   return params;
 }
 

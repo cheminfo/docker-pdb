@@ -164,3 +164,65 @@ test('GET /v1/pdbs?smart=year:0..1900 returns empty without 500', async () => {
   expect(response.statusCode).toBe(200);
   expect(response.json()).toStrictEqual({ docs: [], fts: false, smart: true });
 });
+
+test('GET /v1/pdbs?order=year-desc sorts by year descending', async () => {
+  const response = await app.inject({
+    method: 'GET',
+    url: '/v1/pdbs?order=year-desc',
+  });
+
+  expect(response.statusCode).toBe(200);
+  expect(response.json().docs.map((doc) => doc._id)).toStrictEqual([
+    '1GHI', // 2025
+    '1ABC', // 2024
+    '1DEF', // 2023
+  ]);
+});
+
+test('GET /v1/pdbs?order=residues sorts by residues ascending', async () => {
+  const response = await app.inject({
+    method: 'GET',
+    url: '/v1/pdbs?order=residues',
+  });
+
+  expect(response.statusCode).toBe(200);
+  expect(response.json().docs.map((doc) => doc._id)).toStrictEqual([
+    '1DEF', // 280
+    '1ABC', // 350
+    '1GHI', // 1500
+  ]);
+});
+
+test('GET /v1/pdbs?order=random with same seed is deterministic', async () => {
+  const url = '/v1/pdbs?order=random&seed=42';
+  const first = await app.inject({ method: 'GET', url });
+  const second = await app.inject({ method: 'GET', url });
+
+  expect(first.statusCode).toBe(200);
+  expect(second.statusCode).toBe(200);
+  // Same seed → same shuffle on every call.
+  expect(first.json().docs.map((doc) => doc._id)).toStrictEqual(
+    second.json().docs.map((doc) => doc._id),
+  );
+  // And the set of returned ids is the full collection (no rows dropped).
+  expect(
+    first
+      .json()
+      .docs.map((doc) => doc._id)
+      .toSorted(),
+  ).toStrictEqual(['1ABC', '1DEF', '1GHI']);
+});
+
+test('GET /v1/pdbs?order=unknown falls back to id ordering', async () => {
+  const response = await app.inject({
+    method: 'GET',
+    url: '/v1/pdbs?order=banana',
+  });
+
+  expect(response.statusCode).toBe(200);
+  expect(response.json().docs.map((doc) => doc._id)).toStrictEqual([
+    '1ABC',
+    '1DEF',
+    '1GHI',
+  ]);
+});

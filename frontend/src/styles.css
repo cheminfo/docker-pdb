@@ -752,6 +752,16 @@ code {
   margin-bottom: 4px;
 }
 
+.filter-order-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.filter-order-row .bp6-html-select {
+  flex: 1;
+}
+
 .filter-range-value {
   font-size: 11px;
   color: var(--accent);
