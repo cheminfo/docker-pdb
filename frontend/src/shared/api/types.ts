@@ -216,6 +216,17 @@ export interface SyncRunningInfo {
   total?: number;
   /** Most recently processed PDB id, surfaced for the live banner. */
   lastEntryId?: string;
+  /**
+   * Aggregated PyMol render outcomes for the current bio-assembly phase.
+   * `rendered` = new PNGs generated; `skipped` = existing PNGs kept;
+   * `failed` = render attempts that threw (also appended to
+   * `data/pymol/failures.log` for offline triage).
+   */
+  renderStats?: {
+    rendered: number;
+    skipped: number;
+    failed: number;
+  };
 }
 
 /** Live state of the rsync cron. */

@@ -88,7 +88,10 @@ export default async function update(options = {}) {
       config.bioAssembly.rsync.source,
       config.bioAssembly.rsync.destination,
       config.bioAssembly.rsync.port || 873,
-      common.processPdbAssembly,
+      // Rsync hands us a freshly-written `.pdb1.gz` — pass `forceRender` so
+      // stale PNGs from a previous deposit are unlinked and re-rendered
+      // instead of being kept by the already-exists fast-path in pymol().
+      (file) => common.processPdbAssembly(file, { forceRender: true }),
       config.bioAssembly.rsync.historyDir,
       'bioAssembly',
       options.onProgress
@@ -154,6 +157,7 @@ async function doRsync(
   });
 
   let processed = 0;
+  const renderStats = { rendered: 0, skipped: 0, failed: 0 };
   /* eslint-disable no-await-in-loop -- intentional sequential sqlite writes */
   const workerDone = (async () => {
     while (true) {
@@ -164,12 +168,18 @@ async function doRsync(
       }
       const file = queue.shift();
       try {
-        await processFile(file);
+        const result = await processFile(file);
+        if (result && typeof result === 'object') {
+          renderStats.rendered += result.rendered ?? 0;
+          renderStats.skipped += result.skipped ?? 0;
+          renderStats.failed += result.failed ?? 0;
+        }
         processed++;
         if (onProgress) {
           await onProgress({
             processed,
             lastEntryId: common.getIdFromFileName(file).toUpperCase(),
+            renderStats,
           });
         }
       } catch (error) {

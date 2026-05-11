@@ -1,10 +1,16 @@
 import { useEffect, useState } from 'react';
 
 import { fetchSyncStatus } from './api/client.ts';
-import type { SyncPhase, SyncRunningInfo } from './api/types.ts';
+import type {
+  SyncPhase,
+  SyncRunningInfo,
+  SyncStatusResponse,
+} from './api/types.ts';
 
 const POLL_INTERVAL_RUNNING_MS = 2_000;
 const POLL_INTERVAL_IDLE_MS = 30_000;
+
+const CCD_LABEL = 'Seeding Chemical Component Dictionary (first boot)';
 
 const PHASE_LABELS: Record<SyncPhase, string> = {
   'rebuild-asym':
@@ -24,7 +30,7 @@ const PHASE_LABELS: Record<SyncPhase, string> = {
  * @returns The banner React element, or null when no work is in flight.
  */
 export default function SeedingBanner() {
-  const [running, setRunning] = useState<SyncRunningInfo | null>(null);
+  const [status, setStatus] = useState<SyncStatusResponse | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -32,11 +38,11 @@ export default function SeedingBanner() {
 
     const tick = () => {
       fetchSyncStatus().then(
-        (status) => {
+        (next) => {
           if (cancelled) return;
-          const next = status.rsync.running;
-          setRunning(next);
-          const nextDelay = next
+          setStatus(next);
+          const isRunning = Boolean(next.rsync.running || next.ccd.running);
+          const nextDelay = isRunning
             ? POLL_INTERVAL_RUNNING_MS
             : POLL_INTERVAL_IDLE_MS;
           timer = setTimeout(tick, nextDelay);
@@ -55,9 +61,19 @@ export default function SeedingBanner() {
     };
   }, []);
 
-  if (!running?.phase) return null;
+  // Rsync / rebuild work takes precedence over CCD because it carries the
+  // richer progress payload. CCD is shown only when nothing else is active.
+  const running: SyncRunningInfo | null =
+    status?.rsync.running ?? status?.ccd.running ?? null;
 
-  const label = PHASE_LABELS[running.phase];
+  if (!running) return null;
+  const label =
+    running.type === 'ccd'
+      ? CCD_LABEL
+      : running.phase
+        ? PHASE_LABELS[running.phase]
+        : null;
+  if (!label) return null;
   const processed = running.processed ?? 0;
   const total = running.total;
   const percent =
@@ -82,6 +98,13 @@ export default function SeedingBanner() {
           {counter}
           {percent !== null ? ` (${percent}%)` : ''}
           {running.lastEntryId ? ` · last: ${running.lastEntryId}` : ''}
+          {running.renderStats
+            ? ` · pymol: ${running.renderStats.rendered.toLocaleString()} rendered, ${running.renderStats.skipped.toLocaleString()} skipped${
+                running.renderStats.failed > 0
+                  ? `, ${running.renderStats.failed.toLocaleString()} failed`
+                  : ''
+              }`
+            : ''}
         </span>
       </div>
       {percent !== null ? (

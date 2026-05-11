@@ -80,6 +80,10 @@ function getAssemblyFiles() {
  * @property {number} total - Total files in this phase.
  * @property {string | undefined} lastEntryId - PDB id of the most recently
  *   processed file, surfaced for live UI display.
+ * @property {{ rendered: number, skipped: number, failed: number } | undefined} renderStats -
+ *   Aggregated PyMol render outcomes since the phase started. Set during
+ *   the bio-assembly phase; left `undefined` for the asym-unit phase, which
+ *   does no rendering.
  */
 
 /**
@@ -157,9 +161,13 @@ export async function pdb(options = {}) {
  * for each file is a single statement so per-batch transactions add no
  * meaningful speed-up here — PyMol rendering is the bottleneck — but we
  * still emit progress so the UI can show "12 345 / 215 678" while it runs.
+ *
+ * Pre-existing PNGs are kept (no `forceRender`), so a rebuild after a
+ * cold start is cheap; the rsync path is the only caller that unlinks
+ * stale PNGs.
  * @param {RebuildOptions} [options] - Progress callbacks.
  * @returns {Promise<RebuildProgress>} Final progress (processed === total
- *   on success).
+ *   on success), including the aggregated PyMol render stats.
  */
 export async function assembly(options = {}) {
   await getLigandsDB();
@@ -169,14 +177,19 @@ export async function assembly(options = {}) {
     processed: 0,
     total: files.length,
     lastEntryId: undefined,
+    renderStats: { rendered: 0, skipped: 0, failed: 0 },
   });
 
   let processed = 0;
   let lastEntryId;
+  const renderStats = { rendered: 0, skipped: 0, failed: 0 };
   /* eslint-disable no-await-in-loop -- pymol is heavy; render sequentially */
   for (const file of files) {
     try {
-      await common.processPdbAssembly(file);
+      const fileStats = await common.processPdbAssembly(file);
+      renderStats.rendered += fileStats.rendered;
+      renderStats.skipped += fileStats.skipped;
+      renderStats.failed += fileStats.failed;
       lastEntryId = common.getIdFromFileName(file).toUpperCase();
     } catch (error) {
       debug('Exception for file:', file, error);
@@ -186,11 +199,12 @@ export async function assembly(options = {}) {
       processed,
       total: files.length,
       lastEntryId,
+      renderStats,
     });
   }
   /* eslint-enable no-await-in-loop */
 
-  return { processed, total: files.length, lastEntryId };
+  return { processed, total: files.length, lastEntryId, renderStats };
 }
 
 if (process.argv[1] === import.meta.filename) {

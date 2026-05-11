@@ -16,7 +16,7 @@ services:
       DEBUG: '*'
       PORT: '3000'
     restart: unless-stopped
-    command: sh -c "npm run seed-ccd; npm run api"
+    command: npm run api
 
   # Same nginx config as the production stack so `/v1/...` resolves
   # identically. Bound to a separate port (12346) to avoid conflicting

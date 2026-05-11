@@ -74,7 +74,10 @@ services:
       options:
         max-size: '10m'
         max-file: '3'
-    command: sh -c "npm run seed-ccd; npm run api"
+    # The CCD seed is owned by pdb-api-cron — pdb-api starts the API
+    # server immediately so cloudflared never returns 502 during the
+    # first boot.
+    command: npm run api
 
   pdb-api-cron:
     # Periodically refreshes data/sqlite/ligands.db from the wwPDB

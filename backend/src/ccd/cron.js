@@ -4,10 +4,12 @@
 // archive is older than 7 days, and otherwise sleeps until the next
 // refresh window.
 //
-// Wired into compose as the `pdb-api-cron` service. Independent of
-// `pdb-api`'s startup seed: on a fresh deploy `pdb-api` writes the
-// initial copy of `components.cif.gz`, and this cron sees a fresh cache
-// on its first iteration and goes straight to sleep — no race.
+// Wired into compose as the `pdb-api-cron` service. This is the sole
+// owner of the CCD seed/refresh — `pdb-api` no longer runs `seed-ccd`
+// at boot, because doing so blocked the API server for 5–30 min on first
+// deploy and made nginx return 502 the whole time. On a fresh deploy
+// this loop starts seeding within seconds (`ageMs` is `+Infinity`, which
+// trips the "stale or missing → refresh now" branch below).
 //
 // Like the rsync loop, this cron polls `data/control/ccd-trigger` so the
 // Settings page can request an immediate refresh without waiting up to a
@@ -31,9 +33,6 @@ const logger = pino({ name: 'ccd-refresh-cron' });
 
 /** wwPDB publishes CCD updates weekly. */
 const REFRESH_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
-
-/** Backoff when the cache is missing entirely (pdb-api hasn't seeded yet). */
-const SLEEP_WHEN_NO_CACHE_MS = 60 * 60 * 1000;
 
 /** Minimum sleep between iterations to avoid a tight loop on bugs. */
 const MIN_SLEEP_MS = 60 * 1000;
@@ -59,15 +58,6 @@ async function runForever() {
   while (true) {
     const ageMs = await getCacheAgeMs();
     const triggered = triggerExists(KIND);
-
-    if (ageMs === Number.POSITIVE_INFINITY && !triggered) {
-      logger.info(
-        { sleepHours: SLEEP_WHEN_NO_CACHE_MS / 3_600_000 },
-        'No CCD cache yet; pdb-api will seed first. Sleeping.',
-      );
-      await sleepUntilTrigger(SLEEP_WHEN_NO_CACHE_MS);
-      continue;
-    }
 
     if (triggered || ageMs >= REFRESH_INTERVAL_MS) {
       logger.info(

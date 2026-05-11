@@ -10,18 +10,29 @@ const debug = createDebug('pdb-sync:pymol');
 
 /**
  * Render a PyMol PNG of `pdb` and persist it to disk at `outputPath`.
- * Returns the absolute output path. Skipped silently when the target file
- * already exists, which keeps `npm run rebuild-db` cheap to re-run.
+ * Returns `{ outputPath, status }` so the caller can aggregate per-run
+ * statistics. Skipped silently when the target file already exists, which
+ * keeps `npm run rebuild-db` cheap to re-run — pass `force: true` to
+ * regenerate (used by the rsync path when an entry is replaced upstream).
  * @param {string} id - PDB identifier (uppercased).
  * @param {Buffer | string} pdb - Decompressed PDB content.
  * @param {string} outputPath - Absolute path of the .png file to write.
- * @param {{ width: number, height: number }} options - Image dimensions.
- * @returns {Promise<string>} The output path.
+ * @param {{ width: number, height: number, force?: boolean }} options - Image
+ *   dimensions and an optional `force` flag that bypasses the
+ *   already-exists fast-path and unlinks the stale file before rendering.
+ * @returns {Promise<{ outputPath: string, status: 'rendered' | 'skipped' }>} -
+ *   The result; `status: 'skipped'` means the existing file was reused.
  */
 export default async function pymol(id, pdb, outputPath, options) {
-  if (existsSync(outputPath)) {
+  const force = Boolean(options?.force);
+  if (!force && existsSync(outputPath)) {
     debug(`pymol skip (exists): ${outputPath}`);
-    return outputPath;
+    return { outputPath, status: 'skipped' };
+  }
+  if (force) {
+    // Drop the stale PNG before re-rendering so a failed render leaves no
+    // ambiguous half-state on disk.
+    tryUnlink(outputPath);
   }
   const { width = 200, height = 200 } = options ?? {};
   debug(`pymol ${width} x ${height} -> ${outputPath}`);
@@ -52,7 +63,7 @@ export default async function pymol(id, pdb, outputPath, options) {
             reject(err);
             return;
           }
-          resolve(outputPath);
+          resolve({ outputPath, status: 'rendered' });
         });
     });
   });

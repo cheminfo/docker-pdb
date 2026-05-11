@@ -74,12 +74,26 @@ async function runRebuild() {
   try {
     /* eslint-disable no-await-in-loop -- two phases, run sequentially */
     for (const phase of ['rebuild-asym', 'rebuild-assembly']) {
-      const onStart = async ({ total }) => {
-        await updateRunning(KIND, { phase, processed: 0, total });
+      const onStart = async ({ total, renderStats }) => {
+        await updateRunning(KIND, {
+          phase,
+          processed: 0,
+          total,
+          renderStats,
+        });
       };
-      const onProgress = throttle(async ({ processed, total, lastEntryId }) => {
-        await updateRunning(KIND, { phase, processed, total, lastEntryId });
-      }, MARKER_UPDATE_INTERVAL_MS);
+      const onProgress = throttle(
+        async ({ processed, total, lastEntryId, renderStats }) => {
+          await updateRunning(KIND, {
+            phase,
+            processed,
+            total,
+            lastEntryId,
+            renderStats,
+          });
+        },
+        MARKER_UPDATE_INTERVAL_MS,
+      );
       const fn = phase === 'rebuild-asym' ? rebuild.pdb : rebuild.assembly;
       const final = await fn({ onStart, onProgress });
       // Flush the final state so the UI shows 100% even if the last
@@ -89,6 +103,7 @@ async function runRebuild() {
         processed: final.processed,
         total: final.total,
         lastEntryId: final.lastEntryId,
+        renderStats: final.renderStats,
       });
     }
     /* eslint-enable no-await-in-loop */
@@ -119,12 +134,24 @@ async function runOnce() {
     processed: 0,
   });
   try {
-    const onProgress = throttle(async ({ phase, processed, lastEntryId }) => {
-      await updateRunning(KIND, { phase, processed, lastEntryId });
-    }, MARKER_UPDATE_INTERVAL_MS);
+    const onProgress = throttle(
+      async ({ phase, processed, lastEntryId, renderStats }) => {
+        await updateRunning(KIND, {
+          phase,
+          processed,
+          lastEntryId,
+          renderStats,
+        });
+      },
+      MARKER_UPDATE_INTERVAL_MS,
+    );
     await update({
       onPhase: async ({ phase }) => {
-        await updateRunning(KIND, { phase, processed: 0 });
+        await updateRunning(KIND, {
+          phase,
+          processed: 0,
+          renderStats: undefined,
+        });
       },
       onProgress,
     });
