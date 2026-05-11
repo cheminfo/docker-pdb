@@ -34,9 +34,11 @@ export default function EcClassesChart() {
       errorPrefix="Could not load EC-class distribution"
     >
       {(data) => {
-        const sortedRows = data.rows.toSorted(
-          (left, right) => right.value - left.value,
-        );
+        // Reverse the descending sort so the largest bar lands at the top
+        // (Nivo horizontal renders data[last] at the top of the chart).
+        const sortedRows = data.rows
+          .toSorted((left, right) => right.value - left.value)
+          .toReversed();
         const labelToDigit = new Map<string, string>();
         const chartData = sortedRows.map((row) => {
           const label = EC_LABELS[row.key] ?? `EC ${row.key}`;

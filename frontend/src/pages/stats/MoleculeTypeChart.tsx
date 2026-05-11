@@ -25,8 +25,11 @@ export default function MoleculeTypeChart() {
       errorPrefix="Could not load molecule-type breakdown"
     >
       {(data) => {
+        // Reverse the descending sort so the largest bucket lands at the
+        // top — Nivo horizontal renders data[last] at the top of the chart.
         const chartData = data.rows
           .toSorted((left, right) => right.value - left.value)
+          .toReversed()
           .map((row) => ({
             index: LABELS[row.key] ?? row.key,
             count: row.value,

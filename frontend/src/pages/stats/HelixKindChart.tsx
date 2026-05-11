@@ -37,9 +37,12 @@ export default function HelixKindChart() {
       errorPrefix="Could not load helix-kind distribution"
     >
       {(data) => {
-        const sortedRows = data.rows.toSorted(
-          (left, right) => right.value - left.value,
-        );
+        // Sort descending, then reverse so the most-abundant bar ends up
+        // last in the array — Nivo's horizontal layout renders data[0] at
+        // the bottom and data[last] at the top.
+        const sortedRows = data.rows
+          .toSorted((left, right) => right.value - left.value)
+          .toReversed();
         const labelToKind = new Map<string, number>();
         const chartData = sortedRows.map((row) => {
           const label = KIND_LABELS[row.key] ?? `Kind ${row.key}`;

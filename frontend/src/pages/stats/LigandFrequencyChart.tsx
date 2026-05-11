@@ -26,9 +26,12 @@ export default function LigandFrequencyChart() {
       errorPrefix="Could not load ligand frequencies"
     >
       {(data) => {
+        // Take the top N (descending), then reverse so the most-abundant
+        // ligand sits at the top of the chart in Nivo's horizontal layout.
         const chartData = data.rows
           .toSorted((left, right) => right.value - left.value)
           .slice(0, TOP_N)
+          .toReversed()
           .map((row) => ({ index: row.key, count: row.value }));
         return (
           <HistogramBar

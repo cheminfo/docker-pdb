@@ -12,7 +12,6 @@ const LABELS: Record<string, string> = {
   'sheets-only': 'Sheets only',
   none: 'No SS annotated',
 };
-const ORDER = ['mixed', 'helices-only', 'sheets-only', 'none'];
 
 /**
  * Render a horizontal bar chart of how many entries fall into each
@@ -32,13 +31,18 @@ export default function SecondaryStructureChart() {
       errorPrefix="Could not load secondary-structure presence"
     >
       {(data) => {
-        const byKey = new Map(data.rows.map((row) => [row.key, row.value]));
         const labelToKey = new Map<string, string>();
-        const chartData = ORDER.map((key) => {
-          const label = LABELS[key] ?? key;
-          labelToKey.set(label, key);
-          return { index: label, count: byKey.get(key) ?? 0 };
-        }).filter((row) => row.count > 0);
+        // Sort by count descending, then reverse — Nivo horizontal renders
+        // data[last] at the top, so this puts the most-abundant bucket on top.
+        const chartData = data.rows
+          .filter((row) => row.value > 0)
+          .toSorted((left, right) => right.value - left.value)
+          .toReversed()
+          .map((row) => {
+            const label = LABELS[row.key] ?? row.key;
+            labelToKey.set(label, row.key);
+            return { index: label, count: row.value };
+          });
         return (
           <HistogramBar
             data={chartData}
