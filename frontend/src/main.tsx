@@ -8,7 +8,6 @@ import ApiPage from './pages/api/ApiPage.tsx';
 import BrowsePage from './pages/browse/BrowsePage.tsx';
 import HomePage from './pages/home/HomePage.tsx';
 import MoleculesPage from './pages/molecules/MoleculesPage.tsx';
-import OmegaPage from './pages/omega/OmegaPage.tsx';
 import ScriptingPage from './pages/scripting/ScriptingPage.tsx';
 import SettingsPage from './pages/settings/SettingsPage.tsx';
 import StatsPage from './pages/stats/StatsPage.tsx';
@@ -32,9 +31,9 @@ createRoot(container).render(
             <Route path="/" element={<HomePage />} />
             <Route path="/browse" element={<BrowsePage />} />
             <Route path="/scripting" element={<ScriptingPage />} />
+            <Route path="/scripting/:pdbId" element={<ScriptingPage />} />
             <Route path="/molecules" element={<MoleculesPage />} />
             <Route path="/stats" element={<StatsPage />} />
-            <Route path="/omega" element={<OmegaPage />} />
             <Route path="/api" element={<ApiPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/about" element={<AboutPage />} />

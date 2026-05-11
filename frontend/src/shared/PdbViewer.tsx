@@ -59,6 +59,19 @@ export interface PdbViewerHandle {
    * this to drive Mol* directly from student-written scripts.
    */
   getPlugin: () => { plugin: unknown; molScript: unknown } | null;
+  /**
+   * Return the underlying Mol* WebGL canvas, or `null` if the viewer is not
+   * yet mounted. Used by the scripting page to feed the canvas into a
+   * `MediaRecorder` for video capture.
+   */
+  getCanvas: () => HTMLCanvasElement | null;
+  /**
+   * Immediately halt any trackball animation (spin/rotate) the current
+   * scene has running. Scripting calls this from the Stop button so the
+   * molecule freezes the moment the user asks it to, rather than waiting
+   * for the next `delay()` to abort.
+   */
+  stopAnimations: () => void;
 }
 
 interface MolstarViewer {
@@ -173,6 +186,12 @@ const PdbViewer = forwardRef<PdbViewerHandle, PdbViewerProps>(
           const api = molScriptApiRef.current;
           if (!viewer || !api) return null;
           return { plugin: viewer.plugin, molScript: api };
+        },
+        getCanvas: () => containerRef.current?.querySelector('canvas') ?? null,
+        stopAnimations: () => {
+          viewerRef.current?.plugin.canvas3d?.setProps({
+            trackball: { animate: { name: 'off', params: {} } },
+          });
         },
       }),
       [],
@@ -304,7 +323,7 @@ const PdbViewer = forwardRef<PdbViewerHandle, PdbViewerProps>(
       viewer?.plugin.canvas3d?.setProps({
         trackball: {
           animate: spin
-            ? { name: 'spin', params: { speed: 1, axis: [0, 1, 0] } }
+            ? { name: 'spin', params: { speed: 30 / 360, axis: [0, 1, 0] } }
             : { name: 'off', params: {} },
         },
       });

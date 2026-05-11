@@ -4,7 +4,11 @@ import { expect, test } from 'vitest';
 
 import { getInMemoryLigandsDB } from '../getDB.js';
 import { readPdbDoc } from '../readPdbEntry.js';
-import { recordRsyncHistory, upsertPdbEntrySync } from '../upsertPdbEntry.js';
+import {
+  recordCcdHistory,
+  recordRsyncHistory,
+  upsertPdbEntrySync,
+} from '../upsertPdbEntry.js';
 
 const SAMPLE = {
   title: 'TEST PROTEIN',
@@ -243,6 +247,56 @@ test('recordRsyncHistory inserts a row that survives reads', async () => {
   });
   // Touch recordRsyncHistory so the export is exercised.
   expect(typeof recordRsyncHistory).toBe('function');
+
+  db.close();
+});
+
+test('ccd_history records both success and failure runs', async () => {
+  const db = await getInMemoryLigandsDB();
+
+  db.insertCcdHistory.run(
+    '2026-01-01T00:00:00.000Z',
+    '2026-01-01T00:05:00.000Z',
+    300_000,
+    'success',
+    30_000,
+    42,
+    250_000_000,
+    null,
+  );
+  db.insertCcdHistory.run(
+    '2026-01-08T00:00:00.000Z',
+    '2026-01-08T00:00:01.000Z',
+    1_000,
+    'failed',
+    0,
+    0,
+    null,
+    'HTTP 503',
+  );
+
+  const rows = db.selectCcdHistory.all(10).map((row) => ({ ...row }));
+
+  expect(rows).toHaveLength(2);
+  expect(rows[0]).toStrictEqual({
+    started_at: '2026-01-08T00:00:00.000Z',
+    finished_at: '2026-01-08T00:00:01.000Z',
+    duration_ms: 1_000,
+    status: 'failed',
+    imported_count: 0,
+    skipped_count: 0,
+    bytes_on_disk: null,
+    error: 'HTTP 503',
+  });
+  expect(rows[1].status).toBe('success');
+  expect(rows[1].imported_count).toBe(30_000);
+
+  const last = db.selectLastCcdRefresh.get();
+
+  expect(last.status).toBe('failed');
+
+  // Touch recordCcdHistory so the export is exercised.
+  expect(typeof recordCcdHistory).toBe('function');
 
   db.close();
 });

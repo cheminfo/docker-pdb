@@ -33,6 +33,12 @@ export interface RunScriptParams {
   delay: Delay;
   /** User-typed script source. */
   body: string;
+  /**
+   * Optional abort signal. When the Stop button fires this signal, the
+   * `delay` global rejects with an `AbortError` and the runner returns
+   * `{ aborted: true }` instead of surfacing the error to the user.
+   */
+  signal?: AbortSignal;
 }
 
 /**
@@ -50,7 +56,7 @@ export interface RunScriptParams {
  */
 export async function runScript(
   params: RunScriptParams,
-): Promise<{ error?: Error }> {
+): Promise<{ error?: Error; aborted?: boolean }> {
   let scriptFunction: ScriptFunction;
   try {
     scriptFunction = new AsyncFunctionConstructor(
@@ -67,6 +73,7 @@ export async function runScript(
     await scriptFunction(params.text, params.MolStar, params.delay);
     return {};
   } catch (error) {
+    if (params.signal?.aborted) return { aborted: true };
     return { error: toError(error) };
   }
 }

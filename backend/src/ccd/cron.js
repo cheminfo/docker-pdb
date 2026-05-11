@@ -20,6 +20,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 import { pino } from 'pino';
 
+import { recordCcdHistory } from '../db/upsertPdbEntry.js';
 import {
   clearRunning,
   clearTrigger,
@@ -92,26 +93,68 @@ async function runForever() {
 /**
  * Refresh the CCD once, wrapped with the running marker so the API can
  * report live state. Errors are caught here so a single network blip
- * never crashes the process and triggers a restart loop.
+ * never crashes the process and triggers a restart loop. Every run —
+ * success or failure — is appended to `ccd_history` so the Settings
+ * page can render a refresh log alongside the rsync one.
  */
 async function runOnce() {
   await clearTrigger(KIND);
 
   const startedAt = new Date().toISOString();
+  const startedAtMs = Date.now();
   await markRunning(KIND, {
     startedAt,
     type: KIND,
     pid: process.pid,
   });
+  let status = 'success';
+  let importedCount = 0;
+  let skippedCount = 0;
+  let errorMessage = null;
   try {
-    await seedCCD({ force: true });
+    const result = await seedCCD({ force: true });
+    importedCount = result.imported;
+    skippedCount = result.skipped;
   } catch (error) {
+    status = 'failed';
+    errorMessage = String(error);
     logger.error(
-      { error: String(error) },
+      { error: errorMessage },
       'CCD refresh failed; will retry next cycle',
     );
   } finally {
     await clearRunning(KIND);
+    try {
+      await recordCcdHistory({
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        durationMs: Date.now() - startedAtMs,
+        status,
+        importedCount,
+        skippedCount,
+        bytesOnDisk: await getArchiveSize(),
+        error: errorMessage,
+      });
+    } catch (error) {
+      logger.error(
+        { error: String(error) },
+        'Failed to record ccd-history row',
+      );
+    }
+  }
+}
+
+/**
+ * Best-effort archive size for the `ccd_history` row. Returns `null`
+ * if the cache file isn't there (e.g. download failed before rename).
+ * @returns {Promise<number | null>} Archive size in bytes, or `null`.
+ */
+async function getArchiveSize() {
+  try {
+    const stats = await stat(ccdGzPath);
+    return stats.size;
+  } catch {
+    return null;
   }
 }
 

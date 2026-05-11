@@ -17,6 +17,7 @@ test('migrations create the full sqlite schema in an empty database', async () =
       .map((row) => row.name),
   );
   for (const expected of [
+    'ccd_history',
     'ligand_ss_index',
     'ligands',
     'pdb_chains',

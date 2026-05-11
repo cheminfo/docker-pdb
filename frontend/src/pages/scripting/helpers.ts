@@ -69,6 +69,16 @@ export interface LabelOptions {
   color?: string;
 }
 
+/**
+ * Animation options shared by `selection.focus(...)` and `selection.zoom(...)`.
+ * `seconds` is the duration of the camera tween; omit (or pass `0`) for an
+ * instant snap.
+ */
+export interface CameraTransitionOptions {
+  /** Tween duration in seconds. Omit or `0` for an instant snap. */
+  seconds?: number;
+}
+
 /** Options accepted by `ms.rotate(...)`. */
 export interface RotateOptions {
   /**
@@ -185,14 +195,30 @@ export interface ScriptApi {
 
   selectionHalos: (on: boolean) => Promise<void>;
 
-  focus: (selection: SelectionToken) => Promise<void>;
+  focus: (
+    selection: SelectionToken,
+    options?: CameraTransitionOptions,
+  ) => Promise<void>;
   /**
    * Center + frame the camera on `selection`'s bounding sphere such that the
    * sphere fills `factor` of the viewport. `factor = 1` matches `focus()`;
-   * smaller values leave more margin around the selection.
+   * smaller values leave more margin around the selection. Pass
+   * `{ seconds }` to animate the move — Mol* tweens the camera over the
+   * given duration instead of snapping.
    */
-  zoom: (selection: SelectionToken, factor?: number) => Promise<void>;
+  zoom: (
+    selection: SelectionToken,
+    factor?: number,
+    options?: CameraTransitionOptions,
+  ) => Promise<void>;
   resetCamera: () => Promise<void>;
+  /**
+   * Frame the entire loaded structure with a comfortable margin.
+   * Pins the camera (sets `manualReset: true`) so subsequent rep changes
+   * don't undo the framing. Use after `switchModel(...)` to centre on the
+   * structure once a synthetic model has gone away.
+   */
+  fit: (factor?: number, options?: CameraTransitionOptions) => Promise<void>;
   /**
    * Spin the camera around the given axis. Pass `'off'` to stop.
    * @param axis - Rotation axis, or `'off'` to stop spinning.
@@ -438,6 +464,13 @@ export function createScriptApi(context: ScriptApiContext): ScriptApi {
     await models.clearActive();
     await measurements.clearAll();
     await resetTransients();
+    // Re-enable Mol*'s auto-fit. `zoom()` / `focus()` flip `manualReset`
+    // on so subsequent rep changes don't undo the requested framing, but
+    // that flag persists on the plugin — without this reset, running the
+    // SAME script twice in a row, or switching to a different scene that
+    // expects a fresh auto-fit, would still see the pin from the previous
+    // run and skip the load-time framing the next script depends on.
+    plugin.canvas3d?.setProps({ camera: { manualReset: false } });
     // Re-show every default component the script may have hidden via
     // setDefaultsVisibility(false) or setSelectionVisibility(..., false).
     // Without this, camera.reset() frames only the still-visible subset
@@ -550,25 +583,65 @@ export function createScriptApi(context: ScriptApiContext): ScriptApi {
       plugin.canvas3d?.setProps({ renderer: { selectStrength: on ? 0.3 : 0 } });
     },
 
-    focus: async (selection) => {
+    focus: async (selection, options) => {
       const loci = await selectionToLoci(selection);
       if (!loci) return;
       plugin.managers.structure.selection.fromLoci('set', loci);
-      plugin.managers.camera.focusLoci(loci);
+      const durationMs = secondsToDurationMs(options?.seconds);
+      plugin.managers.camera.focusLoci(loci, { durationMs });
+      await waitForCameraAnimation(options?.seconds);
+      // See zoom() — pin the camera so subsequent rep changes don't
+      // re-fit the view and undo the explicit focus.
+      plugin.canvas3d?.setProps({ camera: { manualReset: true } });
     },
-    zoom: async (selection, factor = 0.75) => {
+    zoom: async (selection, factor, options) => {
       const loci = await selectionToLoci(selection);
       if (!loci) return;
-      const safeFactor = Math.max(0.05, Math.min(1, factor));
+      const resolvedFactor = factor ?? 0.75;
+      const safeFactor = Math.max(0.05, Math.min(1, resolvedFactor));
       const sphere = context.lociHelpers.getBoundingSphere(loci);
       const extraRadius = sphere
         ? (sphere.radius * (1 - safeFactor)) / safeFactor
         : 0;
-      plugin.managers.camera.focusLoci(loci, { extraRadius });
+      const durationMs = secondsToDurationMs(options?.seconds);
+      plugin.managers.camera.focusLoci(loci, { extraRadius, durationMs });
+      await waitForCameraAnimation(options?.seconds);
+      // Mol*'s canvas3d auto-resets the camera every time a renderable's
+      // bounding sphere moves outside the current camera sphere — which
+      // means any rep we add AFTER zoom() (a new ribbon, a fattened tube,
+      // a hidden bonds rep) can silently retarget the camera to fit the
+      // scene tightly, undoing the margin the script asked for. Flip
+      // `camera.manualReset` so the script's framing sticks until the
+      // user (or another zoom/focus call) explicitly changes it.
+      plugin.canvas3d?.setProps({ camera: { manualReset: true } });
     },
     resetCamera: async () => {
       plugin.managers.structure.selection.clear();
+      // Re-enable auto-fit before resetting so the scene boundary drives
+      // the new framing.
+      plugin.canvas3d?.setProps({ camera: { manualReset: false } });
       plugin.managers.camera.reset();
+    },
+    fit: async (factor, options) => {
+      // Frame every atom of the loaded structure. Same math as \`zoom\`,
+      // just bound to the \`all\` selection so callers don't have to spell
+      // it out after a \`switchModel\` (when the in-flight \`pdb\` handle
+      // may point at the previous model).
+      const loci = await selectionToLoci({
+        __ast: { kind: 'group', name: 'all' },
+        source: 'all',
+      });
+      if (!loci) return;
+      const resolvedFactor = factor ?? 0.85;
+      const safeFactor = Math.max(0.05, Math.min(1, resolvedFactor));
+      const sphere = context.lociHelpers.getBoundingSphere(loci);
+      const extraRadius = sphere
+        ? (sphere.radius * (1 - safeFactor)) / safeFactor
+        : 0;
+      const durationMs = secondsToDurationMs(options?.seconds);
+      plugin.managers.camera.focusLoci(loci, { extraRadius, durationMs });
+      await waitForCameraAnimation(options?.seconds);
+      plugin.canvas3d?.setProps({ camera: { manualReset: true } });
     },
     spin: async (axis, speedDegreesPerSecond = 30) => {
       applyTrackball(plugin, axis, speedDegreesPerSecond);
@@ -649,4 +722,32 @@ export function createScriptApi(context: ScriptApiContext): ScriptApi {
 
 function selectFromString(expression: string): SelectionToken {
   return { __ast: parseSelection(expression), source: expression };
+}
+
+/**
+ * Convert a script-facing `seconds` value to the `durationMs` Mol* expects.
+ * Undefined / non-positive values map to `0` so the camera snaps instantly,
+ * matching the historical behaviour of `selection.zoom(factor)`.
+ * @param seconds - Tween duration from the script API, or `undefined`.
+ * @returns Mol* `durationMs` (rounded to integer milliseconds).
+ */
+function secondsToDurationMs(seconds: number | undefined): number {
+  if (!seconds || seconds <= 0) return 0;
+  return Math.round(seconds * 1000);
+}
+
+/**
+ * `focusLoci` schedules a tween on Mol*'s animation loop but returns
+ * synchronously. Without a wait, the next script statement runs before the
+ * camera finishes moving — defeating the point of `selection.zoom(...,
+ * { seconds })`. We mirror the same delay so the await drains in step with
+ * the camera. Small overshoot (50 ms) covers Mol*'s easing settle frame.
+ * @param seconds - Tween duration; `undefined` / `0` resolves immediately.
+ * @returns A promise that resolves once the camera tween has finished.
+ */
+function waitForCameraAnimation(seconds: number | undefined): Promise<void> {
+  if (!seconds || seconds <= 0) return Promise.resolve();
+  return new Promise((resolve) => {
+    setTimeout(resolve, seconds * 1000 + 50);
+  });
 }

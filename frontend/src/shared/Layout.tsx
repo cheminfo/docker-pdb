@@ -14,7 +14,6 @@ const NAV_TABS = [
   { id: '/scripting', label: 'Scripting' },
   { id: '/molecules', label: 'Molecules' },
   { id: '/stats', label: 'Stats' },
-  { id: '/omega', label: 'Omega' },
   { id: '/api', label: 'API' },
   { id: '/settings', label: 'Settings' },
   { id: '/about', label: 'About' },

@@ -220,13 +220,20 @@ function parseBackbone(pdbText: string): Map<string, Residue[]> {
 }
 
 function dihedral(p1: Vec3, p2: Vec3, p3: Vec3, p4: Vec3): number {
+  // Standard IUPAC torsion: φ = atan2(|b2|·b1·(b2×b3), (b1×b2)·(b2×b3))
+  // (Wikipedia "Dihedral angle"; matches Biopython / Praxeolitic). The
+  // earlier form `atan2((n1×b̂2)·n2, n1·n2)` differs by a sign because
+  // (n1×b̂2)·n2 = −(n1×n2)·b̂2 (scalar triple product anti-commutativity),
+  // which flipped both φ and ψ on the Ramachandran plot.
   const b1 = subtract(p2, p1);
   const b2 = subtract(p3, p2);
   const b3 = subtract(p4, p3);
   const n1 = cross(b1, b2);
   const n2 = cross(b2, b3);
-  const m = cross(n1, normalize(b2));
-  return Math.atan2(dot(m, n2), dot(n1, n2)) * RAD_TO_DEG;
+  const b2Length = Math.sqrt(dot(b2, b2));
+  const y = b2Length * dot(b1, n2);
+  const x = dot(n1, n2);
+  return Math.atan2(y, x) * RAD_TO_DEG;
 }
 
 function subtract(a: Vec3, b: Vec3): Vec3 {
@@ -243,11 +250,6 @@ function cross(a: Vec3, b: Vec3): Vec3 {
 
 function dot(a: Vec3, b: Vec3): number {
   return a.x * b.x + a.y * b.y + a.z * b.z;
-}
-
-function normalize(a: Vec3): Vec3 {
-  const length = Math.sqrt(dot(a, a)) || 1;
-  return { x: a.x / length, y: a.y / length, z: a.z / length };
 }
 
 function distanceSq(a: Vec3, b: Vec3): number {

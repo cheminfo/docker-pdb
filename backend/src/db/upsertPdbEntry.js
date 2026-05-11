@@ -243,3 +243,28 @@ export async function recordRsyncHistory(run) {
     run.bytesOnDisk,
   );
 }
+
+/**
+ * Append a row to `ccd_history` describing a completed CCD refresh run
+ * (whether it succeeded or failed). Failures inside this helper are
+ * surfaced to the caller; the cron loop must decide whether to swallow
+ * them — same contract as {@link recordRsyncHistory}.
+ * @param {{ startedAt: string, finishedAt: string, durationMs: number,
+ *   status: 'success' | 'failed', importedCount: number,
+ *   skippedCount: number, bytesOnDisk: number | null,
+ *   error: string | null }} run - Completed CCD refresh summary.
+ * @returns {Promise<void>}
+ */
+export async function recordCcdHistory(run) {
+  const db = await getLigandsDB();
+  db.insertCcdHistory.run(
+    run.startedAt,
+    run.finishedAt,
+    run.durationMs,
+    run.status,
+    run.importedCount,
+    run.skippedCount,
+    run.bytesOnDisk,
+    run.error,
+  );
+}

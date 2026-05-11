@@ -1,3 +1,5 @@
+import OmegaPage from '../omega/OmegaPage.tsx';
+
 import AminoAcidChart from './AminoAcidChart.tsx';
 import ChainsHistogramChart from './ChainsHistogramChart.tsx';
 import CumulativeYearChart from './CumulativeYearChart.tsx';
@@ -87,6 +89,8 @@ export default function StatsPage() {
       <div className="charts charts--single">
         <MethodByYearChart />
       </div>
+
+      <OmegaPage />
     </div>
   );
 }

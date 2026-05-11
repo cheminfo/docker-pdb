@@ -34,6 +34,13 @@ export interface BondsPatch {
 
 export interface RibbonPatch {
   color?: ColorSpec;
+  /**
+   * `true` switches the channel to Mol*'s `putty` representation — a
+   * uniform polymer tube that ignores secondary-structure annotations, so
+   * helices and β-strands render as plain coil. `false` (the default) uses
+   * the standard SS-aware cartoon.
+   */
+  tubular?: boolean;
 }
 
 export interface SurfacePatch {
@@ -98,6 +105,8 @@ interface ChannelState {
   sizeFactor?: number;
   /** Surface-only: dotted vs solid. */
   dotted?: boolean;
+  /** Ribbon-only: `true` ⇒ `putty` (uniform tube), `false` ⇒ `cartoon`. */
+  tubular?: boolean;
 }
 
 /**
@@ -123,6 +132,9 @@ export function createChannels(context: ChannelContext): Channels {
       previous.reprType = previous.dotted
         ? 'gaussian-surface'
         : 'molecular-surface';
+    }
+    if (channel === 'ribbon') {
+      previous.reprType = previous.tubular ? 'putty' : 'cartoon';
     }
     await replaceComponent(context, selection, channel, key, previous);
     states.set(key, previous);
@@ -192,6 +204,7 @@ export function createChannels(context: ChannelContext): Channels {
     setRibbon: (selection, patch) =>
       applyChannel(selection, 'ribbon', patch, (state, p) => {
         if (p.color !== undefined) state.color = p.color;
+        if (p.tubular !== undefined) state.tubular = p.tubular;
       }),
     setSurface: (selection, patch) =>
       applyChannel(selection, 'surface', patch, (state, p) => {

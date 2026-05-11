@@ -439,6 +439,26 @@ export function pairFrequency(db, yearRange) {
   };
 }
 
+/**
+ * Per-`[year, residue1, residue2]` `[nbCis, nbTotal]` totals across the whole
+ * PDB. Sized to be fetched once by the frontend so the year-range slider can
+ * sum locally instead of re-querying SQL on every drag.
+ * @param {import('../../db/getDB.js').LigandsDB} db - Open ligands DB.
+ * @returns {{rows: Array<{key: [number, string, string], value: [number, number]}>}} One row per (year, r1, r2) triple with observations.
+ */
+export function pairFrequencyByYear(db) {
+  const rows =
+    /** @type {Array<{year: number, residue1: string, residue2: string, cis: number, total: number}>} */ (
+      db.statsPairFrequencyByYear.all()
+    );
+  return {
+    rows: rows.map((row) => ({
+      key: [row.year, row.residue1, row.residue2],
+      value: [row.cis ?? 0, row.total ?? 0],
+    })),
+  };
+}
+
 export function twistedPairFrequency(db) {
   const rows = db.statsTwistedPairFrequency.all();
   return {
@@ -480,5 +500,6 @@ export const STATS_HANDLERS = {
   omegaSummary,
   omegaByYear,
   cisCountHistogram,
+  pairFrequencyByYear,
   twistedPairFrequency,
 };

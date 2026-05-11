@@ -14,40 +14,111 @@ export interface Scene {
   code: string;
 }
 
-const GLOBAL_VIEW = `// Global view: everything but the HEC heme c cofactor as a ribbon coloured
-// by secondary structure, water as red spheres, cysteines as thick
-// labelled ball-and-stick (the two CYS that covalently tether HEC are
-// among them), and the HEC cofactor as pink surface dots.
+const GLOBAL_VIEW = `// Global view built step by step. Each step adds one layer on top of the
+// previous one and prints a title with the relevant count. Cysteines are
+// never selected — they ride along inside the chain backbones / ribbons.
 const ms = new MolStar();
 const pdb = ms.loadPDB(text);
-ms.echo('Global View — chains: ' + pdb.chains.join(', '), {
-  size: 28,
-  italic: true,
+ms.hideDefaults();
+
+const chainColors = ['steelblue', 'salmon', 'mediumseagreen', 'mediumpurple'];
+const chainColor = (i) => chainColors[i % chainColors.length];
+const COIL_COLOR = 'lightgrey';
+
+// Step 1 — Two chains in different colors, no secondary structure.
+//   Drawn as a backbone trace (bonds only) so the cartoon shapes of
+//   helices and β-sheets are NOT visible yet — they come in steps 2 & 3.
+ms.echo('Step 1 / 5 — Chains ' + pdb.chains.join(' + ') + ' (backbone trace)', {
+  size: 24, italic: true,
 });
+for (let i = 0; i < pdb.chains.length; i++) {
+  pdb.select(':' + pdb.chains[i] + ' and protein and backbone')
+     .bonds.diameter(0.25).color({ value: chainColor(i) });
+}
+// Frame on the whole structure. Factor 1 fits the bounding sphere
+// edge-to-edge with no extra margin; \`zoom()\` internally pins the
+// camera so subsequent rep additions / visibility flips don't trigger
+// Mol*'s auto-fit (which was tightening the view every time we added a
+// tube or recoloured a ribbon).
+pdb.all.zoom(1);
+ms.rotate({ degrees: 360, speed: 60 });
 
-const protein = pdb.select('not HEC');
-protein.ribbon.color({ model: 'structure' });
+// Step 2 — α-helices, in two beats so the build is easy to follow:
+//   2a) Hide the ball-and-stick backbone and convert the whole protein
+//       to a uniform light-grey tube (Mol*'s \`putty\` rep — ignores
+//       secondary structure, so every residue looks like plain coil).
+//       Chain identity is dropped here so the secondary-structure
+//       highlights in steps 2b and 3 read clearly against a neutral
+//       backdrop. We split the chain into three disjoint sub-selections
+//       (coil / helix / sheet) so each region carries its own channel
+//       state and can switch independently.
+//   2b) Switch the helix sub-selections from tube to SS-aware cartoon,
+//       coloured crimson. Because the channel key is the same, the
+//       tube is REPLACED in place — no ugly tube under the cartoon.
+ms.echo('Step 2 / 5 — Backbone → random-coil tube (no secondary structure)', {
+  size: 24, italic: true,
+});
+ms.bonds.hide();
+for (let i = 0; i < pdb.chains.length; i++) {
+  pdb.select(':' + pdb.chains[i] + ' and protein and not helix and not sheet')
+     .ribbon.tube().color({ value: COIL_COLOR });
+  pdb.select(':' + pdb.chains[i] + ' and helix')
+     .ribbon.tube().color({ value: COIL_COLOR });
+  pdb.select(':' + pdb.chains[i] + ' and sheet')
+     .ribbon.tube().color({ value: COIL_COLOR });
+}
+ms.rotate({ degrees: 360, speed: 60 });
 
-const water = pdb.select('[H2O]');
-water.atoms.color({ value: 'red' });
+ms.echo('Step 2 / 5 — ' + pdb.helices.length + ' α-helices', {
+  size: 24, italic: true,
+});
+for (let i = 0; i < pdb.chains.length; i++) {
+  pdb.select(':' + pdb.chains[i] + ' and helix')
+     .ribbon.cartoon().color({ value: 'crimson' });
+}
+ms.rotate({ degrees: 360, speed: 60 });
 
-const cystein = pdb.select('[CYS]');
-cystein.bonds.diameter(0.4).color({ model: 'atoms', alpha: 0.8 });
-cystein.atoms.radius({ value: 1.4 });
+// Step 3 — β-strands. Same trick: the per-chain sheet sub-selections
+// switch in place from tube to cartoon, coloured gold. The grey coil
+// tubes from step 2a stay as they are, so the random coil ↔ helix ↔
+// sheet regions are painted from disjoint reps — no overlap, no z-fight.
+ms.echo('Step 3 / 5 — ' + pdb.sheets.length + ' β-strands', {
+  size: 24, italic: true,
+});
+for (let i = 0; i < pdb.chains.length; i++) {
+  pdb.select(':' + pdb.chains[i] + ' and sheet')
+     .ribbon.cartoon().color({ value: 'gold' });
+}
+ms.rotate({ degrees: 360, speed: 60 });
 
-const cysteinCAlpha = cystein.select('.CA');
-cysteinCAlpha.label('\${residue.name}\${residue.number}');
+// Step 4 — Water molecules.
+const waterCount = pdb.residues.filter((r) => r.resName === 'HOH').length;
+ms.echo('Step 4 / 5 — ' + waterCount + ' water molecules', {
+  size: 24, italic: true,
+});
+pdb.select('water').atoms.color({ value: 'red' }).radius({ value: 0.4 });
+ms.rotate({ degrees: 360, speed: 60 });
 
-ms.spin('y');
-
+// Step 5 — Inhibitor (HEC): ball-and-stick + translucent surface.
+// Add the cofactor visualization first so it appears in the wide view,
+// THEN slowly cruise the camera in on it (3 s tween) so the binding
+// pocket reveals itself as the surrounding protein slides out of frame.
+ms.echo('Step 5 / 5 — Inhibitor HEC: ball-and-stick + transparent surface', {
+  size: 24, italic: true,
+});
 const ligand = pdb.select('HEC');
-ligand.surface.dots();
-ligand.surface.color({ value: 'pink' });
+ligand.bonds.diameter(0.2).color({ model: 'element' });
+ligand.atoms.radius({ value: 0.25 }).color({ model: 'element' });
+ligand.surface.color({ color: 'magenta', alpha: 0.3 });
+ligand.zoom(0.6, { seconds: 3 });
+ms.spin('y');
 `;
 
 const DISPLAY_HELIX = `// Alpha helix walkthrough on chain A, residues 6-21.
-// Demonstrates the new keyword selectors (helix, backbone, sidechain) and
-// the hbonds channel (yellow dashed lines by default).
+// Demonstrates the new keyword selectors (helix, backbone, sidechain), the
+// hbonds channel (yellow dashed lines by default), and the cinematic
+// \`zoom(factor, { seconds })\` tween — the rest of the protein ghosts out
+// while the camera slowly cruises in on the helix.
 const ms = new MolStar();
 const pdb = ms.loadPDB(text);
 ms.echo('Alpha Helix: residues 6-21, chain A', { size: 24, italic: true });
@@ -60,30 +131,36 @@ ms.hideDefaults();
 pdb.all.ribbon.color({ model: 'structure', alpha: 0.7 });
 ms.rotate({ degrees: 360 });
 
-// 2. Drop the global ribbon and keep only our target helix as a
-//    translucent magenta cartoon — every other secondary structure
-//    (helices, sheets, loops) disappears with it.
-pdb.all.ribbon.hide();
+// 2. Spotlight the target helix: paint it as an opaque magenta cartoon on
+//    top, then ghost out the rest of the protein (alpha 0.05). The overlay
+//    appears bright against a near-invisible backdrop without abrupt cuts.
 const helix = pdb.select('6-21:A');
-helix.ribbon.color({ color: 'magenta', alpha: 0.45 });
+helix.ribbon.color({ color: 'magenta', alpha: 1 });
+pdb.all.ribbon.color({ model: 'structure', alpha: 0.05 });
 
-// 3. Zoom in tight on the helix and show backbone atoms + bonds.
-helix.zoom(0.95);
+// 3. Slow cinematic zoom into the helix (2.5 s tween) — the ghost backdrop
+//    slides naturally out of frame as we move in, completing the
+//    "everything fades but the helix" effect. \`hide()\` afterwards drops
+//    the now-invisible ghost completely.
+helix.zoom(0.85, { seconds: 2.5 });
+pdb.all.ribbon.hide();
+
+// 4. Show the helix backbone atoms + bonds.
 const backbone = helix.select('backbone');
 backbone.atoms.radius({ value: 0.3 });
 backbone.atoms.color({ model: 'element' });
 backbone.bonds.diameter(0.15);
 
-// 4. Hydrogen bonds — defaults to yellow dashed cylinders. We run
+// 5. Hydrogen bonds — defaults to yellow dashed cylinders. We run
 //    detection on the backbone selection so only backbone donors and
 //    acceptors are considered; side-chain N/O atoms aren't drawn here,
 //    so they shouldn't anchor any cylinders either.
 backbone.hbonds.show();
 
-// 5. Slow rotation so the i,i+4 H-bond pattern is easy to follow.
+// 6. Slow rotation so the i,i+4 H-bond pattern is easy to follow.
 ms.rotate({ degrees: 360, speed: 45 });
 
-// 6. Side chains: just the bond cylinders. We include the .CA atom so
+// 7. Side chains: just the bond cylinders. We include the .CA atom so
 //    the CA-CB bond is in-selection and the sidechain stays anchored to
 //    the backbone (otherwise each sidechain renders as a floating stub).
 helix.select('sidechain or .CA').bonds.diameter(0.15);
@@ -106,27 +183,34 @@ ms.hideDefaults();
 pdb.all.ribbon.color({ model: 'structure', alpha: 0.7 });
 ms.rotate({ degrees: 360 });
 
-// 2. Drop the global ribbon; keep only the two β-strands as a translucent
-//    lime cartoon — the rest of the protein disappears.
-pdb.all.ribbon.hide();
+// 2. Spotlight the two β-strands: paint them as an opaque lime cartoon on
+//    top, then ghost out the rest of the protein (alpha 0.05). The bright
+//    strands sit against a near-invisible backdrop without abrupt cuts.
 const sheet = pdb.select('40-47:A or 50-57:A');
-sheet.ribbon.color({ color: 'limegreen', alpha: 0.45 });
+sheet.ribbon.color({ color: 'limegreen', alpha: 1 });
+pdb.all.ribbon.color({ model: 'structure', alpha: 0.05 });
 
-// 3. Zoom in on the strands and show backbone atoms + bonds.
-sheet.zoom(0.85);
+// 3. Slow cinematic zoom into the strands (2.5 s tween) — the ghost
+//    backdrop slides out of frame as we move in, completing the
+//    "everything fades but the sheet" effect. \`hide()\` afterwards drops
+//    the now-invisible ghost completely.
+sheet.zoom(0.75, { seconds: 2.5 });
+pdb.all.ribbon.hide();
+
+// 4. Show the strand backbone atoms + bonds.
 const backbone = sheet.select('backbone');
 backbone.atoms.radius({ value: 0.3 }).color({ model: 'element' });
 backbone.bonds.diameter(0.15);
 
-// 4. Inter-strand H-bonds — Mol*'s chemistry-aware detector run on the
+// 5. Inter-strand H-bonds — Mol*'s chemistry-aware detector run on the
 //    backbone-only sub-structure, so only N…O pairs anchored on drawn
 //    atoms get cylinders.
 backbone.hbonds.show();
 
-// 5. Slow rotation so the parallel donor/acceptor pattern is easy to see.
+// 6. Slow rotation so the parallel donor/acceptor pattern is easy to see.
 ms.rotate({ degrees: 360, speed: 45 });
 
-// 6. Side-chain bonds — include the .CA atom so the CA-CB bond stays
+// 7. Side-chain bonds — include the .CA atom so the CA-CB bond stays
 //    in-selection (otherwise the side chain renders as a floating stub).
 sheet.select('sidechain or .CA').bonds.diameter(0.15);
 `;
@@ -213,9 +297,37 @@ ms.echo('4/5 · Rotate +90° about y · back to (φ × ψ) face', {
 });
 ms.rotate({ axis: 'y', degrees: 90, speed: 45 });
 
-// Step 5 — restore the original protein view.
-ms.echo('5/5 · Back to the protein cartoon', { size: 22, italic: true });
+// Step 5 — restore the original protein view, then zoom slowly onto
+// GLY 59 (chain A) plus its two neighbours. Glycine has no side-chain
+// β-carbon, so its φ angle is free to wander outside the canonical
+// L-amino-acid region of the Ramachandran plot — and GLY 59 sits right
+// at the end of a β-strand in 8ZXR's SSR1698 domain, which is exactly
+// where you'd expect that conformational freedom to show up. We fade
+// the cartoon to near-transparent first so the camera tween reveals the
+// three-residue ball-and-stick motif against a ghosted backbone.
 pdb.switchModel('initial');
+ms.fit();
+ms.echo('5/5 · Back to the protein — focusing on GLY 59 (chain A)', {
+  size: 22, italic: true,
+});
+
+// Fade the SS cartoon down to alpha 0.1 so it stays as a faint context
+// layer instead of competing visually with the close-up.
+pdb.all.ribbon.color({ color: { model: 'structure' }, alpha: 0.1 });
+
+// Reveal GLY 59 + its two flanking residues (58–60) as ball-and-stick,
+// element-coloured, so the φ angle around the GLY 59 backbone N–Cα bond
+// reads at a glance.
+const glyContext = pdb.select('58-60:A');
+glyContext.bonds.diameter(0.15).color({ model: 'element' });
+glyContext.atoms.radius({ value: 0.3 }).color({ model: 'element' });
+glyContext.select('.CA').label('\${residue.name}\${residue.number}', {
+  size: 1.4, bold: true,
+});
+
+// Smooth 3-second cruise from the wide protein view down onto the
+// glycine — the ghosted ribbon slides out of frame as we approach.
+glyContext.zoom(0.65, { seconds: 3 });
 `;
 
 const INTERACTION = `// HEC binding-site walkthrough: faded protein cartoon for context,
@@ -243,15 +355,15 @@ const ligand = pdb.select('HEC');
 ligand.bonds.diameter(0.2).color({ model: 'element' });
 ms.rotate({ degrees: 360 });
 
-// 2. Find every non-HEC, non-water residue with at least one atom within
-//    3.5 Å of HEC, and for each such residue keep the CLOSEST HEC ↔
-//    residue atom pair so step 4 can draw the actual close contact.
+// 2. Find every non-HEC residue (protein side chains AND coordinated
+//    waters) with at least one atom within 3.5 Å of HEC, and for each
+//    such residue keep the CLOSEST HEC ↔ residue atom pair so step 4
+//    can draw the actual close contact.
 const cutoffSq = 3.5 * 3.5;
 const ligandAtoms = pdb.atoms.filter((a) => a.resName === 'HEC');
 const contactMap = new Map();
 for (const atom of pdb.atoms) {
   if (atom.resName === 'HEC') continue;
-  if (atom.resName === 'HOH') continue;
   for (const p of ligandAtoms) {
     const dx = atom.x - p.x;
     const dy = atom.y - p.y;
@@ -276,45 +388,75 @@ const contacts = [...contactMap.values()].sort((a, b) =>
   a.chainId === b.chainId ? a.resNum - b.resNum : a.chainId < b.chainId ? -1 : 1,
 );
 
-// 3. Frame HEC plus a 4-Å shell — wide enough that contact residues fit
-//    and HEC stays centred.
-pdb.select('HEC or within 4 of HEC').zoom(0.75);
+// 3. Smooth cinematic zoom right onto HEC (2.5 s tween). \`factor: 0.9\`
+//    fills almost the whole viewport with the cofactor — once contacts
+//    start landing in step 4 the camera stays here, no need to zoom
+//    again later.
+pdb.select('HEC').zoom(0.9, { seconds: 2.5 });
 ms.echo(contacts.length + ' contact residues — closest-atom distance to HEC', {
   size: 18,
   italic: true,
 });
-delay(1);
 
 // 4. Reveal each contact residue one at a time: sidechain ball-and-stick
 //    + CA label + a short orange line between the closest HEC atom and
 //    the closest residue atom. The line lies inside the 3.5 Å shell so
-//    its length matches what the title promises.
+//    its length matches what the title promises. The camera turns a
+//    small step about y between each reveal so a full 360° is spread
+//    across the contacts — atoms come into view as the binding pocket
+//    rotates.
+const revealStep = 360 / Math.max(contacts.length, 1);
 for (const r of contacts) {
   const sel = pdb.select(r.resNum + ':' + r.chainId);
-  sel.select('sidechain or .CA').bonds.diameter(0.15).color({ model: 'element' });
-  sel.select('.CA').label('\${residue.name}\${residue.number}', {
-    size: 1.3,
-    bold: true,
-  });
+  if (r.resName === 'HOH') {
+    // Water: no sidechain / no CA — show the O atom as a red sphere
+    //        and anchor the label on it.
+    sel.atoms.radius({ value: 0.45 }).color({ model: 'element' });
+    sel.select('.' + r.residueAtom).label('\${residue.name}\${residue.number}', {
+      size: 1.1,
+      bold: true,
+    });
+  } else {
+    sel.select('sidechain or .CA').bonds.diameter(0.15).color({ model: 'element' });
+    sel.select('.CA').label('\${residue.name}\${residue.number}', {
+      size: 1.3,
+      bold: true,
+    });
+  }
   const residueAtomSel = sel.select('.' + r.residueAtom);
   const ligandAtomSel = pdb.select('HEC').select('.' + r.ligandAtom);
   residueAtomSel.distances.to(ligandAtomSel, {
     color: 'orange',
     diameter: 0.05,
   });
-  delay(0.6);
+  ms.rotate({ axis: 'y', degrees: revealStep, speed: 45 });
 }
 
 // 5. Chemistry-aware H-bond cylinders (yellow dashed) overlaid on the
-//    short orange distance labels for any HEC ↔ residue pair Mol*'s
-//    contact detector flags as a hydrogen bond.
-const shell = pdb.select('within 3.5 of HEC and not HEC');
-ligand.contactsWith(shell, { kinds: ['hydrogen-bond'] });
+//    short orange distance labels for any HEC ↔ environment pair Mol*'s
+//    contact detector flags as a hydrogen bond. The partner is anything
+//    in the structure that is NOT HEC itself — protein side chains AND
+//    crystallographic waters — so coordinating H₂O molecules also draw
+//    cylinders. No distance pre-filter: Mol*'s own heavy-atom-distance
+//    threshold (3.5 Å) is enough.
+const environment = pdb.select('not HEC');
+ligand.contactsWith(environment, {
+  kinds: ['hydrogen-bond'],
+  diameter: 0.12,
+});
 
 ms.echo('HEC — H-bonds (yellow dashed) + closest-atom orange distances', {
   size: 18,
   italic: true,
 });
+
+// 6. Stay zoomed-in and slowly turn so the viewer can read every contact
+//    from each angle and appreciate how the cofactor is held in place.
+ms.echo('Turning around HEC to see the cofactor stability', {
+  size: 18,
+  italic: true,
+});
+ms.rotate({ axis: 'y', degrees: 360, speed: 30 });
 `;
 
 const MODELS = `// Demonstrate the model API. 'pdb' is one handle that follows the active

@@ -1,15 +1,17 @@
 import { Card } from '@blueprintjs/core';
-import { useCallback, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import DualRangeSlider from '../../shared/DualRangeSlider.tsx';
 import {
   fetchOmegaByYear,
   fetchOmegaSummary,
-  fetchPairFrequency,
+  fetchPairFrequencyByYear,
 } from '../../shared/api/client.ts';
 import type {
   OmegaSummaryResponse,
   OmegaTuple,
+  PairFrequencyByYearResponse,
+  PairFrequencyResponse,
 } from '../../shared/api/types.ts';
 import Panel from '../../shared/charts/Panel.tsx';
 import { formatNumber } from '../../shared/format.ts';
@@ -19,14 +21,15 @@ import CisHeatmap from './CisHeatmap.tsx';
 import CisOverTimeChart from './CisOverTimeChart.tsx';
 
 /**
- * `/omega` page: explore amide-bond ω torsion statistics across the PDB —
- * global counts, distribution over time, and a 20×20 amino-acid heatmap of
- * cis-bond probability filterable by deposition-year range.
- * @returns Omega-page React element.
+ * Amide-bond geometry section embedded in the Stats page: explore ω torsion
+ * statistics across the PDB — global counts, distribution over time, and a
+ * 20×20 amino-acid heatmap of cis-bond probability filterable by year range.
+ * @returns Omega-section React element.
  */
 export default function OmegaPage() {
   const summaryState = useAsync(fetchOmegaSummary);
   const byYearState = useAsync(fetchOmegaByYear);
+  const pairByYearState = useAsync(fetchPairFrequencyByYear);
 
   const yearBounds = useMemo<[number, number] | null>(() => {
     if (byYearState.status !== 'success') return null;
@@ -54,17 +57,15 @@ export default function OmegaPage() {
     effectiveRange[1] === yearBounds[1];
 
   return (
-    <div className="container omega-page">
-      <header>
-        <h1>Amide-bond geometry</h1>
-        <p>
-          For every consecutive residue pair, the parser computes the ω dihedral
-          (Cα-C-N-Cα). Bonds with |ω| ≤ 30° are flagged as <strong>cis</strong>;
-          |ω| ≥ 150° as <strong>trans</strong>; the rest are{' '}
-          <strong>twisted</strong>. Below: global counts, distribution over
-          time, and a 20×20 heatmap of cis probability per residue pair.
-        </p>
-      </header>
+    <>
+      <h2>Amide-bond geometry</h2>
+      <p className="omega-intro">
+        For every consecutive residue pair, the parser computes the ω dihedral
+        (Cα-C-N-Cα). Bonds with |ω| ≤ 30° are flagged as <strong>cis</strong>;
+        |ω| ≥ 150° as <strong>trans</strong>; the rest are{' '}
+        <strong>twisted</strong>. Below: global counts, distribution over time,
+        and a 20×20 heatmap of cis probability per residue pair.
+      </p>
 
       <SummaryCards state={summaryState} />
 
@@ -86,7 +87,7 @@ export default function OmegaPage() {
         </Panel>
       </div>
 
-      <h2>Cis probability per amino-acid pair</h2>
+      <h3 className="omega-subheading">Cis probability per amino-acid pair</h3>
       <p className="omega-intro">
         Each cell shows P(cis) for the peptide bond between residue i and
         residue i+1 (rows = i, columns = i+1). Cells with fewer than 3 observed
@@ -105,9 +106,9 @@ export default function OmegaPage() {
           <p className="placeholder">Loading heatmap…</p>
         </Card>
       ) : (
-        <HeatmapPanel range={effectiveRange} isFullRange={isFullRange} />
+        <HeatmapPanel state={pairByYearState} range={effectiveRange} />
       )}
-    </div>
+    </>
   );
 }
 
@@ -193,25 +194,58 @@ function YearRangeControl({
 }
 
 interface HeatmapPanelProps {
+  state: ReturnType<typeof useAsync<PairFrequencyByYearResponse>>;
   range: [number, number];
-  isFullRange: boolean;
 }
 
-function HeatmapPanel({ range, isFullRange }: HeatmapPanelProps) {
-  const fetchTask = useCallback(
-    () => fetchPairFrequency(isFullRange ? undefined : range),
-    [range, isFullRange],
+function HeatmapPanel({ state, range }: HeatmapPanelProps) {
+  const reduced = useMemo<PairFrequencyResponse | null>(
+    () =>
+      state.status === 'success' ? reduceToRange(state.data, range) : null,
+    [state, range],
   );
-
-  const state = useAsync(fetchTask);
-
   return (
     <Panel
       title="Cis probability heatmap (20 × 20)"
       state={state}
       errorPrefix="Could not load heatmap"
     >
-      {(data) => <CisHeatmap pairs={data} />}
+      {() => (reduced ? <CisHeatmap pairs={reduced} /> : null)}
     </Panel>
   );
+}
+
+/**
+ * Sum the per-year pair counts into a single `[nbCis, nbTotal]` tuple per
+ * `[residue1, residue2]` pair, keeping only rows whose year falls inside the
+ * inclusive `[fromYear, toYear]` range. Runs on every slider change but stays
+ * fast: ~24k rows × a Map lookup is well under one frame.
+ * @param data - Full per-year pair-frequency payload.
+ * @param range - Inclusive `[fromYear, toYear]` window.
+ * @returns `PairFrequencyResponse`-shaped object ready for `CisHeatmap`.
+ */
+function reduceToRange(
+  data: PairFrequencyByYearResponse,
+  range: [number, number],
+): PairFrequencyResponse {
+  const [fromYear, toYear] = range;
+  const accumulator = new Map<string, [number, number]>();
+  for (const row of data.rows) {
+    const [year, residue1, residue2] = row.key;
+    if (year < fromYear || year > toYear) continue;
+    const mapKey = `${residue1}:${residue2}`;
+    const previous = accumulator.get(mapKey);
+    if (previous) {
+      previous[0] += row.value[0];
+      previous[1] += row.value[1];
+    } else {
+      accumulator.set(mapKey, [row.value[0], row.value[1]]);
+    }
+  }
+  const rows: PairFrequencyResponse['rows'] = [];
+  for (const [mapKey, value] of accumulator) {
+    const [residue1, residue2] = mapKey.split(':') as [string, string];
+    rows.push({ key: [residue1, residue2], value });
+  }
+  return { rows };
 }

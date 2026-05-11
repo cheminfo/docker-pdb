@@ -84,6 +84,11 @@ export interface ContactsOptions {
    * the extension produces. Pass e.g. `['hydrogen-bond']` to filter.
    */
   kinds?: InteractionKind[];
+  /**
+   * Cylinder radius (Mol* `radius`) used for every rendered interaction.
+   * Defaults to the same value as the `hbonds` channel (`0.3`).
+   */
+  diameter?: number;
 }
 
 /** Resources the registry needs (lazy-imported by the page). */
@@ -541,6 +546,7 @@ export function createMeasurements(context: MeasurementsContext): Measurements {
     const bundleB = context.structureElement.Bundle.fromLoci(lociB);
 
     const kinds = options?.kinds ?? [...ALL_INTERACTION_KINDS];
+    const radius = options?.diameter ?? DEFAULT_HBOND_DIAMETER;
 
     // Force a uniform "yellow dashed cylinder, no arrow" style for every
     // requested kind — matches `setHbonds` and matches what the scripting
@@ -555,7 +561,7 @@ export function createMeasurements(context: MeasurementsContext): Measurements {
         // eslint-disable-next-line new-cap -- Mol* `Color` factory
         color: context.colorModule.Color(DEFAULT_HBOND_FALLBACK_HEX),
         style: 'dashed',
-        radius: DEFAULT_HBOND_DIAMETER,
+        radius,
         showArrow: false,
         arrowOffset: 0,
       };

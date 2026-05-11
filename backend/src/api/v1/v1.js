@@ -1,5 +1,6 @@
 import { registerGetAssemblyImageRoute } from './getAssemblyImage.js';
 import { registerGetAssemblyRawRoute } from './getAssemblyRaw.js';
+import { registerGetCcdHistoryRoute } from './getCcdHistory.js';
 import { registerGetDatabaseInfoRoute } from './getDatabaseInfo.js';
 import { registerGetJsmolPdbsRoute } from './getJsmolPdbs.js';
 import { registerGetLigandByCodeRoute } from './getLigandByCode.js';
@@ -38,6 +39,7 @@ export function v1(fastify, db) {
   registerGetPairFrequencyStatsRoute(fastify, db);
   registerGetStatsByViewRoute(fastify, db);
   registerGetRsyncHistoryRoute(fastify, db);
+  registerGetCcdHistoryRoute(fastify, db);
   registerGetSyncStatusRoute(fastify, db);
   registerTriggerSyncRoute(fastify);
 }

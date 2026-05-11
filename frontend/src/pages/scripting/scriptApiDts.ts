@@ -62,6 +62,16 @@ interface RotateOptions {
   speed?: number;
 }
 
+/**
+ * Animation options for camera moves (\`selection.focus\` and
+ * \`selection.zoom\`). \`seconds\` is the tween duration — omit (or pass
+ * \`0\`) for an instant snap.
+ */
+interface CameraTransitionOptions {
+  /** Tween duration in seconds. @default 0 */
+  seconds?: number;
+}
+
 interface SizeOptions {
   /** Multiplier on the default sizing (e.g. ×Van der Waals radius for atoms). */
   value: number;
@@ -108,6 +118,15 @@ interface BondsChannel extends VisibilityToggle<BondsChannel> {
 interface RibbonChannel extends VisibilityToggle<RibbonChannel> {
   /** Recolor (creates the ribbon on first call). */
   color(spec: ColorSpec): RibbonChannel;
+  /**
+   * Switch to Mol*'s \`putty\` representation — a uniform polymer tube
+   * that ignores secondary-structure annotations, so helices and β-strands
+   * render as plain coil. Useful to show the backbone shape without
+   * revealing where the helices and sheets sit.
+   */
+  tube(): RibbonChannel;
+  /** Switch back to the standard SS-aware cartoon (the default). */
+  cartoon(): RibbonChannel;
 }
 
 /** Solvent-accessible surface channel. */
@@ -196,6 +215,12 @@ interface MolStarResidue {
   chainId: string;
 }
 
+interface SecondaryStructureRange {
+  chainId: string;
+  fromResNum: number;
+  toResNum: number;
+}
+
 /**
  * Selection returned by \`pdb.select(...)\`. Channel objects let you build a
  * representation incrementally; chained methods cover camera, labels and
@@ -218,14 +243,19 @@ interface Selection extends VisibilityToggle<Selection> {
    * default 3D text size.
    */
   label(template: string, options?: LabelOptions): void;
-  /** Zoom + center the camera on this selection's bounding sphere. */
-  focus(): void;
+  /**
+   * Zoom + center the camera on this selection's bounding sphere. Pass
+   * \`{ seconds }\` to animate the move over that duration; omit for an
+   * instant snap.
+   */
+  focus(options?: CameraTransitionOptions): void;
   /**
    * Center + frame the camera on this selection's bounding sphere. \`factor\`
    * is the fraction (0–1) of the viewport the sphere should occupy
-   * (default 0.75).
+   * (default 0.75). Pass \`{ seconds }\` to animate the move — useful for
+   * a slow cinematic zoom-in onto a small feature.
    */
-  zoom(factor?: number): void;
+  zoom(factor?: number, options?: CameraTransitionOptions): void;
   /** Draw a labeled distance line to the centroid of \`other\`. */
   distance(other: Selection): void;
   /**
@@ -246,6 +276,17 @@ interface PDB {
   readonly residues: readonly MolStarResidue[];
   readonly chains: readonly string[];
   readonly ligands: readonly string[];
+  /**
+   * Inclusive residue ranges declared by every \`HELIX\` record. One entry
+   * per record (≈ one entry per α-helix), in source order.
+   */
+  readonly helices: readonly SecondaryStructureRange[];
+  /**
+   * Inclusive residue ranges declared by every \`SHEET\` record. One entry
+   * per record (≈ one entry per β-strand — a single β-sheet contains
+   * several entries), in source order.
+   */
+  readonly sheets: readonly SecondaryStructureRange[];
   /** Selection covering every atom of the structure. */
   readonly all: Selection;
   /** Empty selection — matches no atoms. */
@@ -317,6 +358,13 @@ declare class MolStar {
   rotate(options?: RotateOptions): void;
   /** Reset to the default Mol* view. */
   resetCamera(): void;
+  /**
+   * Frame every atom of the currently-loaded structure with a comfortable
+   * margin. \`factor\` is the fraction (0–1) of the viewport the bounding
+   * sphere should fill (default \`0.85\`). Pins the camera so subsequent
+   * rep additions don't undo the framing. Pass \`{ seconds }\` to animate.
+   */
+  fit(factor?: number, options?: CameraTransitionOptions): void;
   /** Show / hide Mol*'s yellow halos around the persistent selection. */
   selectionHalos(on: boolean): void;
   /** Show a text overlay on the canvas (independent of any molecule). */

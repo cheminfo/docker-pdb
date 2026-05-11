@@ -3,6 +3,8 @@ import { stat } from 'node:fs/promises';
 import { ccdGzPath } from '../../ccd/seedCCD.js';
 import { SYNC_KINDS, readRunning, readTrigger } from '../../syncControl.js';
 
+import { ccdHistoryRowToDoc } from './getCcdHistory.js';
+
 /** wwPDB rsync cron sleeps 24 h between passes. */
 const RSYNC_INTERVAL_MS = 24 * 60 * 60 * 1000;
 /** wwPDB CCD cron refreshes weekly. */
@@ -20,7 +22,7 @@ const CCD_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 export function registerGetSyncStatusRoute(fastify, db) {
   fastify.get('/v1/sync/status', async (_request, reply) => {
     const rsync = await getRsyncStatus(db);
-    const ccd = await getCcdStatus();
+    const ccd = await getCcdStatus(db);
     return reply.send({ rsync, ccd, kinds: SYNC_KINDS });
   });
 }
@@ -53,15 +55,29 @@ async function getRsyncStatus(db) {
   };
 }
 
-async function getCcdStatus() {
-  let lastRefreshedAt = null;
-  let bytesOnDisk = null;
-  try {
-    const stats = await stat(ccdGzPath);
-    lastRefreshedAt = new Date(stats.mtimeMs).toISOString();
-    bytesOnDisk = stats.size;
-  } catch {
-    // No CCD archive yet — pdb-api hasn't seeded the initial copy.
+async function getCcdStatus(db) {
+  // Prefer the database row written at the end of each cron pass — it
+  // carries the full success/failure outcome and the import counts. Fall
+  // back to the cached archive's mtime for the first-boot window
+  // (pdb-api has seeded the archive but the cron container hasn't
+  // written a `ccd_history` row yet).
+  const lastRow = db.selectLastCcdRefresh.get();
+  const lastRefresh = lastRow ? ccdHistoryRowToDoc(lastRow) : null;
+
+  let lastRefreshedAt = lastRefresh ? lastRefresh.finishedAt : null;
+  let bytesOnDisk = lastRefresh ? lastRefresh.bytesOnDisk : null;
+  if (!lastRefreshedAt || bytesOnDisk === null) {
+    try {
+      const stats = await stat(ccdGzPath);
+      if (!lastRefreshedAt) {
+        lastRefreshedAt = new Date(stats.mtimeMs).toISOString();
+      }
+      if (bytesOnDisk === null) {
+        bytesOnDisk = stats.size;
+      }
+    } catch {
+      // No CCD archive yet — pdb-api hasn't seeded the initial copy.
+    }
   }
   return {
     kind: 'ccd',
@@ -71,5 +87,6 @@ async function getCcdStatus() {
     triggerQueued: readTrigger('ccd'),
     lastRefreshedAt,
     bytesOnDisk,
+    lastRefresh,
   };
 }

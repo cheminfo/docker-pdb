@@ -1,4 +1,5 @@
 import type {
+  CcdHistoryResponse,
   DatabaseInfo,
   DatabaseInfoResponse,
   GroupedStatsResponse,
@@ -7,6 +8,7 @@ import type {
   LigandSearchResponse,
   OmegaByYearResponse,
   OmegaSummaryResponse,
+  PairFrequencyByYearResponse,
   PairFrequencyResponse,
   PdbDoc,
   PdbViewResponse,
@@ -365,6 +367,15 @@ export function fetchRsyncHistory(
 }
 
 /**
+ * Fetch the most recent CCD-refresh rows.
+ * @param limit - Maximum rows to return (1–200).
+ * @returns The CCD-history page.
+ */
+export function fetchCcdHistory(limit = 20): Promise<CcdHistoryResponse> {
+  return fetchJson<CcdHistoryResponse>(`/v1/ccd-history?limit=${limit}`);
+}
+
+/**
  * Fetch the live state of the rsync and CCD crons.
  * @returns Promise resolving to the combined sync status.
  */
@@ -501,6 +512,18 @@ export function fetchPairFrequency(
   const [fromYear, toYear] = yearRange;
   return fetchJson<PairFrequencyResponse>(
     `/v1/stats/pairFrequency?fromYear=${fromYear}&toYear=${toYear}`,
+  );
+}
+
+/**
+ * Fetch per-`[year, residue1, residue2]` `[nbCis, nbTotal]` tuples for the
+ * whole PDB. The page fetches this once and reduces it locally so the year-
+ * range slider can re-render the heatmap without hitting the backend.
+ * @returns Promise resolving to one row per (year, r1, r2) triple.
+ */
+export function fetchPairFrequencyByYear(): Promise<PairFrequencyByYearResponse> {
+  return fetchJson<PairFrequencyByYearResponse>(
+    '/v1/stats/pairFrequencyByYear',
   );
 }
 

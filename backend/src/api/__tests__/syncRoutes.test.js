@@ -47,6 +47,60 @@ test('GET /v1/sync/status returns idle state when no markers exist', async () =>
     running: null,
     triggerQueued: null,
     lastRefreshedAt: null,
+    lastRefresh: null,
+  });
+});
+
+test('GET /v1/ccd-history surfaces inserted refresh rows in DESC order', async () => {
+  db.insertCcdHistory.run(
+    '2026-04-01T00:00:00.000Z',
+    '2026-04-01T00:05:00.000Z',
+    300_000,
+    'success',
+    30_000,
+    42,
+    250_000_000,
+    null,
+  );
+  db.insertCcdHistory.run(
+    '2026-04-08T00:00:00.000Z',
+    '2026-04-08T00:00:02.000Z',
+    2_000,
+    'failed',
+    0,
+    0,
+    null,
+    'HTTP 503',
+  );
+
+  const response = await app.inject({
+    method: 'GET',
+    url: '/v1/ccd-history?limit=5',
+  });
+
+  expect(response.statusCode).toBe(200);
+
+  const body = response.json();
+
+  expect(body.rows).toHaveLength(2);
+  expect(body.rows[0]).toStrictEqual({
+    startedAt: '2026-04-08T00:00:00.000Z',
+    finishedAt: '2026-04-08T00:00:02.000Z',
+    durationMs: 2_000,
+    status: 'failed',
+    importedCount: 0,
+    skippedCount: 0,
+    bytesOnDisk: null,
+    error: 'HTTP 503',
+  });
+  expect(body.rows[1].status).toBe('success');
+
+  // /v1/sync/status now surfaces lastRefresh sourced from the same rows.
+  const status = await app.inject({ method: 'GET', url: '/v1/sync/status' });
+
+  expect(status.json().ccd.lastRefresh).toMatchObject({
+    status: 'failed',
+    error: 'HTTP 503',
   });
 });
 

@@ -28,6 +28,7 @@
 import { buildRamachandranPdb } from './buildRamachandranPdb.ts';
 import type { ColorSpec } from './colorTheme.ts';
 import type {
+  CameraTransitionOptions,
   EchoOptions,
   LabelOptions,
   RotateOptions,
@@ -35,7 +36,11 @@ import type {
   SelectionToken,
 } from './helpers.ts';
 import type { ContactsOptions, DistanceToOptions } from './measurements.ts';
-import type { MolStarAtom, MolStarResidue } from './parsePdb.ts';
+import type {
+  MolStarAtom,
+  MolStarResidue,
+  SecondaryStructureRange,
+} from './parsePdb.ts';
 import { parsePdb } from './parsePdb.ts';
 import type { DihedralStats } from './ramachandran.ts';
 import { computeDihedralStats } from './ramachandran.ts';
@@ -48,7 +53,11 @@ import {
   makeSurfaceChannel,
 } from './scriptChannels.ts';
 
-export type { MolStarAtom, MolStarResidue } from './parsePdb.ts';
+export type {
+  MolStarAtom,
+  MolStarResidue,
+  SecondaryStructureRange,
+} from './parsePdb.ts';
 
 /**
  * Strip a single `Promise<...>` wrapper from a type. Used by `Sync<T>` to
@@ -133,6 +142,18 @@ export interface RibbonChannel
   extends VisibilityToggle<RibbonChannel>, PromiseLike<void> {
   /** Recolor (creates the ribbon on first call). */
   color: (spec: ColorSpec) => RibbonChannel;
+  /**
+   * Switch to Mol*'s `putty` representation — a uniform polymer tube that
+   * ignores secondary-structure annotations, so helices and β-strands
+   * render as plain coil. Useful to show the protein's backbone shape
+   * without revealing where the helices and sheets sit.
+   */
+  tube: () => RibbonChannel;
+  /**
+   * Switch back to the standard SS-aware cartoon (the default). Helices
+   * render as coils, β-strands as flat arrows.
+   */
+  cartoon: () => RibbonChannel;
 }
 
 /** Solvent-accessible surface channel. */
@@ -200,14 +221,19 @@ export interface Selection extends SelectionToken, VisibilityToggle<Selection> {
   label: (template: string, options?: LabelOptions) => Promise<void>;
   /** Sub-select within this selection (intersection with `expression`). */
   select: (expression: string) => Selection;
-  /** Zoom + center the camera on this selection's bounding sphere. */
-  focus: () => Promise<void>;
+  /**
+   * Zoom + center the camera on this selection's bounding sphere. Pass
+   * `{ seconds }` to tween the move — useful for cinematic "fly in" effects.
+   */
+  focus: (options?: CameraTransitionOptions) => Promise<void>;
   /**
    * Center + frame the camera on this selection's bounding sphere. `factor`
    * is the fraction (0–1) of the viewport the sphere should occupy
    * (default 0.75). Rotation-invariant, so framing survives `ms.spin(...)`.
+   * Pass `{ seconds }` to animate the move over that duration; omit for an
+   * instant snap.
    */
-  zoom: (factor?: number) => Promise<void>;
+  zoom: (factor?: number, options?: CameraTransitionOptions) => Promise<void>;
   /**
    * Draw a labeled distance line to the centroid of `other`. Kept as a
    * shorthand for `selection.distances.to(other)`.
@@ -235,6 +261,19 @@ export interface PDB {
   readonly residues: readonly MolStarResidue[];
   readonly chains: readonly string[];
   readonly ligands: readonly string[];
+  /**
+   * Inclusive residue ranges declared by every `HELIX` record in the PDB
+   * text. One entry per record (≈ one entry per α-helix), in source order.
+   * Empty when the file carries no HELIX records.
+   */
+  readonly helices: readonly SecondaryStructureRange[];
+  /**
+   * Inclusive residue ranges declared by every `SHEET` record in the PDB
+   * text. One entry per record (≈ one entry per β-strand — a single
+   * β-sheet contains several entries), in source order. Empty when the
+   * file carries no SHEET records.
+   */
+  readonly sheets: readonly SecondaryStructureRange[];
 
   readonly all: Selection;
   readonly none: Selection;
@@ -304,6 +343,18 @@ export interface MolStarInstance {
   ) => Promise<void>;
   rotate: (options?: RotateOptions) => Promise<void>;
   resetCamera: () => Promise<void>;
+  /**
+   * Frame every atom of the currently-loaded structure with a comfortable
+   * margin. \`factor\` is the fraction (0–1) of the viewport the bounding
+   * sphere should fill (default \`0.85\`, leaving a 15% margin); pass
+   * \`{ seconds }\` to animate the move.
+   *
+   * Like \`selection.zoom\`, \`fit\` pins the camera so subsequent rep
+   * additions / visibility flips don't trigger Mol*'s auto-fit. Use this
+   * after a \`switchModel\` to re-centre on the protein once the synthetic
+   * Ramachandran cloud (or any other view) has gone away.
+   */
+  fit: (factor?: number, options?: CameraTransitionOptions) => Promise<void>;
   selectionHalos: (on: boolean) => Promise<void>;
   echo: (text: string, options?: EchoOptions) => void;
   clearEcho: () => void;
@@ -454,6 +505,9 @@ export function createMolStarClass(api: ScriptApi): MolStarConstructor {
     resetCamera() {
       return api.resetCamera();
     }
+    fit(factor?: number, options?: CameraTransitionOptions) {
+      return api.fit(factor, options);
+    }
     selectionHalos(on: boolean) {
       return api.selectionHalos(on);
     }
@@ -582,6 +636,8 @@ function buildPdb(api: ScriptApi, text: string): PDB {
     residues: parsed.residues,
     chains: parsed.chains,
     ligands: parsed.ligands,
+    helices: parsed.helices,
+    sheets: parsed.sheets,
     get all() {
       return wrap(api, api.all);
     },
@@ -629,8 +685,9 @@ function wrap(api: ScriptApi, token: SelectionToken): Selection {
       api.setSelectionVisibility(selection, false);
       return selection;
     },
-    focus: () => api.focus(selection),
-    zoom: (factor?: number) => api.zoom(selection, factor),
+    focus: (options?: CameraTransitionOptions) => api.focus(selection, options),
+    zoom: (factor?: number, options?: CameraTransitionOptions) =>
+      api.zoom(selection, factor, options),
     distance: (other: Selection) => api.distance(selection, other),
     contactsWith: (other: Selection, options?: ContactsOptions) =>
       api.addContacts(selection, other, options),

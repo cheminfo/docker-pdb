@@ -562,6 +562,37 @@ export class LigandsDB {
     );
   }
 
+  // -- ccd_history --
+
+  get insertCcdHistory() {
+    return this.statement(
+      `INSERT INTO ccd_history
+         (started_at, finished_at, duration_ms, status,
+          imported_count, skipped_count, bytes_on_disk, error)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    );
+  }
+
+  get selectCcdHistory() {
+    return this.statement(
+      `SELECT started_at, finished_at, duration_ms, status,
+              imported_count, skipped_count, bytes_on_disk, error
+       FROM ccd_history
+       ORDER BY finished_at DESC
+       LIMIT ?`,
+    );
+  }
+
+  get selectLastCcdRefresh() {
+    return this.statement(
+      `SELECT started_at, finished_at, duration_ms, status,
+              imported_count, skipped_count, bytes_on_disk, error
+       FROM ccd_history
+       ORDER BY finished_at DESC
+       LIMIT 1`,
+    );
+  }
+
   // -- stats: pdb_entries --
 
   get statsByYear() {
@@ -683,29 +714,39 @@ export class LigandsDB {
     );
   }
 
+  // The four omega rollup-backed statements below read from
+  // `stats_omega_by_year` / `stats_omega_pairs_by_year`, both regenerated
+  // at the end of every rsync cycle by `rebuildOmegaStatsRollup`. The
+  // raw source-of-truth columns (`pdb_entries.omega_nb_*`,
+  // `pdb_omega_pairs.*`) remain populated per upsert and are still
+  // available for ad-hoc queries / per-PDB endpoints — only the global
+  // stats fan-out is served from the rollup.
+  //
+  // Entries with NULL / non-positive `year` are bucketed under year=0
+  // in the rollup, so the summary picks them up while per-year /
+  // range queries can filter them out with `WHERE year > 0` /
+  // `WHERE year BETWEEN ? AND ?`.
+
   get statsOmegaSummary() {
     return this.statement(
       `SELECT
-         COALESCE(SUM(omega_nb_cis), 0)            AS cis,
-         COALESCE(SUM(omega_nb_trans), 0)          AS trans,
-         COALESCE(SUM(omega_nb_twisted), 0)        AS twisted,
-         COALESCE(SUM(omega_nb_peptide_bonds), 0)  AS total
-       FROM pdb_entries
-       WHERE omega_nb_peptide_bonds > 0`,
+         COALESCE(SUM(cis_count), 0)            AS cis,
+         COALESCE(SUM(trans_count), 0)          AS trans,
+         COALESCE(SUM(twisted_count), 0)        AS twisted,
+         COALESCE(SUM(peptide_bonds_count), 0)  AS total
+       FROM stats_omega_by_year`,
     );
   }
 
   get statsOmegaByYear() {
     return this.statement(
-      `SELECT year                                  AS key,
-              COALESCE(SUM(omega_nb_cis), 0)        AS cis,
-              COALESCE(SUM(omega_nb_trans), 0)      AS trans,
-              COALESCE(SUM(omega_nb_twisted), 0)    AS twisted,
-              COALESCE(SUM(omega_nb_peptide_bonds), 0) AS total
-       FROM pdb_entries
-       WHERE year IS NOT NULL AND year > 0
-         AND omega_nb_peptide_bonds > 0
-       GROUP BY year
+      `SELECT year                AS key,
+              cis_count            AS cis,
+              trans_count          AS trans,
+              twisted_count        AS twisted,
+              peptide_bonds_count  AS total
+       FROM stats_omega_by_year
+       WHERE year > 0
        ORDER BY year`,
     );
   }
@@ -801,7 +842,7 @@ export class LigandsDB {
       `SELECT residue1, residue2,
               SUM(cis_count)   AS cis,
               SUM(total_count) AS total
-       FROM pdb_omega_pairs
+       FROM stats_omega_pairs_by_year
        GROUP BY residue1, residue2`,
     );
   }
@@ -811,9 +852,8 @@ export class LigandsDB {
       `SELECT residue1, residue2,
               SUM(cis_count)   AS cis,
               SUM(total_count) AS total
-       FROM pdb_omega_pairs op
-       JOIN pdb_entries e ON e.id = op.pdb_id
-       WHERE e.year IS NOT NULL AND e.year BETWEEN ? AND ?
+       FROM stats_omega_pairs_by_year
+       WHERE year BETWEEN ? AND ?
        GROUP BY residue1, residue2`,
     );
   }
@@ -821,10 +861,23 @@ export class LigandsDB {
   get statsTwistedPairFrequency() {
     return this.statement(
       `SELECT residue1, residue2, SUM(twisted_count) AS value
-       FROM pdb_omega_pairs
-       WHERE twisted_count > 0
+       FROM stats_omega_pairs_by_year
        GROUP BY residue1, residue2
+       HAVING SUM(twisted_count) > 0
        ORDER BY value DESC`,
+    );
+  }
+
+  get statsPairFrequencyByYear() {
+    return this.statement(
+      `SELECT year,
+              residue1,
+              residue2,
+              cis_count   AS cis,
+              total_count AS total
+       FROM stats_omega_pairs_by_year
+       WHERE year > 0
+       ORDER BY year, residue1, residue2`,
     );
   }
 }

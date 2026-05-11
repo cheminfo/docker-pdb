@@ -6,9 +6,10 @@ import {
   FormGroup,
   InputGroup,
   Intent,
+  Tooltip,
 } from '@blueprintjs/core';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router';
+import { useNavigate, useParams } from 'react-router';
 
 import FloatingWindow from '../../shared/FloatingWindow.tsx';
 import type { PdbViewerHandle } from '../../shared/PdbViewer.tsx';
@@ -20,9 +21,11 @@ import { useAsync } from '../../shared/useAsync.ts';
 import type { EchoEntry } from './EchoOverlay.tsx';
 import EchoOverlay from './EchoOverlay.tsx';
 import Editor from './Editor.tsx';
-import { createMolStarClass, delay } from './MolStar.ts';
+import type { Delay } from './MolStar.ts';
+import { createMolStarClass } from './MolStar.ts';
 import ScriptingHelp from './ScriptingHelp.tsx';
 import { applyScriptingLoadDefaults } from './applyLoadDefaults.ts';
+import type { ScriptApi } from './helpers.ts';
 import { createScriptApi } from './helpers.ts';
 import type {
   InteractionsApi,
@@ -33,6 +36,7 @@ import type {
 } from './molstarTypes.ts';
 import { runScript } from './runScript.ts';
 import { DEFAULT_SCENE_CODE, SCENES } from './scenes.ts';
+import { useCanvasRecording } from './useCanvasRecording.ts';
 
 const DEFAULT_PDB_ID = '8ZXR';
 
@@ -41,19 +45,18 @@ interface ColorModule {
 }
 
 /**
- * Page mounted at `/scripting`. Lets students write a small JS script using
+ * Page mounted at `/scripting` and `/scripting/:pdbId`. Lets students write a small JS script using
  * a curated helper API (`api.cpk`, `api.cartoon`, `api.echo`, …) that
  * drives the Mol* viewer. Replaces the legacy JSmol-based teaching tool.
  * @returns The Scripting page React element.
  */
 export default function ScriptingPage() {
-  const [searchParams] = useSearchParams();
-  const urlPdbId = (
-    searchParams.get('pdb')?.trim() || DEFAULT_PDB_ID
-  ).toUpperCase();
-  // Track the `?pdb=` query param so navigating from Browse with a different
+  const { pdbId: routePdbId } = useParams<{ pdbId?: string }>();
+  const navigate = useNavigate();
+  const urlPdbId = (routePdbId?.trim() || DEFAULT_PDB_ID).toUpperCase();
+  // Track the `:pdbId` route param so navigating from Browse with a different
   // entry re-seeds the toolbar input and the loaded structure (the route
-  // stays mounted across query-only navigations).
+  // stays mounted across path-only navigations).
   const [trackedUrlPdbId, setTrackedUrlPdbId] = useState(urlPdbId);
   const [pdbId, setPdbId] = useState(urlPdbId);
   const [loadedId, setLoadedId] = useState(urlPdbId);
@@ -66,6 +69,7 @@ export default function ScriptingPage() {
   const [echoEntry, setEchoEntry] = useState<EchoEntry | null>(null);
   const [scriptError, setScriptError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
+  const [stopping, setStopping] = useState(false);
   const [swapping, setSwapping] = useState(false);
   const [colorModule, setColorModule] = useState<ColorModule | null>(null);
   const [lociHelpers, setLociHelpers] = useState<LociHelpers | null>(null);
@@ -76,12 +80,16 @@ export default function ScriptingPage() {
   );
   const [shapes, setShapes] = useState<ShapesApi | null>(null);
   const [showHelp, setShowHelp] = useState(false);
+  const recording = useCanvasRecording();
 
   const viewerHandleRef = useRef<PdbViewerHandle | null>(null);
   // Tracks the PDB text Mol* currently has loaded. Persists across script
   // Runs so `api.clear()` can detect that a previous run left a swapped
   // structure and restore the original.
   const loadedPdbRef = useRef<string>('');
+  // Controls cancellation of the currently-running script. The Stop button
+  // calls `abort()`; the per-run `delay` then rejects with AbortError.
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const fetchTask = useCallback(() => fetchPdbText(loadedId), [loadedId]);
   const pdbText = useAsync(fetchTask);
@@ -222,56 +230,103 @@ export default function ScriptingPage() {
     };
   }, []);
 
-  const handleRun = useCallback(async () => {
-    setScriptError(null);
-    const handle = viewerHandleRef.current?.getPlugin();
-    if (
-      !handle ||
-      !colorModule ||
-      !lociHelpers ||
-      !structureElement ||
-      !interactions ||
-      !shapes ||
-      pdbText.status !== 'success'
-    ) {
-      setScriptError('Viewer is still initializing.');
-      return;
-    }
-    const api = createScriptApi({
-      plugin: handle.plugin,
-      molScript: handle.molScript,
+  const handleRun = useCallback(
+    async (afterReset?: () => void | Promise<void>) => {
+      setScriptError(null);
+      const handle = viewerHandleRef.current?.getPlugin();
+      if (
+        !handle ||
+        !colorModule ||
+        !lociHelpers ||
+        !structureElement ||
+        !interactions ||
+        !shapes ||
+        pdbText.status !== 'success'
+      ) {
+        setScriptError('Viewer is still initializing.');
+        return;
+      }
+      const api = createScriptApi({
+        plugin: handle.plugin,
+        molScript: handle.molScript,
+        colorModule,
+        lociHelpers,
+        structureElement,
+        interactions,
+        shapes,
+        setEchoEntry,
+        pdbText: pdbText.data,
+        loadedPdbRef,
+        setSwapping,
+      });
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+      const cancellableDelay = makeCancellableDelay(controller.signal);
+      // Script-facing api throws AbortError on the first call after Stop, so
+      // the script can't continue running synchronous commands (and re-arming
+      // spin/rotate) between `await delay()`s.
+      const scriptApi = makeAbortAwareApi(api, controller.signal);
+      const MolStar = createMolStarClass(scriptApi);
+      setStopping(false);
+      setRunning(true);
+      setEchoEntry(null);
+      await api.reset();
+      // Recording starts here so the first captured frame is the freshly
+      // reset structure, not whatever a previous run left on screen.
+      await afterReset?.();
+      const { error } = await runScript({
+        api: scriptApi,
+        text: pdbText.data,
+        MolStar,
+        delay: cancellableDelay,
+        body: code,
+        signal: controller.signal,
+      });
+      abortControllerRef.current = null;
+      setRunning(false);
+      if (error) setScriptError(error.message);
+    },
+    [
+      code,
       colorModule,
       lociHelpers,
       structureElement,
       interactions,
       shapes,
-      setEchoEntry,
-      pdbText: pdbText.data,
-      loadedPdbRef,
-      setSwapping,
-    });
-    const MolStar = createMolStarClass(api);
-    setRunning(true);
-    setEchoEntry(null);
-    await api.reset();
-    const { error } = await runScript({
-      api,
-      text: pdbText.data,
-      MolStar,
-      delay,
-      body: code,
-    });
-    setRunning(false);
-    if (error) setScriptError(error.message);
-  }, [
-    code,
-    colorModule,
-    lociHelpers,
-    structureElement,
-    interactions,
-    shapes,
-    pdbText,
-  ]);
+      pdbText,
+    ],
+  );
+
+  const handleStop = useCallback(() => {
+    setStopping(true);
+    abortControllerRef.current?.abort();
+    // The abort signal only unblocks the script at the next `await delay()`;
+    // anything Mol* is animating on its own (a spin/rotate the script left
+    // running) keeps going until we explicitly turn the trackball off here.
+    viewerHandleRef.current?.stopAnimations();
+  }, []);
+
+  const handleRecord = useCallback(async () => {
+    setScriptError(null);
+    const canvas = viewerHandleRef.current?.getCanvas();
+    if (!canvas) {
+      setScriptError('Viewer is still initializing.');
+      return;
+    }
+    let started = false;
+    try {
+      await handleRun(() => {
+        recording.start(canvas);
+        started = true;
+      });
+    } catch (error) {
+      setScriptError(
+        error instanceof Error ? error.message : 'Recording failed to start.',
+      );
+    } finally {
+      if (started) recording.stop();
+    }
+  }, [handleRun, recording]);
 
   const handleReset = useCallback(async () => {
     setScriptError(null);
@@ -323,6 +378,10 @@ export default function ScriptingPage() {
     setLoadedId(trimmed);
     setEchoEntry(null);
     setScriptError(null);
+    // Sync the URL so the current entry can be shared as a deep link. The
+    // `trackedUrlPdbId` guard above prevents this from looping back into a
+    // redundant state update once the route param matches.
+    void navigate(`/scripting/${encodeURIComponent(trimmed)}`);
   }
 
   function pickScene(sceneCode: string) {
@@ -388,15 +447,49 @@ export default function ScriptingPage() {
           >
             Reset
           </Button>
-          <Button
-            icon="play"
-            intent={Intent.PRIMARY}
-            loading={running}
-            onClick={() => void handleRun()}
-            disabled={!viewerReady || running}
+          <Tooltip
+            content="Run the script and download a video of the animation"
+            placement="bottom"
           >
-            Run
-          </Button>
+            <Button
+              icon="record"
+              intent={Intent.DANGER}
+              variant="outlined"
+              onClick={() => void handleRecord()}
+              disabled={!viewerReady || running}
+            >
+              Record
+            </Button>
+          </Tooltip>
+          {running ? (
+            <Button
+              icon="stop"
+              intent={Intent.DANGER}
+              onClick={handleStop}
+              disabled={stopping}
+              loading={stopping}
+            >
+              {stopping ? (
+                'Stopping…'
+              ) : recording.recording ? (
+                <span className="scripting-record-label">
+                  <span className="scripting-record-dot" />
+                  Stop &amp; save
+                </span>
+              ) : (
+                'Stop'
+              )}
+            </Button>
+          ) : (
+            <Button
+              icon="play"
+              intent={Intent.PRIMARY}
+              onClick={() => void handleRun()}
+              disabled={!viewerReady}
+            >
+              Run
+            </Button>
+          )}
         </ButtonGroup>
       </div>
       <div className="scripting-editor-frame">
@@ -456,4 +549,57 @@ export default function ScriptingPage() {
       )}
     </div>
   );
+}
+
+/**
+ * Wrap a `ScriptApi` in a Proxy that throws `AbortError` from every method
+ * call once the given signal aborts. Without this, Stop only interrupts the
+ * script at the next `await delay(...)`: any synchronous block in between
+ * (e.g. `ms.spin(); ms.echo(...); ms.cpk();`) still runs, and if any of those
+ * re-arm a trackball animation the molecule keeps moving after Stop. With
+ * the proxy in place the *next* method call on the script-facing surface
+ * throws, `runScript` recognises the abort, and the script unwinds.
+ * @param api - The real script api bound to the Mol* plugin.
+ * @param signal - Abort signal owned by the current run.
+ * @returns A drop-in proxy with the same shape as `api`.
+ */
+function makeAbortAwareApi(api: ScriptApi, signal: AbortSignal): ScriptApi {
+  return new Proxy(api, {
+    get(target, prop, receiver) {
+      const value = Reflect.get(target, prop, receiver) as unknown;
+      if (typeof value !== 'function') return value;
+      return (...args: unknown[]) => {
+        if (signal.aborted) {
+          throw new DOMException('Script stopped', 'AbortError');
+        }
+        return Reflect.apply(
+          value as (...callArgs: unknown[]) => unknown,
+          target,
+          args,
+        );
+      };
+    },
+  });
+}
+
+function makeCancellableDelay(signal: AbortSignal): Delay {
+  return (seconds) =>
+    new Promise<void>((resolve, reject) => {
+      if (signal.aborted) {
+        reject(new DOMException('Script stopped', 'AbortError'));
+        return;
+      }
+      const onAbort = () => {
+        clearTimeout(timer);
+        reject(new DOMException('Script stopped', 'AbortError'));
+      };
+      const timer = setTimeout(
+        () => {
+          signal.removeEventListener('abort', onAbort);
+          resolve();
+        },
+        Math.max(0, seconds) * 1000,
+      );
+      signal.addEventListener('abort', onAbort, { once: true });
+    });
 }

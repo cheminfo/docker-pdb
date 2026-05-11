@@ -212,7 +212,7 @@ function SelectedEntry({ doc }: SelectedEntryProps) {
                 </span>
               </Button>
               <Link
-                to={`/scripting?pdb=${encodeURIComponent(doc._id)}`}
+                to={`/scripting/${encodeURIComponent(doc._id)}`}
                 title={`Open ${doc._id} in the scripting page`}
               >
                 <Button variant="minimal" icon="code" endIcon="arrow-right">

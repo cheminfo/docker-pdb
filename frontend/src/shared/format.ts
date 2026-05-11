@@ -85,6 +85,25 @@ export function formatRelative(value: string | undefined): string {
 }
 
 /**
+ * Format a millisecond duration as a compact `Xh Ym` / `Xm Ys` / `Xs` string.
+ * Returns an en-dash when the value is missing or non-positive — same shape
+ * the rsync/CCD history tables use to mark empty cells.
+ * @param ms - Duration in milliseconds.
+ * @returns Compact duration string, or `–`.
+ */
+export function formatDuration(ms: number): string {
+  if (!Number.isFinite(ms) || ms <= 0) return '–';
+  const seconds = Math.round(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remaining = seconds % 60;
+  if (minutes < 60) return `${minutes}m ${remaining}s`;
+  const hours = Math.floor(minutes / 60);
+  const minRemaining = minutes % 60;
+  return `${hours}h ${minRemaining}m`;
+}
+
+/**
  * Format a byte count as a human-readable size.
  * Returns an en-dash when the value is missing or non-positive.
  * @param bytes - Raw byte count.

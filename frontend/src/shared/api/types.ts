@@ -138,6 +138,18 @@ export interface PairFrequencyResponse {
   rows: Array<{ key: [string, string]; value: [number, number] }>;
 }
 
+/**
+ * Response of `/v1/stats/pairFrequencyByYear`. One row per
+ * `[year, residue1, residue2]` triple with at least one observation, so the
+ * frontend can sum across an arbitrary year range without a network call.
+ */
+export interface PairFrequencyByYearResponse {
+  rows: Array<{
+    key: [number, string, string];
+    value: [number, number];
+  }>;
+}
+
 /** Response of `/v1/stats/twistedPairFrequency`. */
 export interface PairCountResponse {
   rows: Array<{ key: [string, string]; value: number }>;
@@ -176,6 +188,35 @@ export interface RsyncHistoryResponse {
   rows: RsyncHistoryDoc[];
 }
 
+/** A single CCD-refresh row exposed by `/v1/ccd-history`. */
+export interface CcdHistoryDoc {
+  /** ISO timestamp when the refresh started. */
+  startedAt: string;
+  /** ISO timestamp when the refresh finished (or failed). */
+  finishedAt: string;
+  /** Total refresh duration in milliseconds. */
+  durationMs: number;
+  /** Whether the refresh completed without throwing. */
+  status: 'success' | 'failed';
+  /** Number of CCD entries inserted / updated during the run. */
+  importedCount: number;
+  /** Number of CCD entries skipped (single-atom ions, OCL failures, …). */
+  skippedCount: number;
+  /**
+   * Size on disk of the cached archive at the end of the run, or `null`
+   * if the archive was missing (download failed before rename).
+   * @default null
+   */
+  bytesOnDisk: number | null;
+  /** Error message captured on failure, or `null` on success. */
+  error: string | null;
+}
+
+/** Response of `/v1/ccd-history`. */
+export interface CcdHistoryResponse {
+  rows: CcdHistoryDoc[];
+}
+
 /** A trigger marker, present while the API has queued a manual sync. */
 export interface SyncTriggerInfo {
   /** ISO timestamp when the API queued this trigger. */
@@ -190,6 +231,43 @@ export type SyncPhase =
   | 'rebuild-assembly'
   | 'rsync-asym'
   | 'rsync-assembly';
+
+/**
+ * Fine-grained state of the rsync child process within an `rsync-*` phase.
+ * - `connecting`: rsync was spawned, nothing has been received on stdout yet.
+ * - `scanning`: rsync is walking the remote tree (no `.gz` file received yet).
+ * - `transferring`: at least one `.gz` file has been received (or rsync has
+ *   emitted a byte-level progress line).
+ * - `post-rsync`: rsync has exited; the file watcher is still draining the
+ *   awaitWriteFinish grace period before we close it.
+ */
+export type RsyncSubPhase =
+  | 'connecting'
+  | 'scanning'
+  | 'transferring'
+  | 'post-rsync';
+
+/**
+ * Byte-level progress parsed from rsync's `--info=progress2` output. Set
+ * once rsync starts emitting per-file progress lines; remains `undefined`
+ * during the silent connecting / scanning windows.
+ */
+export interface RsyncByteProgress {
+  /** Rsync's own global progress percentage (0-100). */
+  percent: number;
+  /** Bytes received so far in this run. */
+  bytesTransferred: number;
+  /** Human-readable transfer rate (e.g. "1.23MB/s"). */
+  rate: string;
+  /**
+   * Files left to check, as reported by rsync's `to-chk=` / `ir-chk=`
+   * summary. `undefined` while rsync has not yet emitted a per-file
+   * progress line.
+   */
+  filesRemaining?: number;
+  /** Total files known to rsync at the moment of the last progress line. */
+  filesTotal?: number;
+}
 
 /** A running marker, present while the cron container is actively working. */
 export interface SyncRunningInfo {
@@ -207,6 +285,11 @@ export interface SyncRunningInfo {
    * run during the periodic wwPDB rsync. Absent on legacy markers.
    */
   phase?: SyncPhase;
+  /**
+   * Fine-grained state of the rsync child process. Only set during `rsync-*`
+   * phases; absent during `rebuild-*` (rebuild has no upstream connection).
+   */
+  subPhase?: RsyncSubPhase;
   /** Files (or rows) processed so far in the current phase. */
   processed?: number;
   /**
@@ -227,6 +310,12 @@ export interface SyncRunningInfo {
     skipped: number;
     failed: number;
   };
+  /**
+   * Byte-level progress from rsync's own output. Set once rsync has begun
+   * transferring; absent during connecting / scanning windows where the
+   * card falls back to an indeterminate "we're alive" animation.
+   */
+  rsyncProgress?: RsyncByteProgress;
 }
 
 /** Live state of the rsync cron. */
@@ -251,10 +340,22 @@ export interface CcdSyncState {
   intervalMs: number;
   running: SyncRunningInfo | null;
   triggerQueued: SyncTriggerInfo | null;
-  /** Mtime of the cached `components.cif.gz`, or `null` if not yet seeded. */
+  /**
+   * ISO timestamp of the most recent refresh. Comes from the latest
+   * `ccd_history` row when one exists, otherwise from the cached
+   * archive's mtime (first-boot, before the cron container has written
+   * any row yet).
+   */
   lastRefreshedAt: string | null;
   /** Size on disk of the cached archive, or `null` if not present. */
   bytesOnDisk: number | null;
+  /**
+   * Full record for the most recent refresh, or `null` until the first
+   * row is written. Used by the Settings page to render the last
+   * outcome (success / failed, imported count, duration) alongside the
+   * "next run" estimate.
+   */
+  lastRefresh: CcdHistoryDoc | null;
 }
 
 /** Response of `GET /v1/sync/status`. */

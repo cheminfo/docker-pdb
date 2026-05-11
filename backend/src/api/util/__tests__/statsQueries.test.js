@@ -1,6 +1,7 @@
 import { beforeEach, expect, test } from 'vitest';
 
 import { getInMemoryLigandsDB } from '../../../db/getDB.js';
+import { rebuildOmegaStatsRollup } from '../../../db/rebuildOmegaStatsRollup.js';
 import { upsertPdbEntrySync } from '../../../db/upsertPdbEntry.js';
 import {
   STATS_HANDLERS,
@@ -9,6 +10,7 @@ import {
   ligandFrequency,
   ligandMwHistogram,
   pairFrequency,
+  pairFrequencyByYear,
   residuesHistogram,
   secondaryStructurePresence,
 } from '../statsQueries.js';
@@ -195,6 +197,7 @@ test('pairFrequency returns [cis, total] per ordered residue pair', () => {
     pairCounts: { 'ALA:PRO': 5 },
   };
   upsertPdbEntrySync(db, '1AAA', entry({ omega }), { rawSize: 1 });
+  rebuildOmegaStatsRollup(db);
 
   const rows = pairFrequency(db).rows;
   const alaPro = rows.find(
@@ -202,6 +205,52 @@ test('pairFrequency returns [cis, total] per ordered residue pair', () => {
   );
 
   expect(alaPro).toStrictEqual({ key: ['ALA', 'PRO'], value: [1, 5] });
+});
+
+test('pairFrequencyByYear emits one row per `[year, r1, r2]` triple', () => {
+  upsertPdbEntrySync(
+    db,
+    '1AAA',
+    entry({
+      year: 2018,
+      omega: {
+        nbCis: 1,
+        nbTrans: 4,
+        nbTwisted: 0,
+        nbPeptideBonds: 5,
+        cisBonds: [{ residue1: 'ALA', residue2: 'PRO' }],
+        twistedBonds: [],
+        pairCounts: { 'ALA:PRO': 5 },
+      },
+    }),
+    { rawSize: 1 },
+  );
+  upsertPdbEntrySync(
+    db,
+    '2AAA',
+    entry({
+      year: 2020,
+      omega: {
+        nbCis: 0,
+        nbTrans: 3,
+        nbTwisted: 0,
+        nbPeptideBonds: 3,
+        cisBonds: [],
+        twistedBonds: [],
+        pairCounts: { 'ALA:PRO': 2, 'GLY:ALA': 1 },
+      },
+    }),
+    { rawSize: 1 },
+  );
+  rebuildOmegaStatsRollup(db);
+
+  expect(pairFrequencyByYear(db)).toStrictEqual({
+    rows: [
+      { key: [2018, 'ALA', 'PRO'], value: [1, 5] },
+      { key: [2020, 'ALA', 'PRO'], value: [0, 2] },
+      { key: [2020, 'GLY', 'ALA'], value: [0, 1] },
+    ],
+  });
 });
 
 test('STATS_HANDLERS exposes every public statsQueries function', () => {
@@ -217,6 +266,7 @@ test('STATS_HANDLERS exposes every public statsQueries function', () => {
     'nucleicBaseFreq',
     'moleculeType',
     'omegaSummary',
+    'pairFrequencyByYear',
     'twistedPairFrequency',
   ]) {
     expect(typeof STATS_HANDLERS[view]).toBe('function');

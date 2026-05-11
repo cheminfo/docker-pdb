@@ -75,6 +75,12 @@ const SELECTION_METHODS: MethodEntry[] = [
     example: "pdb.all.ribbon.color({ model: 'structure' });",
   },
   {
+    signature: 'selection.ribbon.tube() / .cartoon()',
+    description:
+      "Switch the ribbon channel between Mol*'s `putty` representation — a uniform polymer tube that ignores secondary-structure annotations, so helices and β-strands render as plain coil — and the default SS-aware cartoon. Use `.tube()` to show the backbone shape without revealing where the helices and sheets sit, then `.cartoon()` (or just another `.color(...)` after re-enabling cartoon) to reveal them.",
+    example: "pdb.select('protein').ribbon.tube().color({ model: 'chain' });",
+  },
+  {
     signature: 'selection.surface.color(spec)',
     description:
       'Solid molecular (Connolly) surface — unless `dots()` was called first, then the surface stays dotted.',
@@ -222,6 +228,12 @@ const MS_METHODS: MethodEntry[] = [
     example: 'ms.resetCamera();',
   },
   {
+    signature: 'ms.fit(factor?, options?)',
+    description:
+      "Frame every atom of the currently-loaded structure with a comfortable margin. `factor` is the fraction (0–1) of the viewport the bounding sphere should fill (default `0.85`). Pins the camera so subsequent rep additions don't undo the framing. Pass `{ seconds }` to animate. Useful after `pdb.switchModel(...)` to centre on the protein once a synthetic model (e.g. the Ramachandran cloud) has gone away.",
+    example: 'ms.fit(0.85, { seconds: 1.5 });',
+  },
+  {
     signature: 'ms.selectionHalos(on)',
     description:
       'Show / hide Mol*’s yellow halos around the persistent selection.',
@@ -340,7 +352,11 @@ ms.spin('y');`}</pre>
           The <code>pdb</code> handle also exposes parsed-data fields:{' '}
           <code>pdb.atoms</code>, <code>pdb.residues</code>,{' '}
           <code>pdb.chains</code>, <code>pdb.ligands</code>,{' '}
-          <code>pdb.text</code>.
+          <code>pdb.helices</code>, <code>pdb.sheets</code>,{' '}
+          <code>pdb.text</code>. <code>pdb.helices</code> is one entry per HELIX
+          record (so <code>pdb.helices.length</code> is the helix count);{' '}
+          <code>pdb.sheets</code> is one entry per SHEET record (each entry is a
+          β-strand — a single β-sheet usually contains several).
         </p>
       </section>
 

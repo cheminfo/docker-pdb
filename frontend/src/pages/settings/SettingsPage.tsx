@@ -2,11 +2,13 @@ import { Card } from '@blueprintjs/core';
 import { useCallback, useEffect, useState } from 'react';
 
 import {
+  fetchCcdHistory,
   fetchRsyncHistory,
   fetchSyncStatus,
   triggerSync,
 } from '../../shared/api/client.ts';
 import type {
+  CcdHistoryDoc,
   CcdSyncState,
   RsyncHistoryDoc,
   RsyncSyncState,
@@ -14,6 +16,7 @@ import type {
 } from '../../shared/api/types.ts';
 import { formatBytes, formatDateTime } from '../../shared/format.ts';
 
+import CcdHistoryTable from './CcdHistoryTable.tsx';
 import HistoryTable from './HistoryTable.tsx';
 import SyncCard from './SyncCard.tsx';
 
@@ -25,6 +28,7 @@ const POLL_INTERVAL_IDLE_MS = 60_000;
 interface HistoryState {
   asym: RsyncHistoryDoc[];
   bioAssembly: RsyncHistoryDoc[];
+  ccd: CcdHistoryDoc[];
 }
 
 /**
@@ -41,6 +45,7 @@ export default function SettingsPage() {
   const [history, setHistory] = useState<HistoryState>({
     asym: [],
     bioAssembly: [],
+    ccd: [],
   });
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [pendingKind, setPendingKind] = useState<'rsync' | 'ccd' | null>(null);
@@ -50,9 +55,14 @@ export default function SettingsPage() {
     Promise.all([
       fetchRsyncHistory('asymUnit', 10),
       fetchRsyncHistory('bioAssembly', 10),
+      fetchCcdHistory(10),
     ]).then(
-      ([asym, bioAssembly]) => {
-        setHistory({ asym: asym.rows, bioAssembly: bioAssembly.rows });
+      ([asym, bioAssembly, ccd]) => {
+        setHistory({
+          asym: asym.rows,
+          bioAssembly: bioAssembly.rows,
+          ccd: ccd.rows,
+        });
         setHistoryError(null);
       },
       (error: unknown) => {
@@ -174,10 +184,10 @@ export default function SettingsPage() {
         />
       </div>
 
-      <h2>Recent rsync history</h2>
+      <h2>Recent run history</h2>
       {historyError ? (
         <p className="placeholder">
-          Could not load rsync history: {historyError}
+          Could not load run history: {historyError}
         </p>
       ) : (
         <div className="settings-history-grid">
@@ -188,6 +198,10 @@ export default function SettingsPage() {
           <Card className="panel">
             <h3>Biological assemblies</h3>
             <HistoryTable rows={history.bioAssembly} />
+          </Card>
+          <Card className="panel">
+            <h3>Chemical Component Dictionary</h3>
+            <CcdHistoryTable rows={history.ccd} />
           </Card>
         </div>
       )}
@@ -211,15 +225,40 @@ function RsyncCardBody({ state }: { state: RsyncSyncState }) {
 }
 
 function CcdCardBody({ state }: { state: CcdSyncState }) {
+  const { lastRefresh, lastRefreshedAt, bytesOnDisk } = state;
   return (
     <dl className="settings-sync-meta">
       <dt>Cached archive</dt>
       <dd>
-        {state.lastRefreshedAt
-          ? `${formatDateTime(state.lastRefreshedAt)} · ${formatBytes(state.bytesOnDisk ?? undefined)}`
+        {lastRefreshedAt
+          ? `${formatDateTime(lastRefreshedAt)} · ${formatBytes(bytesOnDisk ?? undefined)}`
           : 'not seeded yet'}
       </dd>
+      {lastRefresh ? (
+        <>
+          <dt>Last refresh</dt>
+          <dd>
+            <CcdRefreshSummary doc={lastRefresh} />
+          </dd>
+        </>
+      ) : null}
     </dl>
+  );
+}
+
+function CcdRefreshSummary({ doc }: { doc: CcdHistoryDoc }) {
+  if (doc.status === 'failed') {
+    return (
+      <span className="settings-muted">
+        failed after {Math.round(doc.durationMs / 1000)}s — {doc.error}
+      </span>
+    );
+  }
+  return (
+    <span>
+      {Math.round(doc.durationMs / 1000)}s · {doc.importedCount} imported
+      {doc.skippedCount ? ` · ${doc.skippedCount} skipped` : ''}
+    </span>
   );
 }
 

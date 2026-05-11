@@ -137,6 +137,8 @@ export function makeRibbonChannel(
   Object.assign(channel, {
     color: (spec: ColorSpec) =>
       enqueue(() => api.setRibbon(selection, { color: spec })),
+    tube: () => enqueue(() => api.setRibbon(selection, { tubular: true })),
+    cartoon: () => enqueue(() => api.setRibbon(selection, { tubular: false })),
     show: () => {
       api.setChannelVisibility(selection, 'ribbon', true);
       return channel;

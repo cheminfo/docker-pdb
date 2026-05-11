@@ -3,6 +3,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import createDebug from 'debug';
 
 import { getLigandsDB } from './db/getDB.js';
+import { rebuildOmegaStatsRollup } from './db/rebuildOmegaStatsRollup.js';
 import * as rebuild from './rebuild.js';
 import {
   clearRunning,
@@ -107,6 +108,7 @@ async function runRebuild() {
       });
     }
     /* eslint-enable no-await-in-loop */
+    refreshOmegaRollup(await getLigandsDB());
   } catch (error) {
     debug('rebuild-from-disk failed; continuing into rsync loop:', error);
   } finally {
@@ -131,6 +133,7 @@ async function runOnce() {
     pid: process.pid,
     scope: ['asymUnit', 'bioAssembly'],
     phase: 'rsync-asym',
+    subPhase: 'connecting',
     processed: 0,
   });
   try {
@@ -145,20 +148,60 @@ async function runOnce() {
       },
       MARKER_UPDATE_INTERVAL_MS,
     );
+    // Sub-phase transitions ("scanning" → "transferring", etc.) are rare and
+    // user-visible — bypass the throttle whenever the sub-phase changes so
+    // the UI flips its banner immediately. Byte-progress updates within the
+    // same sub-phase are throttled to one write per MARKER_UPDATE_INTERVAL_MS.
+    let lastSubPhase;
+    let lastActivityWrite = 0;
+    const onActivity = async ({ phase, subPhase, rsyncProgress }) => {
+      const now = Date.now();
+      const forced = subPhase !== lastSubPhase;
+      if (!forced && now - lastActivityWrite < MARKER_UPDATE_INTERVAL_MS) {
+        return;
+      }
+      lastSubPhase = subPhase;
+      lastActivityWrite = now;
+      await updateRunning(KIND, { phase, subPhase, rsyncProgress });
+    };
     await update({
       onPhase: async ({ phase }) => {
+        // Reset per-phase counters AND the rsync sub-state so the UI does
+        // not show stale asym-phase byte progress while bio-assembly is
+        // still in its connecting / scanning window.
+        lastSubPhase = undefined;
+        lastActivityWrite = 0;
         await updateRunning(KIND, {
           phase,
+          subPhase: 'connecting',
+          rsyncProgress: undefined,
           processed: 0,
           renderStats: undefined,
         });
       },
       onProgress,
+      onActivity,
     });
+    refreshOmegaRollup(await getLigandsDB());
   } catch (error) {
     debug('update failed, will retry next cycle:', error);
   } finally {
     await clearRunning(KIND);
+  }
+}
+
+/**
+ * Regenerate the omega-stats rollup tables after a sync / rebuild
+ * cycle completes. Wrapped in try/catch so a rollup failure (e.g. a
+ * SQLite busy timeout) is logged but does not crash the cron loop —
+ * the next cycle will rebuild from the same source-of-truth tables.
+ * @param {import('./db/getDB.js').LigandsDB} db - Open ligands DB.
+ */
+function refreshOmegaRollup(db) {
+  try {
+    rebuildOmegaStatsRollup(db);
+  } catch (error) {
+    debug('omega-stats rollup rebuild failed:', error);
   }
 }
 
