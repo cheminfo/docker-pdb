@@ -98,23 +98,14 @@ function histogram(rows, bins, valueOf) {
 }
 
 /**
- * Compute a `_stats` reduce result over a single integer column.
- * @param {import('../db/getDB.js').LigandsDB} db - Open database.
- * @param {string} sql - Query that selects one numeric column called `v`.
+ * Wrap an aggregate row into the un-grouped `_stats` envelope expected by
+ * the chart components. `row` is the `{ sum, count, min, max, sumsqr }`
+ * shape produced by every `stats*` getter on `LigandsDB`.
+ * @param {{ sum: number, count: number, min: number, max: number, sumsqr: number } | undefined} row
+ *   Aggregate row, or `undefined` when the table was empty.
  * @returns {{ rows: [{ key: null, value: { sum: number, count: number, min: number, max: number, sumsqr: number } }] }} Stats envelope.
  */
-function computeStats(db, sql) {
-  const row = db
-    .statement(
-      `SELECT
-         COALESCE(SUM(v),    0) AS sum,
-         COUNT(v)               AS count,
-         COALESCE(MIN(v),    0) AS min,
-         COALESCE(MAX(v),    0) AS max,
-         COALESCE(SUM(v*v),  0) AS sumsqr
-       FROM (${sql})`,
-    )
-    .get();
+function wrapStats(row) {
   return {
     rows: [
       {
@@ -132,54 +123,87 @@ function computeStats(db, sql) {
 }
 
 export function byYear(db) {
-  const rows = db
-    .statement(
-      `SELECT year AS key, COUNT(*) AS value
-       FROM pdb_entries
-       WHERE year IS NOT NULL AND year > 0
-       GROUP BY year
-       ORDER BY year`,
-    )
-    .all();
-  return rowsAsGroupedRows(rows);
+  return rowsAsGroupedRows(db.statsByYear.all());
 }
 
 export function byExperiment(db) {
-  const rows = db
-    .statement(
-      `SELECT experiment AS key, COUNT(*) AS value
-       FROM pdb_entries
-       WHERE experiment IS NOT NULL AND experiment <> ''
-       GROUP BY experiment
-       ORDER BY value DESC`,
-    )
-    .all();
-  return rowsAsGroupedRows(rows);
+  return rowsAsGroupedRows(db.statsByExperiment.all());
 }
 
 export function helicesStats(db) {
-  return computeStats(db, `SELECT nb_helices AS v FROM pdb_entries`);
+  return wrapStats(
+    db
+      .statement(
+        `SELECT COALESCE(SUM(nb_helices), 0) AS sum,
+                COUNT(nb_helices)              AS count,
+                COALESCE(MIN(nb_helices), 0)  AS min,
+                COALESCE(MAX(nb_helices), 0)  AS max,
+                COALESCE(SUM(nb_helices*nb_helices), 0) AS sumsqr
+         FROM pdb_entries`,
+      )
+      .get(),
+  );
 }
 
 export function sheetsStats(db) {
-  return computeStats(db, `SELECT nb_sheets AS v FROM pdb_entries`);
+  return wrapStats(
+    db
+      .statement(
+        `SELECT COALESCE(SUM(nb_sheets), 0) AS sum,
+                COUNT(nb_sheets)              AS count,
+                COALESCE(MIN(nb_sheets), 0)  AS min,
+                COALESCE(MAX(nb_sheets), 0)  AS max,
+                COALESCE(SUM(nb_sheets*nb_sheets), 0) AS sumsqr
+         FROM pdb_entries`,
+      )
+      .get(),
+  );
 }
 
 export function ligandsStats(db) {
-  return computeStats(db, `SELECT nb_ligands AS v FROM pdb_entries`);
+  return wrapStats(
+    db
+      .statement(
+        `SELECT COALESCE(SUM(nb_ligands), 0) AS sum,
+                COUNT(nb_ligands)              AS count,
+                COALESCE(MIN(nb_ligands), 0)  AS min,
+                COALESCE(MAX(nb_ligands), 0)  AS max,
+                COALESCE(SUM(nb_ligands*nb_ligands), 0) AS sumsqr
+         FROM pdb_entries`,
+      )
+      .get(),
+  );
 }
 
 export function residuesStats(db) {
-  return computeStats(
-    db,
-    `SELECT nb_residues AS v FROM pdb_entries WHERE nb_residues > 0`,
+  return wrapStats(
+    db
+      .statement(
+        `SELECT COALESCE(SUM(nb_residues), 0) AS sum,
+                COUNT(nb_residues)              AS count,
+                COALESCE(MIN(nb_residues), 0)  AS min,
+                COALESCE(MAX(nb_residues), 0)  AS max,
+                COALESCE(SUM(nb_residues*nb_residues), 0) AS sumsqr
+         FROM pdb_entries
+         WHERE nb_residues > 0`,
+      )
+      .get(),
   );
 }
 
 export function yearStats(db) {
-  return computeStats(
-    db,
-    `SELECT year AS v FROM pdb_entries WHERE year IS NOT NULL AND year > 0`,
+  return wrapStats(
+    db
+      .statement(
+        `SELECT COALESCE(SUM(year), 0) AS sum,
+                COUNT(year)              AS count,
+                COALESCE(MIN(year), 0)  AS min,
+                COALESCE(MAX(year), 0)  AS max,
+                COALESCE(SUM(year*year), 0) AS sumsqr
+         FROM pdb_entries
+         WHERE year IS NOT NULL AND year > 0`,
+      )
+      .get(),
   );
 }
 
@@ -193,7 +217,13 @@ export function aminoAcidFreq(db) {
        GROUP BY residue`,
     )
     .all(...STANDARD_AA);
-  return rowsAsGroupedRows(rows);
+  // Always return all 20 AAs in the canonical STANDARD_AA order (zero
+  // count when the table has no rows for one) so the frontend can render
+  // directly without re-ordering or filling holes.
+  const counts = new Map(rows.map((row) => [row.key, row.value]));
+  return {
+    rows: STANDARD_AA.map((aa) => ({ key: aa, value: counts.get(aa) ?? 0 })),
+  };
 }
 
 export function nucleicBaseFreq(db) {
@@ -238,138 +268,67 @@ export function moleculeType(db) {
 }
 
 export function modifiedResiduesHist(db) {
-  const rows = db
-    .statement(
-      `SELECT nb_modified_residues AS key, COUNT(*) AS value
-       FROM pdb_entries
-       GROUP BY nb_modified_residues
-       ORDER BY nb_modified_residues`,
-    )
-    .all();
-  return rowsAsGroupedRows(rows);
+  return rowsAsGroupedRows(db.statsModifiedResiduesHist.all());
 }
 
 export function helixKindHist(db) {
-  const rows = db
-    .statement(
-      `SELECT kind AS key, COUNT(*) AS value
-       FROM pdb_helices
-       WHERE kind IS NOT NULL
-       GROUP BY kind
-       ORDER BY kind`,
-    )
-    .all();
-  return rowsAsGroupedRows(rows);
+  return rowsAsGroupedRows(db.statsHelixKindHist.all());
 }
 
 export function helixLengthHist(db) {
-  const rows = db
-    .statement(
-      `SELECT (res_to - res_from + 1) AS key, COUNT(*) AS value
-       FROM pdb_helices
-       WHERE res_to >= res_from
-         AND (res_to - res_from + 1) > 0
-         AND (res_to - res_from + 1) < ?
-       GROUP BY key
-       ORDER BY key`,
-    )
-    .all(HELIX_SHEET_LENGTH_LIMIT);
-  return rowsAsGroupedRows(rows);
+  return rowsAsGroupedRows(
+    db.statsHelixLengthHist.all(HELIX_SHEET_LENGTH_LIMIT),
+  );
 }
 
 export function sheetLengthHist(db) {
-  const rows = db
-    .statement(
-      `SELECT (res_to - res_from + 1) AS key, COUNT(*) AS value
-       FROM pdb_sheets
-       WHERE res_to >= res_from
-         AND (res_to - res_from + 1) > 0
-         AND (res_to - res_from + 1) < ?
-       GROUP BY key
-       ORDER BY key`,
-    )
-    .all(HELIX_SHEET_LENGTH_LIMIT);
-  return rowsAsGroupedRows(rows);
+  return rowsAsGroupedRows(
+    db.statsSheetLengthHist.all(HELIX_SHEET_LENGTH_LIMIT),
+  );
 }
 
 export function helicesVsSheets(db) {
-  const rows = db
-    .statement(
-      `SELECT nb_helices AS h, nb_sheets AS s, COUNT(*) AS value
-       FROM pdb_entries
-       GROUP BY nb_helices, nb_sheets`,
-    )
-    .all();
+  const rows = db.statsHelicesVsSheets.all();
   return {
     rows: rows.map((row) => ({ key: [row.h, row.s], value: row.value })),
   };
 }
 
 export function secondaryStructurePresence(db) {
-  const rows = db
-    .statement(
-      `SELECT label AS key, COUNT(*) AS value FROM (
-         SELECT CASE
-           WHEN nb_helices = 0 AND nb_sheets = 0 THEN 'none'
-           WHEN nb_helices > 0 AND nb_sheets = 0 THEN 'helices-only'
-           WHEN nb_helices = 0 AND nb_sheets > 0 THEN 'sheets-only'
-           ELSE 'mixed'
-         END AS label
-         FROM pdb_entries
-       )
-       GROUP BY label`,
-    )
-    .all();
-  return rowsAsGroupedRows(rows);
+  return rowsAsGroupedRows(db.statsSecondaryStructurePresence.all());
 }
 
 export function residuesHistogram(db) {
-  const all = db
-    .statement(`SELECT nb_residues FROM pdb_entries WHERE nb_residues > 0`)
-    .all();
+  const all = db.selectResidueCountsForHistogram.all();
   return histogram(all, RESIDUES_HISTOGRAM_BINS, (row) => row.nb_residues);
 }
 
 export function chainsHistogram(db) {
-  const rows = db
-    .statement(
-      `SELECT nb_chains AS key, COUNT(*) AS value
-       FROM pdb_entries
-       WHERE nb_chains > 0
-       GROUP BY nb_chains
-       ORDER BY nb_chains`,
-    )
-    .all();
-  return rowsAsGroupedRows(rows);
+  return rowsAsGroupedRows(db.statsChainsHistogram.all());
 }
 
 export function residuesPerChainStats(db) {
-  return computeStats(
-    db,
-    `SELECT (CAST(nb_residues AS REAL) / nb_chains) AS v
-     FROM pdb_entries WHERE nb_chains > 0`,
+  return wrapStats(
+    db
+      .statement(
+        `SELECT COALESCE(SUM(CAST(nb_residues AS REAL) / nb_chains), 0) AS sum,
+                COUNT(*)                                                  AS count,
+                COALESCE(MIN(CAST(nb_residues AS REAL) / nb_chains), 0)  AS min,
+                COALESCE(MAX(CAST(nb_residues AS REAL) / nb_chains), 0)  AS max,
+                COALESCE(SUM((CAST(nb_residues AS REAL) / nb_chains) *
+                             (CAST(nb_residues AS REAL) / nb_chains)), 0) AS sumsqr
+         FROM pdb_entries WHERE nb_chains > 0`,
+      )
+      .get(),
   );
 }
 
 export function ligandFrequency(db) {
-  const rows = db
-    .statement(
-      `SELECT label AS key, SUM(count) AS value
-       FROM pdb_formulas
-       WHERE label <> 'HOH'
-       GROUP BY label
-       ORDER BY value DESC`,
-    )
-    .all();
-  return rowsAsGroupedRows(rows);
+  return rowsAsGroupedRows(db.statsLigandFrequency.all());
 }
 
 export function ligandMwHistogram(db) {
-  const all = db
-    .statement(
-      `SELECT mw FROM pdb_formulas WHERE label <> 'HOH' AND mw IS NOT NULL AND mw > 0`,
-    )
-    .all();
+  const all = db.selectLigandMwForHistogram.all();
   return histogram(all, LIGAND_MW_BINS, (row) => row.mw);
 }
 
@@ -403,51 +362,16 @@ export function ligandsByYear(db) {
 }
 
 export function iepHistogram(db) {
-  const rows = db
-    .statement(
-      `SELECT (CAST(iep * 2 AS INTEGER) / 2.0) AS key, COUNT(*) AS value
-       FROM pdb_entries
-       WHERE iep IS NOT NULL
-       GROUP BY key
-       ORDER BY key`,
-    )
-    .all();
-  return rowsAsGroupedRows(rows);
+  return rowsAsGroupedRows(db.statsIepHistogram.all());
 }
 
 export function ecClasses(db) {
   // Each pdb contributes once per top-level EC class (1..7) it has any chain in.
-  const rows = db
-    .statement(
-      `SELECT head AS key, COUNT(DISTINCT pdb_id) AS value FROM (
-         SELECT pdb_id, substr(ec, 1, 1) AS head
-         FROM pdb_chains
-         WHERE ec IS NOT NULL
-           AND length(ec) > 0
-           AND substr(ec, 1, 1) BETWEEN '1' AND '7'
-       )
-       GROUP BY head
-       ORDER BY head`,
-    )
-    .all();
-  return rowsAsGroupedRows(rows);
+  return rowsAsGroupedRows(db.statsEcClasses.all());
 }
 
 export function residuesByYear(db) {
-  const rows = db
-    .statement(
-      `SELECT year                            AS key,
-              COALESCE(SUM(nb_residues), 0)   AS sum,
-              COUNT(*)                        AS count,
-              COALESCE(MIN(nb_residues), 0)   AS min,
-              COALESCE(MAX(nb_residues), 0)   AS max,
-              COALESCE(SUM(nb_residues*nb_residues), 0) AS sumsqr
-       FROM pdb_entries
-       WHERE year IS NOT NULL AND year > 0
-       GROUP BY year
-       ORDER BY year`,
-    )
-    .all();
+  const rows = db.statsResiduesByYear.all();
   return {
     rows: rows.map((row) => ({
       key: row.key,
@@ -463,16 +387,7 @@ export function residuesByYear(db) {
 }
 
 export function methodByYear(db) {
-  const rows = db
-    .statement(
-      `SELECT year, experiment, COUNT(*) AS value
-       FROM pdb_entries
-       WHERE year IS NOT NULL AND year > 0
-         AND experiment IS NOT NULL AND experiment <> ''
-       GROUP BY year, experiment
-       ORDER BY year`,
-    )
-    .all();
+  const rows = db.statsMethodByYear.all();
   return {
     rows: rows.map((row) => ({
       key: [row.year, row.experiment],
@@ -482,17 +397,7 @@ export function methodByYear(db) {
 }
 
 export function omegaSummary(db) {
-  const row = db
-    .statement(
-      `SELECT
-         COALESCE(SUM(omega_nb_cis), 0)            AS cis,
-         COALESCE(SUM(omega_nb_trans), 0)          AS trans,
-         COALESCE(SUM(omega_nb_twisted), 0)        AS twisted,
-         COALESCE(SUM(omega_nb_peptide_bonds), 0)  AS total
-       FROM pdb_entries
-       WHERE omega_nb_peptide_bonds > 0`,
-    )
-    .get();
+  const row = db.statsOmegaSummary.get();
   return {
     rows: [
       {
@@ -509,20 +414,7 @@ export function omegaSummary(db) {
 }
 
 export function omegaByYear(db) {
-  const rows = db
-    .statement(
-      `SELECT year                                  AS key,
-              COALESCE(SUM(omega_nb_cis), 0)        AS cis,
-              COALESCE(SUM(omega_nb_trans), 0)      AS trans,
-              COALESCE(SUM(omega_nb_twisted), 0)    AS twisted,
-              COALESCE(SUM(omega_nb_peptide_bonds), 0) AS total
-       FROM pdb_entries
-       WHERE year IS NOT NULL AND year > 0
-         AND omega_nb_peptide_bonds > 0
-       GROUP BY year
-       ORDER BY year`,
-    )
-    .all();
+  const rows = db.statsOmegaByYear.all();
   return {
     rows: rows.map((row) => ({
       key: row.key,
@@ -532,42 +424,13 @@ export function omegaByYear(db) {
 }
 
 export function cisCountHistogram(db) {
-  const rows = db
-    .statement(
-      `SELECT omega_nb_cis AS key, COUNT(*) AS value
-       FROM pdb_entries
-       GROUP BY omega_nb_cis
-       ORDER BY omega_nb_cis`,
-    )
-    .all();
-  return rowsAsGroupedRows(rows);
+  return rowsAsGroupedRows(db.statsCisCountHistogram.all());
 }
 
 export function pairFrequency(db, yearRange) {
-  let rows;
-  if (yearRange) {
-    rows = db
-      .statement(
-        `SELECT residue1, residue2,
-                SUM(cis_count)   AS cis,
-                SUM(total_count) AS total
-         FROM pdb_omega_pairs op
-         JOIN pdb_entries e ON e.id = op.pdb_id
-         WHERE e.year IS NOT NULL AND e.year BETWEEN ? AND ?
-         GROUP BY residue1, residue2`,
-      )
-      .all(yearRange[0], yearRange[1]);
-  } else {
-    rows = db
-      .statement(
-        `SELECT residue1, residue2,
-                SUM(cis_count)   AS cis,
-                SUM(total_count) AS total
-         FROM pdb_omega_pairs
-         GROUP BY residue1, residue2`,
-      )
-      .all();
-  }
+  const rows = yearRange
+    ? db.statsPairFrequencyByYearRange.all(yearRange[0], yearRange[1])
+    : db.statsPairFrequencyAllYears.all();
   return {
     rows: rows.map((row) => ({
       key: [row.residue1, row.residue2],
@@ -577,15 +440,7 @@ export function pairFrequency(db, yearRange) {
 }
 
 export function twistedPairFrequency(db) {
-  const rows = db
-    .statement(
-      `SELECT residue1, residue2, SUM(twisted_count) AS value
-       FROM pdb_omega_pairs
-       WHERE twisted_count > 0
-       GROUP BY residue1, residue2
-       ORDER BY value DESC`,
-    )
-    .all();
+  const rows = db.statsTwistedPairFrequency.all();
   return {
     rows: rows.map((row) => ({
       key: [row.residue1, row.residue2],

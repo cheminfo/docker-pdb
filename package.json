@@ -27,6 +27,7 @@
   "license": "MIT",
   "scripts": {
     "api": "npm run api -w backend",
+    "check-types": "npm run check-types -w frontend",
     "cron": "npm run cron -w backend",
     "cron-ccd": "npm run cron-ccd -w backend",
     "dev": "npm run dev:seed && concurrently --names backend,frontend --prefix-colors blue,magenta \"npm:dev:backend\" \"npm:dev:frontend\"",
@@ -40,7 +41,7 @@
     "rebuild": "npm run rebuild -w backend",
     "seed": "npm run seed -w backend",
     "seed-ccd": "npm run seed-ccd -w backend",
-    "test": "npm run test-only && npm run eslint && npm run prettier",
+    "test": "npm run test-only && npm run check-types && npm run eslint && npm run prettier",
     "test-only": "npm run test-only -w backend",
     "update": "npm run update -w backend"
   },

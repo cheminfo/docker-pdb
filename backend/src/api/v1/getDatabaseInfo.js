@@ -7,15 +7,7 @@
  */
 export function registerGetDatabaseInfoRoute(fastify, db) {
   fastify.get('/v1/database/info', async (_request, reply) => {
-    const totals = db
-      .statement(
-        `SELECT COUNT(*)                                      AS pdb_count,
-                COALESCE(SUM(raw_size), 0)                    AS pdb_bytes,
-                SUM(CASE WHEN has_assembly = 1 THEN 1 ELSE 0 END) AS assembly_count,
-                COALESCE(SUM(CASE WHEN has_assembly = 1 THEN assembly_size ELSE 0 END), 0) AS assembly_bytes
-         FROM pdb_entries`,
-      )
-      .get();
+    const totals = db.pdbDatabaseTotals.get();
     return reply.send({
       pdb: {
         // eslint-disable-next-line camelcase -- legacy snake_case key preserved for backward compatibility

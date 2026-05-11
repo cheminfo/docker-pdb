@@ -41,6 +41,29 @@ function logSlowQuery(entry) {
 }
 
 /**
+ * Execute a sqlite statement call and report it as a slow query if it
+ * exceeds {@link SLOW_QUERY_THRESHOLD_MS}. Both pino and the on-disk JSON-lines
+ * log are notified. The result is returned unchanged.
+ * @template TResult
+ * @param {string} sql - SQL of the statement being timed (used for logging).
+ * @param {() => TResult} run - Thunk that executes the prepared statement call.
+ * @param {(result: TResult) => object} [extras] - Optional extras (e.g. `{ rowCount }`)
+ *   to attach to the log entry. Receives the call's result.
+ * @returns {TResult} The result of `run()`, unchanged.
+ */
+function timed(sql, run, extras) {
+  const start = performance.now();
+  const result = run();
+  const duration = Math.round(performance.now() - start);
+  if (duration > SLOW_QUERY_THRESHOLD_MS) {
+    const entry = { sql, duration, ...(extras ? extras(result) : {}) };
+    logger.warn(entry, 'Slow query');
+    logSlowQuery(entry);
+  }
+  return result;
+}
+
+/**
  * Apply performance PRAGMAs to a database connection. Mirrors the
  * settings used in cheminfo/pipeline.
  * @param {DatabaseSync} db - Database connection to configure.
@@ -122,9 +145,15 @@ async function applyMigrations(db) {
 }
 
 /**
- * Thin wrapper around a `DatabaseSync` connection that wraps every prepared
- * statement with timing instrumentation. Slow queries (over 10 ms) are
- * emitted to pino at WARN level and appended to the on-disk log.
+ * Wrapper class around a `DatabaseSync` connection that caches prepared
+ * statements and times every call. All static SQL used by the project is
+ * exposed as a named getter on this class (the cheminfo/pipeline pattern):
+ * each getter calls `this.statement(sql)` once, the resulting prepared
+ * statement is cached, and call sites use `db.upsertPdbEntry.run(...)`
+ * rather than re-typing SQL strings.
+ *
+ * Truly dynamic SQL (e.g. /v1/pdbs search builds WHERE clauses from query
+ * params) still uses `db.statement(sql)` directly.
  */
 export class LigandsDB {
   /**
@@ -141,43 +170,23 @@ export class LigandsDB {
    * call to `.get()`, `.all()`, or `.run()` is timed and reports slow
    * queries to pino + the on-disk log.
    * @param {string} sql - SQL to prepare.
-   * @returns {{ get: Function, all: Function, run: Function }} Timed prepared-statement wrapper.
+   * @returns {{ get: (...args: unknown[]) => unknown, all: (...args: unknown[]) => unknown[], run: (...args: unknown[]) => unknown }} Timed prepared-statement wrapper.
    */
   statement(sql) {
     let wrapped = this.cache.get(sql);
     if (wrapped) return wrapped;
     const statement = this.db.prepare(sql);
     wrapped = {
-      get: (...args) => {
-        const start = performance.now();
-        const row = statement.get(...args);
-        const duration = Math.round(performance.now() - start);
-        if (duration > SLOW_QUERY_THRESHOLD_MS) {
-          logger.warn({ sql, duration }, 'Slow query');
-          logSlowQuery({ sql, duration });
-        }
-        return row;
-      },
-      all: (...args) => {
-        const start = performance.now();
-        const rows = statement.all(...args);
-        const duration = Math.round(performance.now() - start);
-        if (duration > SLOW_QUERY_THRESHOLD_MS) {
-          logger.warn({ sql, duration, rowCount: rows.length }, 'Slow query');
-          logSlowQuery({ sql, duration, rowCount: rows.length });
-        }
-        return rows;
-      },
-      run: (...args) => {
-        const start = performance.now();
-        const result = statement.run(...args);
-        const duration = Math.round(performance.now() - start);
-        if (duration > SLOW_QUERY_THRESHOLD_MS) {
-          logger.warn({ sql, duration }, 'Slow query');
-          logSlowQuery({ sql, duration });
-        }
-        return result;
-      },
+      get: (...args) => timed(sql, () => statement.get(...args)),
+      all: (...args) =>
+        timed(
+          sql,
+          () => statement.all(...args),
+          (rows) => ({
+            rowCount: rows.length,
+          }),
+        ),
+      run: (...args) => timed(sql, () => statement.run(...args)),
     };
     this.cache.set(sql, wrapped);
     return wrapped;
@@ -186,5 +195,636 @@ export class LigandsDB {
   /** Close the underlying connection. */
   close() {
     this.db.close();
+  }
+
+  // -- pdb_entries --
+
+  get upsertPdbEntry() {
+    return this.statement(
+      `INSERT INTO pdb_entries (
+         id, title, experiment, year, nb_residues, nb_modified_residues,
+         nb_chains, nb_helices, nb_sheets, nb_ligands, iep,
+         raw_size, has_assembly, assembly_size, parsed_at,
+         omega_nb_cis, omega_nb_trans, omega_nb_twisted, omega_nb_peptide_bonds,
+         residue_stats_json, percentage_aa_json
+       )
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         title = excluded.title,
+         experiment = excluded.experiment,
+         year = excluded.year,
+         nb_residues = excluded.nb_residues,
+         nb_modified_residues = excluded.nb_modified_residues,
+         nb_chains = excluded.nb_chains,
+         nb_helices = excluded.nb_helices,
+         nb_sheets = excluded.nb_sheets,
+         nb_ligands = excluded.nb_ligands,
+         iep = excluded.iep,
+         raw_size = excluded.raw_size,
+         has_assembly = excluded.has_assembly,
+         assembly_size = excluded.assembly_size,
+         parsed_at = excluded.parsed_at,
+         omega_nb_cis = excluded.omega_nb_cis,
+         omega_nb_trans = excluded.omega_nb_trans,
+         omega_nb_twisted = excluded.omega_nb_twisted,
+         omega_nb_peptide_bonds = excluded.omega_nb_peptide_bonds,
+         residue_stats_json = excluded.residue_stats_json,
+         percentage_aa_json = excluded.percentage_aa_json`,
+    );
+  }
+
+  get markPdbAssembly() {
+    return this.statement(
+      `INSERT INTO pdb_entries (id, has_assembly, assembly_size, parsed_at)
+       VALUES (?, 1, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         has_assembly = 1,
+         assembly_size = excluded.assembly_size`,
+    );
+  }
+
+  get selectPdbEntry() {
+    return this.statement(
+      `SELECT id, title, experiment, year, nb_residues, nb_modified_residues,
+              nb_chains, nb_helices, nb_sheets, nb_ligands, iep,
+              omega_nb_cis, omega_nb_trans, omega_nb_twisted, omega_nb_peptide_bonds,
+              residue_stats_json, percentage_aa_json,
+              has_assembly, assembly_size, raw_size
+       FROM pdb_entries WHERE id = ?`,
+    );
+  }
+
+  get countPdbEntries() {
+    return this.statement(`SELECT COUNT(*) AS n FROM pdb_entries`);
+  }
+
+  get pdbDatabaseTotals() {
+    return this.statement(
+      `SELECT COUNT(*)                                      AS pdb_count,
+              COALESCE(SUM(raw_size), 0)                    AS pdb_bytes,
+              SUM(CASE WHEN has_assembly = 1 THEN 1 ELSE 0 END) AS assembly_count,
+              COALESCE(SUM(CASE WHEN has_assembly = 1 THEN assembly_size ELSE 0 END), 0) AS assembly_bytes
+       FROM pdb_entries`,
+    );
+  }
+
+  get selectJsmolPdbCandidates() {
+    return this.statement(
+      `SELECT e.id
+       FROM pdb_entries e
+       WHERE e.nb_residues BETWEEN 100 AND 500
+         AND e.nb_modified_residues = 0
+         AND e.nb_sheets > 5
+         AND EXISTS (SELECT 1 FROM pdb_helices h
+                     WHERE h.pdb_id = e.id AND (h.res_to - h.res_from) >= 10)
+         AND EXISTS (SELECT 1 FROM pdb_sheets s
+                     WHERE s.pdb_id = e.id AND (s.res_to - s.res_from) >= 10)
+         AND EXISTS (SELECT 1 FROM pdb_formulas f
+                     WHERE f.pdb_id = e.id AND f.label <> 'HOH'
+                       AND f.mw >= 150 AND f.mw <= 500)`,
+    );
+  }
+
+  // -- pdb_chains --
+
+  get deletePdbChains() {
+    return this.statement(`DELETE FROM pdb_chains WHERE pdb_id = ?`);
+  }
+
+  get insertPdbChain() {
+    return this.statement(
+      `INSERT INTO pdb_chains (pdb_id, chain_id, molecule, synonym, ec, nb_residues, iep)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    );
+  }
+
+  get selectPdbChains() {
+    return this.statement(
+      `SELECT chain_id, molecule, synonym, ec, nb_residues, iep
+       FROM pdb_chains WHERE pdb_id = ? ORDER BY chain_id`,
+    );
+  }
+
+  // -- pdb_residue_counts --
+
+  get deletePdbResidueCounts() {
+    return this.statement(`DELETE FROM pdb_residue_counts WHERE pdb_id = ?`);
+  }
+
+  get insertPdbResidueCount() {
+    return this.statement(
+      `INSERT INTO pdb_residue_counts (pdb_id, residue, count) VALUES (?, ?, ?)`,
+    );
+  }
+
+  // -- pdb_helices --
+
+  get deletePdbHelices() {
+    return this.statement(`DELETE FROM pdb_helices WHERE pdb_id = ?`);
+  }
+
+  get insertPdbHelix() {
+    return this.statement(
+      `INSERT INTO pdb_helices (pdb_id, idx, chain, res_from, res_to, kind)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    );
+  }
+
+  get selectPdbHelices() {
+    return this.statement(
+      `SELECT chain, res_from, res_to, kind
+       FROM pdb_helices WHERE pdb_id = ? ORDER BY idx`,
+    );
+  }
+
+  // -- pdb_sheets --
+
+  get deletePdbSheets() {
+    return this.statement(`DELETE FROM pdb_sheets WHERE pdb_id = ?`);
+  }
+
+  get insertPdbSheet() {
+    return this.statement(
+      `INSERT INTO pdb_sheets (pdb_id, idx, chain, res_from, res_to)
+       VALUES (?, ?, ?, ?, ?)`,
+    );
+  }
+
+  get selectPdbSheets() {
+    return this.statement(
+      `SELECT chain, res_from, res_to
+       FROM pdb_sheets WHERE pdb_id = ? ORDER BY idx`,
+    );
+  }
+
+  // -- pdb_formulas --
+
+  get deletePdbFormulas() {
+    return this.statement(`DELETE FROM pdb_formulas WHERE pdb_id = ?`);
+  }
+
+  get insertPdbFormula() {
+    return this.statement(
+      `INSERT INTO pdb_formulas (pdb_id, label, mf, mw, count, name)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    );
+  }
+
+  get selectPdbFormulas() {
+    return this.statement(
+      `SELECT label, mf, mw, count, name
+       FROM pdb_formulas WHERE pdb_id = ? ORDER BY label`,
+    );
+  }
+
+  // -- pdb_omega_pairs --
+
+  get deletePdbOmegaPairs() {
+    return this.statement(`DELETE FROM pdb_omega_pairs WHERE pdb_id = ?`);
+  }
+
+  get insertPdbOmegaPair() {
+    return this.statement(
+      `INSERT INTO pdb_omega_pairs (pdb_id, residue1, residue2, total_count, cis_count, twisted_count)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    );
+  }
+
+  // -- pdb_ligands --
+
+  get deletePdbLigands() {
+    return this.statement(`DELETE FROM pdb_ligands WHERE pdb_id = ?`);
+  }
+
+  get insertPdbLigand() {
+    return this.statement(
+      `INSERT INTO pdb_ligands (pdb_id, ligand_code, count) VALUES (?, ?, ?)`,
+    );
+  }
+
+  get upsertPdbLigand() {
+    return this.statement(
+      `INSERT OR REPLACE INTO pdb_ligands (pdb_id, ligand_code, count)
+       VALUES (?, ?, ?)`,
+    );
+  }
+
+  get countPdbsByLigandCode() {
+    return this.statement(
+      `SELECT COUNT(*) AS n FROM pdb_ligands WHERE ligand_code = ?`,
+    );
+  }
+
+  get selectPdbsByLigandCode() {
+    return this.statement(
+      `SELECT pdb_id AS pdbId, count
+       FROM pdb_ligands
+       WHERE ligand_code = ?
+       ORDER BY pdb_id
+       LIMIT ? OFFSET ?`,
+    );
+  }
+
+  // -- pdb_ligand_instances --
+
+  get deletePdbLigandInstances() {
+    return this.statement(`DELETE FROM pdb_ligand_instances WHERE pdb_id = ?`);
+  }
+
+  get insertPdbLigandInstance() {
+    return this.statement(
+      `INSERT OR REPLACE INTO pdb_ligand_instances
+         (pdb_id, ligand_code, chain, res_seq, i_code, atoms)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    );
+  }
+
+  // -- pdb_title_fts --
+
+  get deletePdbTitleFts() {
+    return this.statement(`DELETE FROM pdb_title_fts WHERE pdb_id = ?`);
+  }
+
+  get insertPdbTitleFts() {
+    return this.statement(
+      `INSERT INTO pdb_title_fts (pdb_id, title) VALUES (?, ?)`,
+    );
+  }
+
+  // -- ligands --
+
+  get countLigands() {
+    return this.statement(`SELECT COUNT(*) AS n FROM ligands`);
+  }
+
+  get upsertLigand() {
+    return this.statement(
+      `INSERT INTO ligands (code, name, formula, type, id_code, coordinates, mf, mw, nb_atoms, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, cast(unixepoch('subsec') * 1000 as integer))
+       ON CONFLICT(code) DO UPDATE SET
+         name = excluded.name,
+         formula = excluded.formula,
+         type = excluded.type,
+         id_code = excluded.id_code,
+         coordinates = excluded.coordinates,
+         mf = excluded.mf,
+         mw = excluded.mw,
+         nb_atoms = excluded.nb_atoms,
+         updated_at = excluded.updated_at`,
+    );
+  }
+
+  get selectLigandByCode() {
+    return this.statement(
+      `SELECT l.code, l.name, l.formula, l.type, l.mf, l.mw, l.nb_atoms AS nbAtoms,
+              l.id_code AS idCode, l.coordinates,
+              COALESCE((SELECT COUNT(*) FROM pdb_ligands p WHERE p.ligand_code = l.code), 0) AS nbPdbs
+       FROM ligands l WHERE l.code = ?`,
+    );
+  }
+
+  get selectLigandsByDefaultRanking() {
+    return this.statement(
+      `SELECT l.code, l.name, l.mf, l.mw, l.id_code AS idCode, l.coordinates,
+              COALESCE((SELECT COUNT(*) FROM pdb_ligands p WHERE p.ligand_code = l.code), 0) AS nbPdbs
+       FROM ligands l
+       ORDER BY nbPdbs DESC
+       LIMIT ?`,
+    );
+  }
+
+  // -- ligand_ss_index --
+
+  get upsertLigandSSIndex() {
+    return this.statement(
+      `INSERT INTO ligand_ss_index
+         (code, ss_index0, ss_index1, ss_index2, ss_index3, ss_index4, ss_index5, ss_index6, ss_index7)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(code) DO UPDATE SET
+         ss_index0 = excluded.ss_index0,
+         ss_index1 = excluded.ss_index1,
+         ss_index2 = excluded.ss_index2,
+         ss_index3 = excluded.ss_index3,
+         ss_index4 = excluded.ss_index4,
+         ss_index5 = excluded.ss_index5,
+         ss_index6 = excluded.ss_index6,
+         ss_index7 = excluded.ss_index7`,
+    );
+  }
+
+  get screenLigandSSIndex() {
+    return this.statement(
+      `SELECT l.code, l.name, l.mf, l.mw, l.id_code, l.coordinates,
+              COALESCE((SELECT COUNT(*) FROM pdb_ligands p WHERE p.ligand_code = l.code), 0) AS nb_pdbs
+       FROM ligands l
+       JOIN ligand_ss_index x ON x.code = l.code
+       WHERE (x.ss_index0 & ?) = ?
+         AND (x.ss_index1 & ?) = ?
+         AND (x.ss_index2 & ?) = ?
+         AND (x.ss_index3 & ?) = ?
+         AND (x.ss_index4 & ?) = ?
+         AND (x.ss_index5 & ?) = ?
+         AND (x.ss_index6 & ?) = ?
+         AND (x.ss_index7 & ?) = ?`,
+    );
+  }
+
+  // -- rsync_history --
+
+  get insertRsyncHistory() {
+    return this.statement(
+      `INSERT INTO rsync_history
+         (type, started_at, finished_at, duration_ms,
+          updated_count, deleted_count, last_entry_id, bytes_on_disk)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    );
+  }
+
+  get selectRsyncHistory() {
+    return this.statement(
+      `SELECT type, started_at, finished_at, duration_ms, updated_count,
+              deleted_count, last_entry_id, bytes_on_disk
+       FROM rsync_history
+       WHERE type = ?
+       ORDER BY finished_at DESC
+       LIMIT ?`,
+    );
+  }
+
+  get selectLastRsyncRun() {
+    return this.statement(
+      `SELECT type, started_at, finished_at, duration_ms, updated_count,
+              deleted_count, last_entry_id, bytes_on_disk
+       FROM rsync_history
+       WHERE type = ?
+       ORDER BY finished_at DESC
+       LIMIT 1`,
+    );
+  }
+
+  // -- stats: pdb_entries --
+
+  get statsByYear() {
+    return this.statement(
+      `SELECT year AS key, COUNT(*) AS value
+       FROM pdb_entries
+       WHERE year IS NOT NULL AND year > 0
+       GROUP BY year
+       ORDER BY year`,
+    );
+  }
+
+  get statsByExperiment() {
+    return this.statement(
+      `SELECT experiment AS key, COUNT(*) AS value
+       FROM pdb_entries
+       WHERE experiment IS NOT NULL AND experiment <> ''
+       GROUP BY experiment
+       ORDER BY value DESC`,
+    );
+  }
+
+  get statsModifiedResiduesHist() {
+    return this.statement(
+      `SELECT nb_modified_residues AS key, COUNT(*) AS value
+       FROM pdb_entries
+       GROUP BY nb_modified_residues
+       ORDER BY nb_modified_residues`,
+    );
+  }
+
+  get statsHelicesVsSheets() {
+    return this.statement(
+      `SELECT nb_helices AS h, nb_sheets AS s, COUNT(*) AS value
+       FROM pdb_entries
+       GROUP BY nb_helices, nb_sheets`,
+    );
+  }
+
+  get statsSecondaryStructurePresence() {
+    return this.statement(
+      `SELECT label AS key, COUNT(*) AS value FROM (
+         SELECT CASE
+           WHEN nb_helices = 0 AND nb_sheets = 0 THEN 'none'
+           WHEN nb_helices > 0 AND nb_sheets = 0 THEN 'helices-only'
+           WHEN nb_helices = 0 AND nb_sheets > 0 THEN 'sheets-only'
+           ELSE 'mixed'
+         END AS label
+         FROM pdb_entries
+       )
+       GROUP BY label`,
+    );
+  }
+
+  get selectResidueCountsForHistogram() {
+    return this.statement(
+      `SELECT nb_residues FROM pdb_entries WHERE nb_residues > 0`,
+    );
+  }
+
+  get statsChainsHistogram() {
+    return this.statement(
+      `SELECT nb_chains AS key, COUNT(*) AS value
+       FROM pdb_entries
+       WHERE nb_chains > 0
+       GROUP BY nb_chains
+       ORDER BY nb_chains`,
+    );
+  }
+
+  get statsIepHistogram() {
+    return this.statement(
+      `SELECT (CAST(iep * 2 AS INTEGER) / 2.0) AS key, COUNT(*) AS value
+       FROM pdb_entries
+       WHERE iep IS NOT NULL
+       GROUP BY key
+       ORDER BY key`,
+    );
+  }
+
+  get statsLigandsByYear() {
+    return this.statement(
+      `SELECT year                          AS key,
+              COALESCE(SUM(nb_ligands), 0)  AS sum,
+              COUNT(*)                      AS count,
+              COALESCE(MIN(nb_ligands), 0)  AS min,
+              COALESCE(MAX(nb_ligands), 0)  AS max,
+              COALESCE(SUM(nb_ligands*nb_ligands), 0) AS sumsqr
+       FROM pdb_entries
+       WHERE year IS NOT NULL AND year > 0
+       GROUP BY year
+       ORDER BY year`,
+    );
+  }
+
+  get statsResiduesByYear() {
+    return this.statement(
+      `SELECT year                            AS key,
+              COALESCE(SUM(nb_residues), 0)   AS sum,
+              COUNT(*)                        AS count,
+              COALESCE(MIN(nb_residues), 0)   AS min,
+              COALESCE(MAX(nb_residues), 0)   AS max,
+              COALESCE(SUM(nb_residues*nb_residues), 0) AS sumsqr
+       FROM pdb_entries
+       WHERE year IS NOT NULL AND year > 0
+       GROUP BY year
+       ORDER BY year`,
+    );
+  }
+
+  get statsMethodByYear() {
+    return this.statement(
+      `SELECT year, experiment, COUNT(*) AS value
+       FROM pdb_entries
+       WHERE year IS NOT NULL AND year > 0
+         AND experiment IS NOT NULL AND experiment <> ''
+       GROUP BY year, experiment
+       ORDER BY year`,
+    );
+  }
+
+  get statsOmegaSummary() {
+    return this.statement(
+      `SELECT
+         COALESCE(SUM(omega_nb_cis), 0)            AS cis,
+         COALESCE(SUM(omega_nb_trans), 0)          AS trans,
+         COALESCE(SUM(omega_nb_twisted), 0)        AS twisted,
+         COALESCE(SUM(omega_nb_peptide_bonds), 0)  AS total
+       FROM pdb_entries
+       WHERE omega_nb_peptide_bonds > 0`,
+    );
+  }
+
+  get statsOmegaByYear() {
+    return this.statement(
+      `SELECT year                                  AS key,
+              COALESCE(SUM(omega_nb_cis), 0)        AS cis,
+              COALESCE(SUM(omega_nb_trans), 0)      AS trans,
+              COALESCE(SUM(omega_nb_twisted), 0)    AS twisted,
+              COALESCE(SUM(omega_nb_peptide_bonds), 0) AS total
+       FROM pdb_entries
+       WHERE year IS NOT NULL AND year > 0
+         AND omega_nb_peptide_bonds > 0
+       GROUP BY year
+       ORDER BY year`,
+    );
+  }
+
+  get statsCisCountHistogram() {
+    return this.statement(
+      `SELECT omega_nb_cis AS key, COUNT(*) AS value
+       FROM pdb_entries
+       GROUP BY omega_nb_cis
+       ORDER BY omega_nb_cis`,
+    );
+  }
+
+  get statsResiduesPerChain() {
+    return this.statement(
+      `SELECT (CAST(nb_residues AS REAL) / nb_chains) AS v
+       FROM pdb_entries WHERE nb_chains > 0`,
+    );
+  }
+
+  // -- stats: pdb_helices / pdb_sheets --
+
+  get statsHelixKindHist() {
+    return this.statement(
+      `SELECT kind AS key, COUNT(*) AS value
+       FROM pdb_helices
+       WHERE kind IS NOT NULL
+       GROUP BY kind
+       ORDER BY kind`,
+    );
+  }
+
+  get statsHelixLengthHist() {
+    return this.statement(
+      `SELECT (res_to - res_from + 1) AS key, COUNT(*) AS value
+       FROM pdb_helices
+       WHERE res_to >= res_from
+         AND (res_to - res_from + 1) > 0
+         AND (res_to - res_from + 1) < ?
+       GROUP BY key
+       ORDER BY key`,
+    );
+  }
+
+  get statsSheetLengthHist() {
+    return this.statement(
+      `SELECT (res_to - res_from + 1) AS key, COUNT(*) AS value
+       FROM pdb_sheets
+       WHERE res_to >= res_from
+         AND (res_to - res_from + 1) > 0
+         AND (res_to - res_from + 1) < ?
+       GROUP BY key
+       ORDER BY key`,
+    );
+  }
+
+  // -- stats: pdb_chains / pdb_formulas --
+
+  get statsEcClasses() {
+    return this.statement(
+      `SELECT head AS key, COUNT(DISTINCT pdb_id) AS value FROM (
+         SELECT pdb_id, substr(ec, 1, 1) AS head
+         FROM pdb_chains
+         WHERE ec IS NOT NULL
+           AND length(ec) > 0
+           AND substr(ec, 1, 1) BETWEEN '1' AND '7'
+       )
+       GROUP BY head
+       ORDER BY head`,
+    );
+  }
+
+  get statsLigandFrequency() {
+    return this.statement(
+      `SELECT label AS key, SUM(count) AS value
+       FROM pdb_formulas
+       WHERE label <> 'HOH'
+       GROUP BY label
+       ORDER BY value DESC`,
+    );
+  }
+
+  get selectLigandMwForHistogram() {
+    return this.statement(
+      `SELECT mw FROM pdb_formulas WHERE label <> 'HOH' AND mw IS NOT NULL AND mw > 0`,
+    );
+  }
+
+  // -- stats: pdb_omega_pairs --
+
+  get statsPairFrequencyAllYears() {
+    return this.statement(
+      `SELECT residue1, residue2,
+              SUM(cis_count)   AS cis,
+              SUM(total_count) AS total
+       FROM pdb_omega_pairs
+       GROUP BY residue1, residue2`,
+    );
+  }
+
+  get statsPairFrequencyByYearRange() {
+    return this.statement(
+      `SELECT residue1, residue2,
+              SUM(cis_count)   AS cis,
+              SUM(total_count) AS total
+       FROM pdb_omega_pairs op
+       JOIN pdb_entries e ON e.id = op.pdb_id
+       WHERE e.year IS NOT NULL AND e.year BETWEEN ? AND ?
+       GROUP BY residue1, residue2`,
+    );
+  }
+
+  get statsTwistedPairFrequency() {
+    return this.statement(
+      `SELECT residue1, residue2, SUM(twisted_count) AS value
+       FROM pdb_omega_pairs
+       WHERE twisted_count > 0
+       GROUP BY residue1, residue2
+       ORDER BY value DESC`,
+    );
   }
 }

@@ -28,16 +28,7 @@ export function registerGetSyncStatusRoute(fastify, db) {
 async function getRsyncStatus(db) {
   const lastByType = {};
   for (const type of ['asymUnit', 'bioAssembly']) {
-    const row = db
-      .statement(
-        `SELECT type, started_at, finished_at, duration_ms, updated_count,
-                deleted_count, last_entry_id, bytes_on_disk
-         FROM rsync_history
-         WHERE type = ?
-         ORDER BY finished_at DESC
-         LIMIT 1`,
-      )
-      .get(type);
+    const row = db.selectLastRsyncRun.get(type);
     lastByType[type] = row
       ? {
           type: row.type,

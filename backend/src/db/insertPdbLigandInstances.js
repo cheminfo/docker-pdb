@@ -37,23 +37,15 @@ export function replacePdbLigandInstancesSync(
   options = {},
 ) {
   const skipTransaction = Boolean(options.skipTransaction);
-  const deleteAll = db.statement(
-    `DELETE FROM pdb_ligand_instances WHERE pdb_id = ?`,
-  );
-  const insert = db.statement(
-    `INSERT OR REPLACE INTO pdb_ligand_instances
-     (pdb_id, ligand_code, chain, res_seq, i_code, atoms)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-  );
 
   if (!skipTransaction) db.db.exec('BEGIN');
   try {
-    deleteAll.run(pdbId);
+    db.deletePdbLigandInstances.run(pdbId);
     let inserted = 0;
     for (const instance of instances) {
       if (!instance.code || instance.code === 'HOH') continue;
       if (!instance.atoms || instance.atoms.length === 0) continue;
-      insert.run(
+      db.insertPdbLigandInstance.run(
         pdbId,
         instance.code,
         instance.chain,

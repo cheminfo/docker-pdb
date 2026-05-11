@@ -27,19 +27,13 @@ export async function replacePdbLigands(pdbId, formulaEntries) {
  * @returns {number} Number of rows inserted (excludes water).
  */
 export function replacePdbLigandsSync(db, pdbId, formulaEntries) {
-  const deleteAll = db.statement(`DELETE FROM pdb_ligands WHERE pdb_id = ?`);
-  const insert = db.statement(
-    `INSERT OR REPLACE INTO pdb_ligands (pdb_id, ligand_code, count)
-     VALUES (?, ?, ?)`,
-  );
-
   db.db.exec('BEGIN');
   try {
-    deleteAll.run(pdbId);
+    db.deletePdbLigands.run(pdbId);
     let inserted = 0;
     for (const entry of formulaEntries) {
       if (!entry.label || entry.label === 'HOH') continue;
-      insert.run(pdbId, entry.label, entry.number || 1);
+      db.upsertPdbLigand.run(pdbId, entry.label, entry.number || 1);
       inserted++;
     }
     db.db.exec('COMMIT');

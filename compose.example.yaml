@@ -1,29 +1,8 @@
 services:
-  nginx-proxy:
-    image: docker.io/nginx:1.27
-    ports:
-      - '127.0.0.1:${NGINX_PORT}:80'
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./nginx/www:/data/www:ro
-    env_file:
-      - .env
-    depends_on:
-      - pdb-api
-    restart: unless-stopped
-    pids_limit: 256
-    ulimits:
-      core: 0
-    logging:
-      driver: json-file
-      options:
-        max-size: '10m'
-        max-file: '3'
-
   node-pdb-sync:
     # Use the released image by default. To build locally instead, run:
     #   docker compose up -d --build
-    image: ghcr.io/cheminfo/pdb-quickview:latest
+    image: ghcr.io/cheminfo/docker-pdb:latest
     build: .
     volumes:
       - ./data:/app/data
@@ -32,6 +11,7 @@ services:
     environment:
       DEBUG: '*'
     restart: unless-stopped
+    init: true
     pids_limit: 256
     ulimits:
       core: 0
@@ -43,14 +23,17 @@ services:
     command: npm run cron
 
   pdb-api:
-    # Fastify server backing the entire HTTP API (substructure search,
-    # parsed PDB metadata, stats aggregates, raw file streaming). On first
-    # start it seeds data/sqlite/ligands.db from the wwPDB Chemical
-    # Component Dictionary if the `ligands` table is empty.
+    # Fastify server: HTTP API (substructure search, parsed PDB metadata,
+    # stats aggregates, raw file streaming) AND the React/Vite bundle baked
+    # into the image at /app/backend/public. On first start it seeds
+    # data/sqlite/ligands.db from the wwPDB Chemical Component Dictionary
+    # if the `ligands` table is empty.
     # Use the released image by default. To build locally instead, run:
     #   docker compose up -d --build
-    image: ghcr.io/cheminfo/pdb-quickview:latest
+    image: ghcr.io/cheminfo/docker-pdb:latest
     build: .
+    ports:
+      - '127.0.0.1:${PUBLIC_PORT}:3000'
     volumes:
       - ./data:/app/data
     env_file:
@@ -59,6 +42,7 @@ services:
       DEBUG: '*'
       PORT: '3000'
     restart: unless-stopped
+    init: true
     pids_limit: 256
     ulimits:
       core: 0
@@ -68,7 +52,7 @@ services:
         max-size: '10m'
         max-file: '3'
     # The CCD seed is owned by pdb-api-cron — pdb-api starts the API
-    # server immediately so nginx never returns 502 during the first boot.
+    # immediately so the homepage never 502s during the first boot.
     command: npm run api
 
   pdb-api-cron:
@@ -76,7 +60,7 @@ services:
     # Chemical Component Dictionary (weekly upstream cadence). Idle most
     # of the time. Independent of pdb-api: on a fresh deploy pdb-api
     # writes the initial copy and this cron sleeps until next week.
-    image: ghcr.io/cheminfo/pdb-quickview:latest
+    image: ghcr.io/cheminfo/docker-pdb:latest
     build: .
     volumes:
       - ./data:/app/data
@@ -85,6 +69,7 @@ services:
     environment:
       DEBUG: '*'
     restart: unless-stopped
+    init: true
     pids_limit: 256
     ulimits:
       core: 0

@@ -12,45 +12,13 @@
  * @returns {object | null} Doc-shaped object, or `null` if the row does not exist.
  */
 export function readPdbDoc(db, pdbId) {
-  const entry = db
-    .statement(
-      `SELECT id, title, experiment, year, nb_residues, nb_modified_residues,
-              nb_chains, nb_helices, nb_sheets, nb_ligands, iep,
-              omega_nb_cis, omega_nb_trans, omega_nb_twisted, omega_nb_peptide_bonds,
-              residue_stats_json, percentage_aa_json,
-              has_assembly, assembly_size, raw_size
-       FROM pdb_entries WHERE id = ?`,
-    )
-    .get(pdbId);
+  const entry = db.selectPdbEntry.get(pdbId);
   if (!entry) return null;
 
-  const chains = db
-    .statement(
-      `SELECT chain_id, molecule, synonym, ec, nb_residues, iep
-       FROM pdb_chains WHERE pdb_id = ? ORDER BY chain_id`,
-    )
-    .all(pdbId);
-
-  const helices = db
-    .statement(
-      `SELECT chain, res_from, res_to, kind
-       FROM pdb_helices WHERE pdb_id = ? ORDER BY idx`,
-    )
-    .all(pdbId);
-
-  const sheets = db
-    .statement(
-      `SELECT chain, res_from, res_to
-       FROM pdb_sheets WHERE pdb_id = ? ORDER BY idx`,
-    )
-    .all(pdbId);
-
-  const formulas = db
-    .statement(
-      `SELECT label, mf, mw, count, name
-       FROM pdb_formulas WHERE pdb_id = ? ORDER BY label`,
-    )
-    .all(pdbId);
+  const chains = db.selectPdbChains.all(pdbId);
+  const helices = db.selectPdbHelices.all(pdbId);
+  const sheets = db.selectPdbSheets.all(pdbId);
+  const formulas = db.selectPdbFormulas.all(pdbId);
 
   const chain = {};
   for (const row of chains) {

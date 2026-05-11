@@ -35,39 +35,24 @@ export function substructureSearch({ db, queryIdCode, maxResults = 200 }) {
   const queryIndex = computeSSIndex(fragment);
 
   const screenStart = performance.now();
-  const candidates = db
-    .statement(
-      `SELECT l.code, l.name, l.mf, l.mw, l.id_code, l.coordinates,
-              COALESCE((SELECT COUNT(*) FROM pdb_ligands p WHERE p.ligand_code = l.code), 0) AS nb_pdbs
-       FROM ligands l
-       JOIN ligand_ss_index x ON x.code = l.code
-       WHERE (x.ss_index0 & ?) = ?
-         AND (x.ss_index1 & ?) = ?
-         AND (x.ss_index2 & ?) = ?
-         AND (x.ss_index3 & ?) = ?
-         AND (x.ss_index4 & ?) = ?
-         AND (x.ss_index5 & ?) = ?
-         AND (x.ss_index6 & ?) = ?
-         AND (x.ss_index7 & ?) = ?`,
-    )
-    .all(
-      queryIndex.ss_index0,
-      queryIndex.ss_index0,
-      queryIndex.ss_index1,
-      queryIndex.ss_index1,
-      queryIndex.ss_index2,
-      queryIndex.ss_index2,
-      queryIndex.ss_index3,
-      queryIndex.ss_index3,
-      queryIndex.ss_index4,
-      queryIndex.ss_index4,
-      queryIndex.ss_index5,
-      queryIndex.ss_index5,
-      queryIndex.ss_index6,
-      queryIndex.ss_index6,
-      queryIndex.ss_index7,
-      queryIndex.ss_index7,
-    );
+  const candidates = db.screenLigandSSIndex.all(
+    queryIndex.ss_index0,
+    queryIndex.ss_index0,
+    queryIndex.ss_index1,
+    queryIndex.ss_index1,
+    queryIndex.ss_index2,
+    queryIndex.ss_index2,
+    queryIndex.ss_index3,
+    queryIndex.ss_index3,
+    queryIndex.ss_index4,
+    queryIndex.ss_index4,
+    queryIndex.ss_index5,
+    queryIndex.ss_index5,
+    queryIndex.ss_index6,
+    queryIndex.ss_index6,
+    queryIndex.ss_index7,
+    queryIndex.ss_index7,
+  );
   const screeningMs = Math.round(performance.now() - screenStart);
 
   const searcher = new OCL.SSSearcher();

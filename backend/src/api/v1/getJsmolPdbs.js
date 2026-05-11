@@ -15,23 +15,7 @@ import { readPdbDoc } from '../../db/readPdbEntry.js';
  */
 export function registerGetJsmolPdbsRoute(fastify, db) {
   const handler = async (_request, reply) => {
-    const candidates = db
-      .statement(
-        `SELECT e.id
-         FROM pdb_entries e
-         WHERE e.nb_residues BETWEEN 100 AND 500
-           AND e.nb_modified_residues = 0
-           AND e.nb_sheets > 5
-           AND EXISTS (SELECT 1 FROM pdb_helices h
-                       WHERE h.pdb_id = e.id AND (h.res_to - h.res_from) >= 10)
-           AND EXISTS (SELECT 1 FROM pdb_sheets s
-                       WHERE s.pdb_id = e.id AND (s.res_to - s.res_from) >= 10)
-           AND EXISTS (SELECT 1 FROM pdb_formulas f
-                       WHERE f.pdb_id = e.id AND f.label <> 'HOH'
-                         AND f.mw >= 150 AND f.mw <= 500)`,
-      )
-      .all()
-      .map((row) => row.id);
+    const candidates = db.selectJsmolPdbCandidates.all().map((row) => row.id);
 
     const rows = [];
     for (const id of candidates) {

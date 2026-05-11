@@ -34,7 +34,7 @@ async function cron() {
   // (e.g. carried over from a previous deployment) but `pdb_entries` is
   // empty, rebuild metadata from disk before resuming the periodic rsync
   // — this is the "rebuild from local files without re-downloading" path.
-  const count = db.statement(`SELECT COUNT(*) AS n FROM pdb_entries`).get();
+  const count = db.countPdbEntries.get();
   if ((count?.n ?? 0) === 0) {
     debug(
       'pdb_entries is empty — running rebuild-from-disk before first rsync',

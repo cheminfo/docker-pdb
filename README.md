@@ -23,20 +23,19 @@ upstream lookup.
   the sqlite index can be wiped and rebuilt from them with `npm run
   rebuild`, no re-download required.
 - **Small React dashboard** — homepage at `/` with database statistics
-  and a thumbnail gallery, built from [`frontend/`](./frontend) into
-  [`nginx/www/`](./nginx/www).
+  and a thumbnail gallery, built from [`frontend/`](./frontend) and baked
+  into the `pdb-api` image at build time.
 
 ## Architecture
 
-Three core containers, plus a CCD-refresh sidecar, wired together by
+Two core containers, plus a CCD-refresh sidecar, wired together by
 `docker compose`:
 
-| Container       | Role                                                                                              |
-| --------------- | ------------------------------------------------------------------------------------------------- |
-| `nginx-proxy`   | Public read-only entry point (proxies `/v1/...` to `pdb-api`) + serves the homepage SPA           |
-| `node-pdb-sync` | Daily cron: `rsync` the wwPDB tree, parse new files, render PyMol images, write to sqlite        |
-| `pdb-api`       | Fastify server: parsed metadata, stats aggregates, raw file streaming, substructure search        |
-| `pdb-api-cron`  | Weekly cron: refreshes `data/sqlite/ligands.db` from the wwPDB Chemical Component Dictionary     |
+| Container       | Role                                                                                                                       |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `pdb-api`       | Fastify server: HTTP API (parsed metadata, stats aggregates, raw file streaming, substructure search) **and** the React/Vite homepage SPA, baked into the image at build time |
+| `node-pdb-sync` | Daily cron: `rsync` the wwPDB tree, parse new files, render PyMol images, write to sqlite                                  |
+| `pdb-api-cron`  | Weekly cron: refreshes `data/sqlite/ligands.db` from the wwPDB Chemical Component Dictionary                               |
 
 All persistent state lives in `data/sqlite/ligands.db` (parsed metadata,
 ligand fingerprints, rsync history) plus the rsynced `.gz` archives.
@@ -51,7 +50,7 @@ cp .env.example .env
 ```
 
 By default, every example pulls the released image
-`ghcr.io/cheminfo/pdb-quickview:latest`. To build the image locally instead,
+`ghcr.io/cheminfo/docker-pdb:latest`. To build the image locally instead,
 add `--build`:
 
 ```sh
@@ -61,8 +60,8 @@ docker compose up -d --build                       # local build
 
 ### 1. Local / port-published — `compose.example.yaml`
 
-Publishes nginx on `127.0.0.1:${NGINX_PORT}`. Open
-`http://localhost:${NGINX_PORT}` once the database has finished its first
+Publishes `pdb-api` on `127.0.0.1:${PUBLIC_PORT}`. Open
+`http://localhost:${PUBLIC_PORT}` once the database has finished its first
 build.
 
 ```sh
@@ -78,7 +77,7 @@ In the Cloudflare dashboard (https://dash.cloudflare.com):
 **Networking → Tunnels → Create a tunnel → Cloudflared connector** → copy
 the token into `.env` as `TUNNEL_TOKEN=...` → open the tunnel →
 **Published applications** → add an application with **Service = HTTP**,
-**URL = `nginx-proxy:80`**, **Public hostname = `pdb.lactame.com`** (or
+**URL = `pdb-api:3000`**, **Public hostname = `pdb.lactame.com`** (or
 your chosen hostname).
 
 ```sh
@@ -194,14 +193,22 @@ npm run test-only  # vitest with coverage
 
 ```sh
 cd frontend
-npm run build      # type-check + vite build → ../nginx/www
+npm run build      # type-check + vite build → ../backend/public
 npm run test       # check-types + eslint + prettier
 ```
 
-`npm run build` writes to `nginx/www/` (committed to git). After any change
-under `frontend/src/`, rebuild and commit both the source change and the
-updated assets so a `git pull && docker compose up -d` on the deploy host
-picks up the new homepage without needing Node installed.
+`npm run build` writes to `backend/public/` (gitignored — rebuilt by
+Docker). The `pdb-api` image is built from [`Dockerfile`](./Dockerfile),
+whose first stage runs `vite build` and copies the bundle into
+`/app/backend/public`. Fastify serves it from there alongside the JSON
+API. To pick up frontend changes on the deploy host:
+
+```sh
+git pull && docker compose up -d --build
+```
+
+The `--build` flag is what regenerates the bundle — without it, the
+existing `pdb-api` image (and its stale `/app/backend/public`) is reused.
 
 To point the Vite dev server at a different backend (e.g. a production
 stack on the local network):

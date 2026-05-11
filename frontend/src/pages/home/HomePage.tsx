@@ -93,8 +93,12 @@ export default function HomePage() {
         </h1>
         <p>
           A self-hosted, fast read-only mirror of the worldwide Protein Data
-          Bank — every entry parsed once into SQLite and rendered once into
-          PyMol thumbnails so structure metadata loads instantly.
+          Bank. Every entry is parsed once into SQLite and rendered once with
+          PyMol so structure thumbnails load instantly. Search by title, residue
+          composition, molecular weight or isoelectric point, run ligand
+          substructure queries, inspect any entry in the in-browser Mol* 3D
+          viewer, and compose multi-structure scenes with a JSmol-inspired
+          scripting language.
         </p>
       </header>
 

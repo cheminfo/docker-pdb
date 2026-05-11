@@ -1,1 +1,0 @@
-import{u as r,I as _,s as a}from"./index-DQwomA__.js";const p=async(o,s)=>{const i=r(o);let t;return s===_.STANDARD?t=await a(()=>import("./index-DtzT8OsX.js").then(e=>e.I),[]):t=await a(()=>import("./index-mbPvlb_I.js").then(e=>e.I),[]),t[i]};export{p as splitPathsBySizeLoader};

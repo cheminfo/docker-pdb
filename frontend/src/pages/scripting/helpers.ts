@@ -1,4 +1,9 @@
 import type { EchoEntry } from './EchoOverlay.tsx';
+import {
+  applyTrackball,
+  axisVector,
+  buildResetSnapshotFn,
+} from './cameraControl.ts';
 import type {
   AtomsPatch,
   BondsPatch,
@@ -27,6 +32,7 @@ import type {
 import { compileSelection } from './selectionCompiler.ts';
 import type { Selection as SelectionAst } from './selectionParser.ts';
 import { parseSelection } from './selectionParser.ts';
+import { resolveShapePrimitive } from './shapeResolve.ts';
 
 /**
  * Wraps a parsed selection AST in an opaque token. The internal renderer
@@ -641,170 +647,6 @@ export function createScriptApi(context: ScriptApiContext): ScriptApi {
   };
 }
 
-interface ResolvedShapePrimitive {
-  kind: 'cylinder' | 'arrow' | 'sphere' | 'text';
-  from?: readonly [number, number, number];
-  to?: readonly [number, number, number];
-  center?: readonly [number, number, number];
-  position?: readonly [number, number, number];
-  text?: string;
-  size?: number;
-  bold?: boolean;
-  italic?: boolean;
-  radius?: number;
-  colorHex: number;
-  label?: string;
-  headLength?: number;
-  headRadius?: number;
-}
-
-const SHAPE_DEFAULT_RADIUS = 0.4;
-const SHAPE_DEFAULT_COLOR_HEX = 0x88_88_88;
-
-function resolveShapePrimitive(
-  spec: ShapePrimitiveSpec,
-  colorModule: { Color: (hex: number) => unknown },
-): ResolvedShapePrimitive {
-  const colorHex =
-    spec.color === undefined
-      ? SHAPE_DEFAULT_COLOR_HEX
-      : (parseCssColorToHex(spec.color) ?? SHAPE_DEFAULT_COLOR_HEX);
-  // `colorModule` is unused at this layer — kept in the signature for
-  // future alpha / blending support without churning every call site.
-  void colorModule;
-  if (spec.kind === 'text') {
-    return {
-      kind: 'text',
-      position: spec.position,
-      text: spec.text,
-      size: spec.size,
-      bold: spec.bold,
-      italic: spec.italic,
-      colorHex,
-      label: spec.label,
-    };
-  }
-  const radius = spec.radius ?? SHAPE_DEFAULT_RADIUS;
-  if (spec.kind === 'sphere') {
-    return {
-      kind: 'sphere',
-      center: spec.center,
-      radius,
-      colorHex,
-      label: spec.label,
-    };
-  }
-  if (spec.kind === 'arrow') {
-    return {
-      kind: 'arrow',
-      from: spec.from,
-      to: spec.to,
-      radius,
-      colorHex,
-      label: spec.label,
-      headLength: spec.headLength,
-      headRadius: spec.headRadius,
-    };
-  }
-  return {
-    kind: 'cylinder',
-    from: spec.from,
-    to: spec.to,
-    radius,
-    colorHex,
-    label: spec.label,
-  };
-}
-
-function parseCssColorToHex(name: string): number | null {
-  const trimmed = name.trim();
-  // eslint-disable-next-line prefer-named-capture-group -- short hex match
-  const hexMatch = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(trimmed);
-  if (hexMatch) {
-    const value = hexMatch[1];
-    if (value === undefined) return null;
-    if (value.length === 3) {
-      const r = Number.parseInt(`${value[0]}${value[0]}`, 16);
-      const g = Number.parseInt(`${value[1]}${value[1]}`, 16);
-      const b = Number.parseInt(`${value[2]}${value[2]}`, 16);
-      return (r << 16) | (g << 8) | b;
-    }
-    return Number.parseInt(value, 16);
-  }
-  if (typeof document === 'undefined') return null;
-  const probe = document.createElement('div');
-  probe.style.color = trimmed;
-  document.body.append(probe);
-  const computed = globalThis.getComputedStyle(probe).color;
-  probe.remove();
-  // eslint-disable-next-line prefer-named-capture-group -- 3-channel rgb match
-  const rgbMatch = /^rgba?\((\d+),\s*(\d+),\s*(\d+)/i.exec(computed);
-  if (!rgbMatch) return null;
-  const r = Number.parseInt(rgbMatch[1] ?? '0', 10);
-  const g = Number.parseInt(rgbMatch[2] ?? '0', 10);
-  const b = Number.parseInt(rgbMatch[3] ?? '0', 10);
-  return (r << 16) | (g << 8) | b;
-}
-
 function selectFromString(expression: string): SelectionToken {
   return { __ast: parseSelection(expression), source: expression };
-}
-
-/**
- * Snapshot factory passed to `plugin.managers.camera.reset(fn, 0)` so that
- * the reset truly snaps back to the canonical orientation: target = scene
- * center, up = +Y, look direction = -Z. Using `getInvariantFocus` (rather
- * than the default `getFocus`) is essential — it copies `up` and `dir`
- * directly instead of preserving whatever the camera was doing.
- * @param scene - Mol*'s scene; we read `boundingSphereVisible` for framing.
- * @param camera - Mol*'s `Camera` instance; exposes `getInvariantFocus`.
- * @returns A camera-state snapshot suitable for `requestCameraReset`.
- */
-function buildResetSnapshotFn(
-  scene: ResetSceneArg,
-  camera: ResetCameraArg,
-): unknown {
-  return camera.getInvariantFocus(
-    scene.boundingSphereVisible.center,
-    scene.boundingSphereVisible.radius,
-    Float32Array.of(0, 1, 0),
-    Float32Array.of(0, 0, -1),
-  );
-}
-
-interface ResetSceneArg {
-  boundingSphereVisible: { center: unknown; radius: number };
-}
-
-interface ResetCameraArg {
-  getInvariantFocus: (
-    target: unknown,
-    radius: number,
-    up: unknown,
-    dir: unknown,
-  ) => unknown;
-}
-
-function axisVector(axis: 'x' | 'y' | 'z'): [number, number, number] {
-  if (axis === 'x') return [1, 0, 0];
-  if (axis === 'y') return [0, 1, 0];
-  return [0, 0, 1];
-}
-
-function applyTrackball(
-  plugin: PluginContext,
-  axis: 'x' | 'y' | 'z' | 'off',
-  speedDegreesPerSecond: number,
-) {
-  const animate =
-    axis === 'off'
-      ? { name: 'off', params: {} }
-      : {
-          name: 'spin',
-          params: {
-            speed: speedDegreesPerSecond / 360,
-            axis: axisVector(axis),
-          },
-        };
-  plugin.canvas3d?.setProps({ trackball: { animate } });
 }

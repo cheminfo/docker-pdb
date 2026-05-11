@@ -15,7 +15,7 @@ const apiPaths = [
 export default defineConfig({
   plugins: [react()],
   build: {
-    outDir: '../nginx/www',
+    outDir: '../backend/public',
     emptyOutDir: true,
   },
   server: {

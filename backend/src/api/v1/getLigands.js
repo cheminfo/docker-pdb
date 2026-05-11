@@ -29,6 +29,7 @@ export function registerGetLigandsRoute(fastify, db) {
     if (queryIdCode === null) {
       let ligands;
       if (codes && codes.length > 0) {
+        // Dynamic IN-list size: SQL is built per-request.
         const placeholders = codes.map(() => '?').join(',');
         ligands = db
           .statement(
@@ -40,14 +41,7 @@ export function registerGetLigandsRoute(fastify, db) {
           .all(...codes)
           .map((row) => ({ ...row }));
       } else {
-        ligands = db
-          .statement(
-            `SELECT l.code, l.name, l.mf, l.mw, l.id_code AS idCode, l.coordinates,
-                    COALESCE((SELECT COUNT(*) FROM pdb_ligands p WHERE p.ligand_code = l.code), 0) AS nbPdbs
-             FROM ligands l
-             ORDER BY nbPdbs DESC
-             LIMIT ?`,
-          )
+        ligands = db.selectLigandsByDefaultRanking
           .all(limit)
           .map((row) => ({ ...row }));
       }

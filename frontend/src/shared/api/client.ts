@@ -20,15 +20,25 @@ import type {
 } from './types.ts';
 
 /**
+ * Throw a descriptive `Error` when `response` carries a non-2xx status.
+ * Pass-through otherwise. Used by every fetch wrapper in this module so the
+ * error shape is consistent.
+ * @param response - The `fetch()` response to assert on.
+ */
+function assertOk(response: Response): void {
+  if (!response.ok) {
+    throw new Error(`${response.status} ${response.statusText}`);
+  }
+}
+
+/**
  * Fetch a JSON resource from the same origin and throw on a non-2xx response.
  * @param url - Relative URL to fetch.
  * @returns Parsed JSON body of the response.
  */
 async function fetchJson<TResponse>(url: string): Promise<TResponse> {
   const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`${response.status} ${response.statusText}`);
-  }
+  assertOk(response);
   return response.json() as Promise<TResponse>;
 }
 
@@ -304,9 +314,7 @@ function emptyStats(): StatsValue {
  */
 export async function fetchPdbText(pdbId: string): Promise<string> {
   const response = await fetch(`/v1/pdbs/${encodeURIComponent(pdbId)}/raw`);
-  if (!response.ok) {
-    throw new Error(`${response.status} ${response.statusText}`);
-  }
+  assertOk(response);
   return response.text();
 }
 
@@ -379,9 +387,7 @@ export async function triggerSync(
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ kind }),
   });
-  if (!response.ok) {
-    throw new Error(`${response.status} ${response.statusText}`);
-  }
+  assertOk(response);
   return response.json() as Promise<SyncTriggerResponse>;
 }
 

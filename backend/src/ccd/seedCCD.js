@@ -59,7 +59,7 @@ export async function seedCCD({ force = false } = {}) {
   // every boot. The weekly cron-ccd container always passes force=true
   // so the periodic refresh still runs.
   if (!force) {
-    const row = db.statement(`SELECT COUNT(*) AS n FROM ligands`).get();
+    const row = db.countLigands.get();
     if ((row?.n ?? 0) >= 1000) {
       logger.info(
         { ligandCount: row.n },
@@ -75,34 +75,8 @@ export async function seedCCD({ force = false } = {}) {
     logger.info({ path: ccdGzPath }, 'Reusing cached CCD archive');
   }
 
-  const insertLigand = db.statement(
-    `INSERT INTO ligands (code, name, formula, type, id_code, coordinates, mf, mw, nb_atoms, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, cast(unixepoch('subsec') * 1000 as integer))
-     ON CONFLICT(code) DO UPDATE SET
-       name = excluded.name,
-       formula = excluded.formula,
-       type = excluded.type,
-       id_code = excluded.id_code,
-       coordinates = excluded.coordinates,
-       mf = excluded.mf,
-       mw = excluded.mw,
-       nb_atoms = excluded.nb_atoms,
-       updated_at = excluded.updated_at`,
-  );
-  const insertSSIndex = db.statement(
-    `INSERT INTO ligand_ss_index
-       (code, ss_index0, ss_index1, ss_index2, ss_index3, ss_index4, ss_index5, ss_index6, ss_index7)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(code) DO UPDATE SET
-       ss_index0 = excluded.ss_index0,
-       ss_index1 = excluded.ss_index1,
-       ss_index2 = excluded.ss_index2,
-       ss_index3 = excluded.ss_index3,
-       ss_index4 = excluded.ss_index4,
-       ss_index5 = excluded.ss_index5,
-       ss_index6 = excluded.ss_index6,
-       ss_index7 = excluded.ss_index7`,
-  );
+  const insertLigand = db.upsertLigand;
+  const insertSSIndex = db.upsertLigandSSIndex;
 
   // Insert in small transactions (1000 rows each). One big transaction
   // gave better raw throughput, but it holds an exclusive write lock for

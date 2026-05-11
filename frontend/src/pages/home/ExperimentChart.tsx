@@ -1,6 +1,11 @@
 import { ResponsiveBar } from '@nivo/bar';
 
 import type { ViewResponse } from '../../shared/api/types.ts';
+import {
+  chartAccent,
+  chartTheme,
+  formatCompact,
+} from '../../shared/charts/theme.ts';
 import { formatNumber } from '../../shared/format.ts';
 
 interface ExperimentChartProps {
@@ -24,6 +29,7 @@ export default function ExperimentChart({ data }: ExperimentChartProps) {
     .filter((row): row is { key: string; value: number } => Boolean(row.key))
     .toSorted((left, right) => right.value - left.value)
     .slice(0, 8)
+    .toReversed()
     .map((row) => ({ method: prettyMethod(row.key), count: row.value }));
 
   if (chartData.length === 0) {
@@ -39,7 +45,7 @@ export default function ExperimentChart({ data }: ExperimentChartProps) {
         layout="horizontal"
         margin={{ top: 8, right: 24, bottom: 32, left: 160 }}
         padding={0.25}
-        colors={['#2563eb']}
+        colors={[chartAccent]}
         borderRadius={2}
         enableLabel={false}
         axisBottom={{
@@ -74,16 +80,3 @@ function prettyMethod(method: string): string {
     })
     .join(' ');
 }
-
-function formatCompact(value: number): string {
-  if (value >= 1000) return `${Math.round(value / 1000)}k`;
-  return String(value);
-}
-
-const chartTheme = {
-  axis: {
-    ticks: { text: { fontSize: 11, fill: '#64748b' } },
-    legend: { text: { fontSize: 12, fill: '#64748b' } },
-  },
-  grid: { line: { stroke: '#e2e8f0', strokeDasharray: '2 2' } },
-};

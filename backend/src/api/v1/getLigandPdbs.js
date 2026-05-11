@@ -15,17 +15,8 @@ export function registerGetLigandPdbsRoute(fastify, db) {
     const limit = clampLimit(query.limit, DEFAULT_MAX_PDBS_PER_PAGE, 1, 1000);
     const offset = clampLimit(query.offset, 0, 0, 1_000_000);
 
-    const total = db
-      .statement(`SELECT COUNT(*) AS n FROM pdb_ligands WHERE ligand_code = ?`)
-      .get(code).n;
-    const pdbs = db
-      .statement(
-        `SELECT pdb_id AS pdbId, count
-         FROM pdb_ligands
-         WHERE ligand_code = ?
-         ORDER BY pdb_id
-         LIMIT ? OFFSET ?`,
-      )
+    const total = db.countPdbsByLigandCode.get(code).n;
+    const pdbs = db.selectPdbsByLigandCode
       .all(code, limit, offset)
       .map((row) => ({ ...row }));
     return reply.send({ total, limit, offset, pdbs });

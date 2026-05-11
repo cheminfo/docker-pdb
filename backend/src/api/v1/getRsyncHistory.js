@@ -11,26 +11,16 @@ export function registerGetRsyncHistoryRoute(fastify, db) {
     const query = request.query ?? {};
     const type = query.type === 'bioAssembly' ? 'bioAssembly' : 'asymUnit';
     const limit = clampLimit(query.limit, 20, 1, 200);
-    const rows = db
-      .statement(
-        `SELECT type, started_at, finished_at, duration_ms, updated_count,
-                deleted_count, last_entry_id, bytes_on_disk
-         FROM rsync_history
-         WHERE type = ?
-         ORDER BY finished_at DESC
-         LIMIT ?`,
-      )
-      .all(type, limit)
-      .map((row) => ({
-        type: row.type,
-        startedAt: row.started_at,
-        finishedAt: row.finished_at,
-        durationMs: row.duration_ms,
-        updatedCount: row.updated_count,
-        deletedCount: row.deleted_count,
-        lastEntryId: row.last_entry_id,
-        bytesOnDisk: row.bytes_on_disk,
-      }));
+    const rows = db.selectRsyncHistory.all(type, limit).map((row) => ({
+      type: row.type,
+      startedAt: row.started_at,
+      finishedAt: row.finished_at,
+      durationMs: row.duration_ms,
+      updatedCount: row.updated_count,
+      deletedCount: row.deleted_count,
+      lastEntryId: row.last_entry_id,
+      bytesOnDisk: row.bytes_on_disk,
+    }));
     return reply.send({ rows });
   });
 }

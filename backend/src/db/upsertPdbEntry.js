@@ -68,86 +68,6 @@ export function upsertPdbEntrySync(db, pdbId, parsed, options = {}) {
     twistedByPair.set(key, (twistedByPair.get(key) ?? 0) + 1);
   }
 
-  const upsertEntry = db.statement(
-    `INSERT INTO pdb_entries (
-       id, title, experiment, year, nb_residues, nb_modified_residues,
-       nb_chains, nb_helices, nb_sheets, nb_ligands, iep,
-       raw_size, has_assembly, assembly_size, parsed_at,
-       omega_nb_cis, omega_nb_trans, omega_nb_twisted, omega_nb_peptide_bonds,
-       residue_stats_json, percentage_aa_json
-     )
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(id) DO UPDATE SET
-       title = excluded.title,
-       experiment = excluded.experiment,
-       year = excluded.year,
-       nb_residues = excluded.nb_residues,
-       nb_modified_residues = excluded.nb_modified_residues,
-       nb_chains = excluded.nb_chains,
-       nb_helices = excluded.nb_helices,
-       nb_sheets = excluded.nb_sheets,
-       nb_ligands = excluded.nb_ligands,
-       iep = excluded.iep,
-       raw_size = excluded.raw_size,
-       has_assembly = excluded.has_assembly,
-       assembly_size = excluded.assembly_size,
-       parsed_at = excluded.parsed_at,
-       omega_nb_cis = excluded.omega_nb_cis,
-       omega_nb_trans = excluded.omega_nb_trans,
-       omega_nb_twisted = excluded.omega_nb_twisted,
-       omega_nb_peptide_bonds = excluded.omega_nb_peptide_bonds,
-       residue_stats_json = excluded.residue_stats_json,
-       percentage_aa_json = excluded.percentage_aa_json`,
-  );
-
-  const deleteChains = db.statement(`DELETE FROM pdb_chains WHERE pdb_id = ?`);
-  const insertChain = db.statement(
-    `INSERT INTO pdb_chains (pdb_id, chain_id, molecule, synonym, ec, nb_residues, iep)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  );
-  const deleteResidueCounts = db.statement(
-    `DELETE FROM pdb_residue_counts WHERE pdb_id = ?`,
-  );
-  const insertResidueCount = db.statement(
-    `INSERT INTO pdb_residue_counts (pdb_id, residue, count) VALUES (?, ?, ?)`,
-  );
-  const deleteHelices = db.statement(
-    `DELETE FROM pdb_helices WHERE pdb_id = ?`,
-  );
-  const insertHelix = db.statement(
-    `INSERT INTO pdb_helices (pdb_id, idx, chain, res_from, res_to, kind)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-  );
-  const deleteSheets = db.statement(`DELETE FROM pdb_sheets WHERE pdb_id = ?`);
-  const insertSheet = db.statement(
-    `INSERT INTO pdb_sheets (pdb_id, idx, chain, res_from, res_to)
-     VALUES (?, ?, ?, ?, ?)`,
-  );
-  const deleteFormulas = db.statement(
-    `DELETE FROM pdb_formulas WHERE pdb_id = ?`,
-  );
-  const insertFormula = db.statement(
-    `INSERT INTO pdb_formulas (pdb_id, label, mf, mw, count, name)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-  );
-  const deleteOmegaPairs = db.statement(
-    `DELETE FROM pdb_omega_pairs WHERE pdb_id = ?`,
-  );
-  const insertOmegaPair = db.statement(
-    `INSERT INTO pdb_omega_pairs (pdb_id, residue1, residue2, total_count, cis_count, twisted_count)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-  );
-  const deletePdbLigands = db.statement(
-    `DELETE FROM pdb_ligands WHERE pdb_id = ?`,
-  );
-  const insertPdbLigand = db.statement(
-    `INSERT INTO pdb_ligands (pdb_id, ligand_code, count) VALUES (?, ?, ?)`,
-  );
-  const deleteFts = db.statement(`DELETE FROM pdb_title_fts WHERE pdb_id = ?`);
-  const insertFts = db.statement(
-    `INSERT INTO pdb_title_fts (pdb_id, title) VALUES (?, ?)`,
-  );
-
   const nbLigands = formula.filter((entry) => entry.label !== 'HOH').length;
   const parsedAt = Date.now();
   const rawSize = Number.isFinite(options.rawSize) ? options.rawSize : null;
@@ -159,7 +79,7 @@ export function upsertPdbEntrySync(db, pdbId, parsed, options = {}) {
 
   if (!skipTransaction) db.db.exec('BEGIN');
   try {
-    upsertEntry.run(
+    db.upsertPdbEntry.run(
       pdbId,
       parsed.title || '',
       parsed.experiment || null,
@@ -183,10 +103,10 @@ export function upsertPdbEntrySync(db, pdbId, parsed, options = {}) {
       JSON.stringify(percentageAA),
     );
 
-    deleteChains.run(pdbId);
+    db.deletePdbChains.run(pdbId);
     for (const chainId of Object.keys(chains)) {
       const chain = chains[chainId];
-      insertChain.run(
+      db.insertPdbChain.run(
         pdbId,
         chainId,
         chain.molecule || null,
@@ -197,16 +117,16 @@ export function upsertPdbEntrySync(db, pdbId, parsed, options = {}) {
       );
     }
 
-    deleteResidueCounts.run(pdbId);
+    db.deletePdbResidueCounts.run(pdbId);
     for (const [residue, count] of Object.entries(residueStats)) {
       if (!Number.isFinite(count) || count <= 0) continue;
-      insertResidueCount.run(pdbId, residue, count);
+      db.insertPdbResidueCount.run(pdbId, residue, count);
     }
 
-    deleteHelices.run(pdbId);
+    db.deletePdbHelices.run(pdbId);
     for (let index = 0; index < helices.length; index++) {
       const helix = helices[index];
-      insertHelix.run(
+      db.insertPdbHelix.run(
         pdbId,
         index,
         helix.chain || null,
@@ -216,10 +136,10 @@ export function upsertPdbEntrySync(db, pdbId, parsed, options = {}) {
       );
     }
 
-    deleteSheets.run(pdbId);
+    db.deletePdbSheets.run(pdbId);
     for (let index = 0; index < sheets.length; index++) {
       const sheet = sheets[index];
-      insertSheet.run(
+      db.insertPdbSheet.run(
         pdbId,
         index,
         sheet.chain || null,
@@ -228,11 +148,11 @@ export function upsertPdbEntrySync(db, pdbId, parsed, options = {}) {
       );
     }
 
-    deleteFormulas.run(pdbId);
+    db.deletePdbFormulas.run(pdbId);
     for (const entry of formula) {
       if (!entry?.label) continue;
       const mw = Number.parseFloat(entry.mw);
-      insertFormula.run(
+      db.insertPdbFormula.run(
         pdbId,
         entry.label,
         entry.mf || null,
@@ -242,13 +162,13 @@ export function upsertPdbEntrySync(db, pdbId, parsed, options = {}) {
       );
     }
 
-    deleteOmegaPairs.run(pdbId);
+    db.deletePdbOmegaPairs.run(pdbId);
     for (const [key, total] of Object.entries(pairCounts)) {
       const sep = key.indexOf(':');
       if (sep <= 0) continue;
       const residue1 = key.slice(0, sep);
       const residue2 = key.slice(sep + 1);
-      insertOmegaPair.run(
+      db.insertPdbOmegaPair.run(
         pdbId,
         residue1,
         residue2,
@@ -258,15 +178,15 @@ export function upsertPdbEntrySync(db, pdbId, parsed, options = {}) {
       );
     }
 
-    deletePdbLigands.run(pdbId);
+    db.deletePdbLigands.run(pdbId);
     for (const entry of formula) {
       if (!entry?.label || entry.label === 'HOH') continue;
-      insertPdbLigand.run(pdbId, entry.label, entry.number || 1);
+      db.insertPdbLigand.run(pdbId, entry.label, entry.number || 1);
     }
 
-    deleteFts.run(pdbId);
+    db.deletePdbTitleFts.run(pdbId);
     if (parsed.title) {
-      insertFts.run(pdbId, parsed.title);
+      db.insertPdbTitleFts.run(pdbId, parsed.title);
     }
 
     if (!skipTransaction) db.db.exec('COMMIT');
@@ -298,14 +218,7 @@ export async function markAssembly(pdbId, assemblySize) {
  * @returns {void}
  */
 export function markAssemblySync(db, pdbId, assemblySize) {
-  const update = db.statement(
-    `INSERT INTO pdb_entries (id, has_assembly, assembly_size, parsed_at)
-     VALUES (?, 1, ?, ?)
-     ON CONFLICT(id) DO UPDATE SET
-       has_assembly = 1,
-       assembly_size = excluded.assembly_size`,
-  );
-  update.run(pdbId, assemblySize, Date.now());
+  db.markPdbAssembly.run(pdbId, assemblySize, Date.now());
 }
 
 /**
@@ -319,13 +232,7 @@ export function markAssemblySync(db, pdbId, assemblySize) {
  */
 export async function recordRsyncHistory(run) {
   const db = await getLigandsDB();
-  const insert = db.statement(
-    `INSERT INTO rsync_history
-       (type, started_at, finished_at, duration_ms,
-        updated_count, deleted_count, last_entry_id, bytes_on_disk)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-  );
-  insert.run(
+  db.insertRsyncHistory.run(
     run.type,
     run.startedAt,
     run.finishedAt,

@@ -1,0 +1,17 @@
+.git
+.github
+.claude
+.DS_Store
+.env
+.env.*
+!.env.example
+coverage
+data
+node_modules
+backend/node_modules
+backend/coverage
+frontend/node_modules
+frontend/playwright-report
+frontend/test-results
+backend/public
+*.log

@@ -1,3 +1,28 @@
+# Stage 1: build the React/Vite frontend bundle.
+FROM node:24-bookworm AS frontend-build
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+COPY frontend/package.json ./frontend/
+COPY backend/package.json ./backend/
+
+# Install only the frontend workspace (plus root devDeps it depends on).
+# Vite, @vitejs/plugin-react and TypeScript are devDependencies, so we
+# cannot pass --omit=dev here.
+RUN npm ci --workspace=frontend --include-workspace-root \
+    && npm cache clean --force
+
+COPY frontend ./frontend
+
+# Vite is configured to emit at ../backend/public → /app/backend/public.
+# Bump the heap because tsc + molstar/monaco/blueprint comfortably exceed
+# the default ~1.7 GB during the type-check pass.
+ENV NODE_OPTIONS=--max-old-space-size=4096
+RUN npm run build -w frontend
+
+# Stage 2: backend service image (runs the API + cron + cron-ccd) with
+# the built frontend baked in at /app/backend/public.
 FROM node:24-bookworm
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -16,6 +41,7 @@ COPY frontend/package.json ./frontend/
 RUN npm ci --omit=dev --workspace=backend && npm cache clean --force
 
 COPY backend ./backend
+COPY --from=frontend-build /app/backend/public ./backend/public
 COPY docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
