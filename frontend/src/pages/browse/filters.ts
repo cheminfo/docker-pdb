@@ -1,5 +1,120 @@
+import type { FilterField } from '../../shared/SmartFilterBuilder/index.ts';
 import type { FindParams } from '../../shared/api/client.ts';
 import type { PdbDoc } from '../../shared/api/types.ts';
+
+/**
+ * Schema of the `pdb_entries` columns exposed by the smart-sqlite3-filter
+ * backend. Drives the `SmartFilterBuilder` field picker on the browse page.
+ * Numeric `min`/`max` defaults are conservative; the live range comes from
+ * `RangeStats` once the stats endpoint resolves (see {@link buildPdbFields}).
+ */
+export const PDB_FIELDS: FilterField[] = [
+  {
+    name: 'id',
+    label: 'PDB ID',
+    type: 'string',
+    description: '4-character PDB code, e.g. 1A2B',
+  },
+  {
+    name: 'title',
+    label: 'Title',
+    type: 'string',
+    description: 'Entry title (case-insensitive)',
+  },
+  {
+    name: 'experiment',
+    label: 'Experimental method',
+    type: 'enum',
+    description: 'X-RAY DIFFRACTION, ELECTRON MICROSCOPY, SOLUTION NMR, …',
+  },
+  {
+    name: 'year',
+    label: 'Deposition year',
+    type: 'number',
+    description: 'Year the entry was deposited',
+  },
+  {
+    name: 'nb_residues',
+    label: 'Residues',
+    type: 'number',
+    description: 'Total number of residues across all chains',
+  },
+  {
+    name: 'nb_modified_residues',
+    label: 'Modified residues',
+    type: 'number',
+    description: 'Non-standard / modified residues',
+  },
+  {
+    name: 'nb_chains',
+    label: 'Chains',
+    type: 'number',
+    description: 'Number of polypeptide / nucleotide chains',
+  },
+  {
+    name: 'nb_helices',
+    label: 'α-Helices',
+    type: 'number',
+  },
+  {
+    name: 'nb_sheets',
+    label: 'β-Sheets',
+    type: 'number',
+  },
+  {
+    name: 'nb_ligands',
+    label: 'Ligands',
+    type: 'number',
+    description: 'Non-water ligand records',
+  },
+  {
+    name: 'iep',
+    label: 'Isoelectric point',
+    type: 'number',
+  },
+  {
+    name: 'assembly_size',
+    label: 'Assembly size',
+    type: 'number',
+  },
+];
+
+/**
+ * Same as {@link PDB_FIELDS} but with the runtime-known enum options for
+ * `experiment` and the runtime-known `min`/`max` for each numeric field
+ * folded in. Used as the `fields` prop of `SmartFilterBuilder`.
+ * @param methodCounts - DB-wide method tally (drives enum options).
+ * @param bounds - DB-wide numeric stats for placeholder hints.
+ * @returns Enriched field list.
+ */
+export function buildPdbFields(
+  methodCounts: Array<[string, number]>,
+  bounds: FilterBounds | undefined,
+): FilterField[] {
+  const methodOptions = methodCounts.map(([method]) => method);
+  return PDB_FIELDS.map((field) => {
+    if (field.name === 'experiment' && methodOptions.length > 0) {
+      return { ...field, options: methodOptions };
+    }
+    if (!bounds) return field;
+    const boundsKey = NUMERIC_FIELD_TO_BOUNDS_KEY[field.name];
+    if (!boundsKey) return field;
+    const range = bounds[boundsKey];
+    return { ...field, min: range.min, max: range.max };
+  });
+}
+
+// Keys are SQL column names (snake_case by convention of `pdb_entries`);
+// values are the camelCase keys of `FilterBounds`.
+/* eslint-disable camelcase */
+const NUMERIC_FIELD_TO_BOUNDS_KEY: Record<string, keyof FilterBounds> = {
+  nb_helices: 'helices',
+  nb_sheets: 'sheets',
+  nb_ligands: 'ligands',
+  nb_residues: 'residues',
+  year: 'year',
+};
+/* eslint-enable camelcase */
 
 /** Numeric range filter with optional lower / upper bounds. */
 export interface RangeFilter {
@@ -126,21 +241,23 @@ function extent(values: number[]): { min: number; max: number } {
 }
 
 /**
- * Convert a `FilterState` (UI-friendly) plus a free-text query into a
- * `FindParams` object. The text input is auto-routed: if it contains a `:`
- * (e.g. `year:>=2024 nb_helices:>5`) it goes to the `smart` parameter
- * (smart-sqlite3-filter), otherwise to `query` (FTS5 title search).
+ * Convert a `FilterState` (UI-friendly), a free-text title query, and a
+ * smart-sqlite3-filter expression into a `FindParams` object. The two text
+ * inputs are passed through to separate backend parameters (`q` and `smart`)
+ * — composition happens server-side via AND-intersection.
  * @param filters - Current filter state.
- * @param query - Search input. Plain words → FTS5 title; field expressions
- *   (containing `:`) → smart-sqlite3-filter against `pdb_entries`.
+ * @param query - Free-text title query (FTS5 against the `title` column).
+ * @param smart - Smart-sqlite3-filter expression evaluated against
+ *   `pdb_entries` (e.g. `year:>=2024 nb_helices:>5`).
  * @returns Parameters ready to pass to `findDocuments`.
  */
 export function filtersToFindParams(
   filters: FilterState,
   query: string,
+  smart: string,
 ): FindParams {
-  const trimmed = query.trim();
-  const isSmart = trimmed.includes(':');
+  const trimmedQuery = query.trim();
+  const trimmedSmart = smart.trim();
   return {
     methods: filters.methods.size > 0 ? [...filters.methods] : undefined,
     helices: hasRange(filters.helices) ? filters.helices : undefined,
@@ -148,8 +265,8 @@ export function filtersToFindParams(
     ligands: hasRange(filters.ligands) ? filters.ligands : undefined,
     residues: hasRange(filters.residues) ? filters.residues : undefined,
     year: hasRange(filters.year) ? filters.year : undefined,
-    query: !isSmart && trimmed ? trimmed : undefined,
-    smart: isSmart && trimmed ? trimmed : undefined,
+    query: trimmedQuery || undefined,
+    smart: trimmedSmart || undefined,
   };
 }
 

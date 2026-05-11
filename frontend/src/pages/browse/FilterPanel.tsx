@@ -2,17 +2,22 @@ import { Button, Card, Checkbox, NumericInput } from '@blueprintjs/core';
 import { useMemo } from 'react';
 
 import DualRangeSlider from '../../shared/DualRangeSlider.tsx';
+import SmartFilterBuilder from '../../shared/SmartFilterBuilder/index.ts';
 import type { RangeStats } from '../../shared/api/client.ts';
 
 import SearchBox from './SearchBox.tsx';
 import type { FilterBounds, FilterState, RangeFilter } from './filters.ts';
-import { emptyFilterState } from './filters.ts';
+import { buildPdbFields, emptyFilterState } from './filters.ts';
 
 interface FilterPanelProps {
-  /** Free-text query (controlled by the parent). */
+  /** Free-text title query (FTS5, controlled by the parent). */
   query: string;
-  /** Called when the user types into the search box. */
+  /** Called when the user types into the title search box. */
   onQueryChange: (value: string) => void;
+  /** Current smart-sqlite3-filter expression (controlled by the parent). */
+  smart: string;
+  /** Called whenever the smart-filter builder changes the expression. */
+  onSmartChange: (value: string) => void;
   /** Total number of results matching the current filter+query. */
   matchCount: number;
   /** Total number of documents in the database (for the "N / total" hint). */
@@ -35,6 +40,8 @@ interface FilterPanelProps {
  * @param props - Component props.
  * @param props.query - Current free-text query.
  * @param props.onQueryChange - Called when the search input changes.
+ * @param props.smart - Current smart-sqlite3-filter expression.
+ * @param props.onSmartChange - Called when the chip builder changes the expression.
  * @param props.matchCount - Number of results currently matching.
  * @param props.totalCount - Total entries in the database.
  * @param props.methodCounts - DB-wide tally of `experiment` values.
@@ -46,6 +53,8 @@ interface FilterPanelProps {
 export default function FilterPanel({
   query,
   onQueryChange,
+  smart,
+  onSmartChange,
   matchCount,
   totalCount,
   methodCounts,
@@ -91,6 +100,7 @@ export default function FilterPanel({
 
   const isActive =
     query.trim() !== '' ||
+    smart.trim() !== '' ||
     filters.methods.size > 0 ||
     hasRange(filters.helices) ||
     hasRange(filters.sheets) ||
@@ -100,8 +110,14 @@ export default function FilterPanel({
 
   function reset() {
     onQueryChange('');
+    onSmartChange('');
     onChange(emptyFilterState);
   }
+
+  const smartFields = useMemo(
+    () => buildPdbFields(methodCounts, bounds),
+    [methodCounts, bounds],
+  );
 
   return (
     <Card className="filter-panel panel">
@@ -123,6 +139,15 @@ export default function FilterPanel({
       </div>
 
       <SearchBox value={query} onChange={onQueryChange} />
+
+      <div className="filter-group">
+        <div className="filter-group-label">Field filters</div>
+        <SmartFilterBuilder
+          fields={smartFields}
+          value={smart}
+          onChange={onSmartChange}
+        />
+      </div>
 
       <div className="filter-group">
         <div className="filter-group-label">Method</div>

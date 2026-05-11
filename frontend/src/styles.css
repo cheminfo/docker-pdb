@@ -2004,3 +2004,159 @@ code {
     transparent 85% 100%
   );
 }
+
+/* -------------------------------------------------------------------------- */
+/* SmartFilterBuilder                                                         */
+/* -------------------------------------------------------------------------- */
+
+.smart-filter-builder {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.smart-filter-builder-label {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+
+.smart-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg) 50%, white);
+  min-height: 38px;
+}
+
+.smart-filter-chip {
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.smart-filter-chip-body {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.smart-filter-chip-field {
+  font-weight: 600;
+}
+
+.smart-filter-chip-op {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.smart-filter-chip-value {
+  color: var(--text);
+}
+
+.smart-filter-chip-neg {
+  color: #b91c1c;
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+}
+
+.smart-filter-chip-raw {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+}
+
+.smart-filter-add,
+.smart-filter-clear {
+  font-size: 12px;
+}
+
+.smart-filter-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  margin-left: 4px;
+}
+
+/* ----- Editor popover ----- */
+
+.smart-filter-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  min-width: 320px;
+  max-width: 420px;
+  background: white;
+}
+
+.smart-filter-editor-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.smart-filter-editor-label {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+
+.smart-filter-editor-ops {
+  flex-wrap: wrap;
+}
+
+.smart-filter-editor-range {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.smart-filter-editor-single {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.smart-filter-editor-single > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.smart-filter-editor-range-sep {
+  color: var(--muted);
+}
+
+.smart-filter-editor-enum {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.smart-filter-editor-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+.smart-filter-editor-actions {
+  display: flex;
+  gap: 6px;
+}

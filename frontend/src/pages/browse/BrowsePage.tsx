@@ -46,17 +46,19 @@ export default function BrowsePage() {
   const methodView = useAsync(fetchByExperiment);
 
   const [query, setQuery] = useState('');
+  const [smart, setSmart] = useState('');
   const [filters, setFilters] = useState<FilterState>(emptyFilterState);
   const [pickedId, setPickedId] = useState<string | undefined>(undefined);
 
   // Debounce the inputs so the keyword box doesn't fire one search query per
   // keystroke and slider drags are smooth.
   const debouncedQuery = useDebouncedValue(query, 250);
+  const debouncedSmart = useDebouncedValue(smart, 250);
   const debouncedFilters = useDebouncedValue(filters, 250);
 
   const findParams = useMemo(
-    () => filtersToFindParams(debouncedFilters, debouncedQuery),
-    [debouncedFilters, debouncedQuery],
+    () => filtersToFindParams(debouncedFilters, debouncedQuery, debouncedSmart),
+    [debouncedFilters, debouncedQuery, debouncedSmart],
   );
 
   const findTask = useCallback(
@@ -95,6 +97,8 @@ export default function BrowsePage() {
         <FilterPanel
           query={query}
           onQueryChange={setQuery}
+          smart={smart}
+          onSmartChange={setSmart}
           matchCount={docs.length}
           totalCount={totalCount}
           methodCounts={methodCounts}
