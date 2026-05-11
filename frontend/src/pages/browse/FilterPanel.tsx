@@ -1,4 +1,4 @@
-import { Button, Card, Checkbox, NumericInput } from '@blueprintjs/core';
+import { Button, Card, Checkbox, NumericInput, Tag } from '@blueprintjs/core';
 import { useMemo } from 'react';
 
 import DualRangeSlider from '../../shared/DualRangeSlider.tsx';
@@ -8,6 +8,36 @@ import type { RangeStats } from '../../shared/api/client.ts';
 import SearchBox from './SearchBox.tsx';
 import type { FilterBounds, FilterState, RangeFilter } from './filters.ts';
 import { buildPdbFields, emptyFilterState } from './filters.ts';
+
+const HELIX_KIND_LABELS: Record<number, string> = {
+  1: 'α right',
+  2: 'ω right',
+  3: 'π right',
+  4: 'γ right',
+  5: '3-10 right',
+  6: 'α left',
+  7: 'ω left',
+  8: 'γ left',
+  9: '2.7 ribbon',
+  10: 'polyproline',
+};
+
+const SS_PRESENCE_LABELS: Record<string, string> = {
+  mixed: 'Mixed (α+β)',
+  'helices-only': 'Helices only',
+  'sheets-only': 'Sheets only',
+  none: 'No SS annotated',
+};
+
+const EC_CLASS_LABELS: Record<string, string> = {
+  '1': 'Oxidoreductases',
+  '2': 'Transferases',
+  '3': 'Hydrolases',
+  '4': 'Lyases',
+  '5': 'Isomerases',
+  '6': 'Ligases',
+  '7': 'Translocases',
+};
 
 interface FilterPanelProps {
   /** Free-text title query (FTS5, controlled by the parent). */
@@ -98,6 +128,12 @@ export default function FilterPanel({
     onChange({ ...filters, [key]: range });
   }
 
+  const hasChartFilter =
+    filters.helixKind !== null ||
+    filters.ssPresence !== null ||
+    filters.ecClass !== null ||
+    filters.ligandCode !== null;
+
   const isActive =
     query.trim() !== '' ||
     smart.trim() !== '' ||
@@ -106,7 +142,8 @@ export default function FilterPanel({
     hasRange(filters.sheets) ||
     hasRange(filters.ligands) ||
     hasRange(filters.residues) ||
-    hasRange(filters.year);
+    hasRange(filters.year) ||
+    hasChartFilter;
 
   function reset() {
     onQueryChange('');
@@ -139,6 +176,40 @@ export default function FilterPanel({
       </div>
 
       <SearchBox value={query} onChange={onQueryChange} />
+
+      {hasChartFilter && (
+        <div className="filter-group">
+          <div className="filter-group-label">From stats charts</div>
+          <div className="filter-chart-pills">
+            {filters.helixKind !== null && (
+              <Tag onRemove={() => onChange({ ...filters, helixKind: null })}>
+                Helix kind:{' '}
+                {HELIX_KIND_LABELS[filters.helixKind] ??
+                  `kind ${filters.helixKind}`}
+              </Tag>
+            )}
+            {filters.ssPresence !== null && (
+              <Tag onRemove={() => onChange({ ...filters, ssPresence: null })}>
+                Secondary structure:{' '}
+                {SS_PRESENCE_LABELS[filters.ssPresence] ?? filters.ssPresence}
+              </Tag>
+            )}
+            {filters.ecClass !== null && (
+              <Tag onRemove={() => onChange({ ...filters, ecClass: null })}>
+                EC class: {filters.ecClass}
+                {EC_CLASS_LABELS[filters.ecClass]
+                  ? ` — ${EC_CLASS_LABELS[filters.ecClass]}`
+                  : ''}
+              </Tag>
+            )}
+            {filters.ligandCode !== null && (
+              <Tag onRemove={() => onChange({ ...filters, ligandCode: null })}>
+                Ligand: {filters.ligandCode}
+              </Tag>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="filter-group">
         <div className="filter-group-label">Field filters</div>

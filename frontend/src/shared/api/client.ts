@@ -421,6 +421,18 @@ export interface FindParams {
   ligands?: NumericRange;
   residues?: NumericRange;
   year?: NumericRange;
+  /** Keep only entries with at least one HELIX record of this `kind` code. */
+  helixKind?: number;
+  /**
+   * Secondary-structure presence bucket — `mixed` requires both helices and
+   * sheets, `helices-only` / `sheets-only` exclude the other, `none` keeps
+   * entries with neither.
+   */
+  ssPresence?: 'mixed' | 'helices-only' | 'sheets-only' | 'none';
+  /** Top-level Enzyme-Commission digit (1–7). Matches `ec LIKE 'D.%'`. */
+  ecClass?: string;
+  /** Keep only entries that reference this CCD ligand code (e.g. `HEM`). */
+  ligandCode?: string;
   /**
    * Free-text query matched against the `title` FTS5 column. Whitespace
    * splits the query into AND-ed tokens.
@@ -433,14 +445,38 @@ export interface FindParams {
    * and `query` (FTS5) via AND-intersection.
    */
   smart?: string;
+  /**
+   * Result ordering key. Defaults to ascending `id` server-side when omitted.
+   * `random` requires a `seed`; identical seeds always produce the same
+   * shuffle so the URL is shareable.
+   */
+  order?: OrderKey;
+  /** Integer seed used by the `random` ordering. Ignored otherwise. */
+  seed?: number;
 }
+
+/**
+ * Server-supported ordering keys. Each value maps 1:1 to a fixed `ORDER BY`
+ * clause in the backend.
+ */
+export type OrderKey =
+  | 'id'
+  | 'id-desc'
+  | 'year'
+  | 'year-desc'
+  | 'residues'
+  | 'residues-desc'
+  | 'helices-desc'
+  | 'sheets-desc'
+  | 'ligands-desc'
+  | 'random';
 
 /** Response of a `_find`-style query. */
 export interface FindResponse<TDoc> {
   docs: TDoc[];
 }
 
-const PAGE_LIMIT = 200;
+const PAGE_LIMIT = 1000;
 
 function appendRange(
   params: URLSearchParams,
@@ -475,8 +511,20 @@ export async function findDocuments<TDoc>(
   appendRange(queryParams, 'ligands', params.ligands);
   appendRange(queryParams, 'residues', params.residues);
   appendRange(queryParams, 'year', params.year);
+  if (typeof params.helixKind === 'number') {
+    queryParams.set('helixKind', String(params.helixKind));
+  }
+  if (params.ssPresence) queryParams.set('ssPresence', params.ssPresence);
+  if (params.ecClass) queryParams.set('ecClass', params.ecClass);
+  if (params.ligandCode) queryParams.set('ligandCode', params.ligandCode);
   if (params.query?.trim()) queryParams.set('q', params.query.trim());
   if (params.smart?.trim()) queryParams.set('smart', params.smart.trim());
+  if (params.order && params.order !== 'id') {
+    queryParams.set('order', params.order);
+  }
+  if (params.order === 'random' && typeof params.seed === 'number') {
+    queryParams.set('seed', String(params.seed));
+  }
   return fetchJson<FindResponse<TDoc>>(`/v1/pdbs?${queryParams.toString()}`);
 }
 

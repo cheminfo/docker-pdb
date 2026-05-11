@@ -43,6 +43,12 @@ interface HistogramBarProps {
    * @default ' structures'
    */
   valueLabel?: string;
+  /**
+   * If provided, bars become interactive: the cursor turns into a pointer and
+   * a click reports the bar's `index` value. Used by stats charts to deep-link
+   * into Browse.
+   */
+  onBarClick?: (index: string) => void;
 }
 
 interface HistogramDatum {
@@ -70,6 +76,7 @@ export default function HistogramBar(props: HistogramBarProps) {
     marginLeft,
     rotateBottom = 0,
     valueLabel = ' structures',
+    onBarClick,
   } = props;
 
   if (data.length === 0) {
@@ -80,12 +87,15 @@ export default function HistogramBar(props: HistogramBarProps) {
   const chartData: HistogramDatum[] = data;
 
   return (
-    <div style={{ height }}>
+    <div style={{ height, cursor: onBarClick ? 'pointer' : undefined }}>
       <ResponsiveBar
         data={chartData}
         keys={['count']}
         indexBy="index"
         layout={isHorizontal ? 'horizontal' : 'vertical'}
+        onClick={
+          onBarClick ? (bar) => onBarClick(String(bar.indexValue)) : undefined
+        }
         margin={{
           top: 8,
           right: isHorizontal ? 24 : 16,

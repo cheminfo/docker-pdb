@@ -1,7 +1,9 @@
 import { ResponsiveBar } from '@nivo/bar';
+import { useNavigate } from 'react-router';
 
 import { fetchMethodByYear } from '../../shared/api/client.ts';
 import Panel from '../../shared/charts/Panel.tsx';
+import { browseHref } from '../../shared/charts/browseLink.ts';
 import {
   chartTheme,
   formatCompact,
@@ -33,15 +35,18 @@ interface YearDatum {
  * Render a stacked bar chart of structures deposited per year, broken
  * down by experimental method. Methods outside the global top
  * `TOP_METHODS` are folded into a single `Other` series so the legend
- * stays readable.
+ * stays readable. Clicking a bar segment filters Browse to that year and
+ * method (the `Other` segment only filters by year, since the underlying
+ * set is heterogeneous).
  * @returns Panel React element with the chart.
  */
 export default function MethodByYearChart() {
   const state = useAsync(fetchMethodByYear);
+  const navigate = useNavigate();
   return (
     <Panel
       title="Methods over time"
-      description="Yearly deposition counts split by the top experimental methods."
+      description="Yearly deposition counts split by the top experimental methods. Click a segment to browse that year and method."
       state={state}
       errorPrefix="Could not load method-by-year breakdown"
     >
@@ -87,7 +92,7 @@ export default function MethodByYearChart() {
         );
 
         return (
-          <div style={{ height: 320 }}>
+          <div style={{ height: 320, cursor: 'pointer' }}>
             <ResponsiveBar
               data={chartData}
               keys={keys}
@@ -97,6 +102,17 @@ export default function MethodByYearChart() {
               colors={colors}
               borderRadius={1}
               enableLabel={false}
+              onClick={(bar) => {
+                const year = String(bar.indexValue);
+                const method = String(bar.id);
+                void navigate(
+                  browseHref({
+                    yearMin: year,
+                    yearMax: year,
+                    methods: method === 'Other' ? undefined : method,
+                  }),
+                );
+              }}
               axisBottom={{
                 tickSize: 4,
                 tickPadding: 6,

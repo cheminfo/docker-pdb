@@ -1,5 +1,5 @@
 import type { FilterField } from '../../shared/SmartFilterBuilder/index.ts';
-import type { FindParams } from '../../shared/api/client.ts';
+import type { FindParams, OrderKey } from '../../shared/api/client.ts';
 import type { PdbDoc } from '../../shared/api/types.ts';
 
 /**
@@ -122,6 +122,16 @@ export interface RangeFilter {
   max: number | null;
 }
 
+/** Allowed values for the secondary-structure presence pill. */
+export type SsPresence = 'mixed' | 'helices-only' | 'sheets-only' | 'none';
+
+const SS_PRESENCE_VALUES = new Set<SsPresence>([
+  'mixed',
+  'helices-only',
+  'sheets-only',
+  'none',
+]);
+
 /** Combined filter state for the browse page sidebar. */
 export interface FilterState {
   /** Set of allowed `doc.experiment` values; empty means "no method filter". */
@@ -132,6 +142,45 @@ export interface FilterState {
   ligands: RangeFilter;
   residues: RangeFilter;
   year: RangeFilter;
+  /** Chart-driven: HELIX kind code (1–10), or null for "no filter". */
+  helixKind: number | null;
+  ssPresence: SsPresence | null;
+  /** Top-level EC class digit ("1"–"7"), or null. */
+  ecClass: string | null;
+  /** CCD ligand code (e.g. `HEM`), or null. */
+  ligandCode: string | null;
+}
+
+/**
+ * Human-readable labels for every supported {@link OrderKey}, in the order they
+ * should appear in the sort dropdown. The first entry (`id`) is the implicit
+ * default and is therefore the only one omitted from the URL when chosen.
+ */
+export const ORDER_OPTIONS: Array<{ key: OrderKey; label: string }> = [
+  { key: 'id', label: 'PDB ID (A → Z)' },
+  { key: 'id-desc', label: 'PDB ID (Z → A)' },
+  { key: 'year-desc', label: 'Year (newest first)' },
+  { key: 'year', label: 'Year (oldest first)' },
+  { key: 'residues-desc', label: 'Residues (most first)' },
+  { key: 'residues', label: 'Residues (fewest first)' },
+  { key: 'helices-desc', label: 'α-Helices (most first)' },
+  { key: 'sheets-desc', label: 'β-Sheets (most first)' },
+  { key: 'ligands-desc', label: 'Ligands (most first)' },
+  { key: 'random', label: 'Random (shuffled)' },
+];
+
+const ORDER_KEYS = new Set<OrderKey>(ORDER_OPTIONS.map((option) => option.key));
+
+/** Default ordering when no `order` parameter is present in the URL. */
+export const DEFAULT_ORDER: OrderKey = 'id';
+
+/**
+ * Generate a fresh integer seed for the `random` ordering. Caller stores it in
+ * URL state so the shuffle is reproducible by anyone who opens the link.
+ * @returns A positive 31-bit integer.
+ */
+export function makeRandomSeed(): number {
+  return Math.floor(Math.random() * 2_147_483_647);
 }
 
 /** Initial state — all filters disabled. */
@@ -142,6 +191,10 @@ export const emptyFilterState: FilterState = {
   ligands: { min: null, max: null },
   residues: { min: null, max: null },
   year: { min: null, max: null },
+  helixKind: null,
+  ssPresence: null,
+  ecClass: null,
+  ligandCode: null,
 };
 
 /**
@@ -241,20 +294,25 @@ function extent(values: number[]): { min: number; max: number } {
 }
 
 /**
- * Convert a `FilterState` (UI-friendly), a free-text title query, and a
- * smart-sqlite3-filter expression into a `FindParams` object. The two text
- * inputs are passed through to separate backend parameters (`q` and `smart`)
- * — composition happens server-side via AND-intersection.
+ * Convert a `FilterState` (UI-friendly), a free-text title query, a
+ * smart-sqlite3-filter expression, and the chosen result ordering into a
+ * `FindParams` object. The two text inputs are passed through to separate
+ * backend parameters (`q` and `smart`) — composition happens server-side via
+ * AND-intersection.
  * @param filters - Current filter state.
  * @param query - Free-text title query (FTS5 against the `title` column).
  * @param smart - Smart-sqlite3-filter expression evaluated against
  *   `pdb_entries` (e.g. `year:>=2024 nb_helices:>5`).
+ * @param order - Result ordering key.
+ * @param seed - Integer seed for the `random` ordering. Ignored otherwise.
  * @returns Parameters ready to pass to `findDocuments`.
  */
 export function filtersToFindParams(
   filters: FilterState,
   query: string,
   smart: string,
+  order: OrderKey,
+  seed: number,
 ): FindParams {
   const trimmedQuery = query.trim();
   const trimmedSmart = smart.trim();
@@ -265,11 +323,123 @@ export function filtersToFindParams(
     ligands: hasRange(filters.ligands) ? filters.ligands : undefined,
     residues: hasRange(filters.residues) ? filters.residues : undefined,
     year: hasRange(filters.year) ? filters.year : undefined,
+    helixKind: filters.helixKind ?? undefined,
+    ssPresence: filters.ssPresence ?? undefined,
+    ecClass: filters.ecClass ?? undefined,
+    ligandCode: filters.ligandCode ?? undefined,
     query: trimmedQuery || undefined,
     smart: trimmedSmart || undefined,
+    order,
+    seed: order === 'random' ? seed : undefined,
   };
 }
 
 function hasRange(range: RangeFilter): boolean {
   return range.min !== null || range.max !== null;
+}
+
+/**
+ * Parse `URLSearchParams` (or the URL fragment after `?`) into a `FilterState`
+ * + query/smart strings. Unknown / malformed parameters are silently
+ * ignored — any field that isn't present falls back to its empty default.
+ * @param search - `URLSearchParams` instance to read from.
+ * @returns Decoded state. Always returns a fully populated `FilterState`.
+ */
+export function filterStateFromUrl(search: URLSearchParams): {
+  filters: FilterState;
+  query: string;
+  smart: string;
+  order: OrderKey;
+  seed: number;
+} {
+  const filters: FilterState = {
+    ...emptyFilterState,
+    methods: new Set(emptyFilterState.methods),
+    helices: { ...emptyFilterState.helices },
+    sheets: { ...emptyFilterState.sheets },
+    ligands: { ...emptyFilterState.ligands },
+    residues: { ...emptyFilterState.residues },
+    year: { ...emptyFilterState.year },
+  };
+  const methodsParam = search.get('methods');
+  if (methodsParam) {
+    for (const method of methodsParam.split(',')) {
+      const trimmed = method.trim();
+      if (trimmed) filters.methods.add(trimmed);
+    }
+  }
+  readRange(search, 'helices', filters.helices);
+  readRange(search, 'sheets', filters.sheets);
+  readRange(search, 'ligands', filters.ligands);
+  readRange(search, 'residues', filters.residues);
+  readRange(search, 'year', filters.year);
+  const helixKind = Number.parseInt(search.get('helixKind') ?? '', 10);
+  if (Number.isFinite(helixKind)) filters.helixKind = helixKind;
+  const ssPresence = search.get('ssPresence') as SsPresence | null;
+  if (ssPresence && SS_PRESENCE_VALUES.has(ssPresence)) {
+    filters.ssPresence = ssPresence;
+  }
+  const ecClass = search.get('ecClass');
+  if (ecClass && /^[1-7]$/.test(ecClass)) filters.ecClass = ecClass;
+  const ligandCode = search.get('ligandCode');
+  if (ligandCode) filters.ligandCode = ligandCode;
+  return {
+    filters,
+    query: search.get('q') ?? '',
+    smart: search.get('smart') ?? '',
+  };
+}
+
+function readRange(
+  search: URLSearchParams,
+  field: string,
+  range: RangeFilter,
+): void {
+  const min = Number.parseFloat(search.get(`${field}Min`) ?? '');
+  const max = Number.parseFloat(search.get(`${field}Max`) ?? '');
+  if (Number.isFinite(min)) range.min = min;
+  if (Number.isFinite(max)) range.max = max;
+}
+
+/**
+ * Inverse of {@link filterStateFromUrl}: serialize a `FilterState` (+ free
+ * text inputs) into a `URLSearchParams`. Empty / null fields are omitted so
+ * the resulting URL stays compact.
+ * @param filters - Current filter state.
+ * @param query - Free-text title query.
+ * @param smart - smart-sqlite3-filter expression.
+ * @returns A fresh `URLSearchParams` (no `?` prefix).
+ */
+export function filterStateToUrl(
+  filters: FilterState,
+  query: string,
+  smart: string,
+): URLSearchParams {
+  const params = new URLSearchParams();
+  if (filters.methods.size > 0) {
+    params.set('methods', [...filters.methods].join(','));
+  }
+  writeRange(params, 'helices', filters.helices);
+  writeRange(params, 'sheets', filters.sheets);
+  writeRange(params, 'ligands', filters.ligands);
+  writeRange(params, 'residues', filters.residues);
+  writeRange(params, 'year', filters.year);
+  if (filters.helixKind !== null) {
+    params.set('helixKind', String(filters.helixKind));
+  }
+  if (filters.ssPresence) params.set('ssPresence', filters.ssPresence);
+  if (filters.ecClass) params.set('ecClass', filters.ecClass);
+  if (filters.ligandCode) params.set('ligandCode', filters.ligandCode);
+  if (query.trim()) params.set('q', query.trim());
+  if (smart.trim()) params.set('smart', smart.trim());
+  return params;
+}
+
+function writeRange(
+  params: URLSearchParams,
+  field: string,
+  range: RangeFilter,
+): void {
+  if (range.min !== null) params.set(`${field}Min`, String(range.min));
+  if (range.max !== null) params.set(`${field}Max`, String(range.max));
 }

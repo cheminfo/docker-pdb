@@ -1,10 +1,22 @@
+import { useNavigate } from 'react-router';
+
 import { fetchHelicesVsSheets } from '../../shared/api/client.ts';
 import Panel from '../../shared/charts/Panel.tsx';
+import { browseHref } from '../../shared/charts/browseLink.ts';
 import { formatNumber } from '../../shared/format.ts';
 import { useAsync } from '../../shared/useAsync.ts';
 
 const BINS = [0, 1, 5, 10, 20, 50] as const;
 const BIN_LABELS = ['0', '1–4', '5–9', '10–19', '20–49', '≥50'];
+// Inclusive (min, max) for each bin. `null` upper means "open-ended".
+const BIN_RANGES: Array<[number, number | null]> = [
+  [0, 0],
+  [1, 4],
+  [5, 9],
+  [10, 19],
+  [20, 49],
+  [50, null],
+];
 const CELL = 44;
 const MARGIN_LEFT = 56;
 const MARGIN_BOTTOM = 30;
@@ -29,10 +41,11 @@ function bin(value: number): number {
  */
 export default function HelicesVsSheetsChart() {
   const state = useAsync(fetchHelicesVsSheets);
+  const navigate = useNavigate();
   return (
     <Panel
       title="Helices vs sheets per entry"
-      description="2-D distribution: how many entries fall into each (helix-count, sheet-count) bucket."
+      description="2-D distribution: how many entries fall into each (helix-count, sheet-count) bucket. Click a cell to browse that combination."
       state={state}
       errorPrefix="Could not load helices/sheets matrix"
     >
@@ -114,8 +127,27 @@ export default function HelicesVsSheetsChart() {
                     MARGIN_TOP + (BIN_LABELS.length - 1 - helixIndex) * CELL;
                   const helixLabel = BIN_LABELS[helixIndex];
                   const sheetLabel = BIN_LABELS[sheetIndex];
+                  const helixRange = BIN_RANGES[helixIndex];
+                  const sheetRange = BIN_RANGES[sheetIndex];
+                  const onCellClick =
+                    helixRange && sheetRange
+                      ? () => {
+                          void navigate(
+                            browseHref({
+                              helicesMin: helixRange[0],
+                              helicesMax: helixRange[1] ?? undefined,
+                              sheetsMin: sheetRange[0],
+                              sheetsMax: sheetRange[1] ?? undefined,
+                            }),
+                          );
+                        }
+                      : undefined;
                   return (
-                    <g key={`h${helixLabel}-s${sheetLabel}`}>
+                    <g
+                      key={`h${helixLabel}-s${sheetLabel}`}
+                      onClick={onCellClick}
+                      style={{ cursor: onCellClick ? 'pointer' : undefined }}
+                    >
                       <rect
                         x={x + 1}
                         y={y + 1}

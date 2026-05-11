@@ -30,8 +30,22 @@ const pymolFailuresLogPath = join(config.pymolDir, 'failures.log');
  * Append a render failure record to the on-disk JSON-lines log. Failures of
  * the log write itself (full disk, permissions) are swallowed so a bad log
  * never propagates back and aborts the rsync / rebuild loop.
- * @param {{ pdbId: string, width: number, height: number, error: string }} entry
- *   Failure record to persist.
+ *
+ * `stderr` and `stdout` are tail-truncated (last 2000 / 500 chars) so a
+ * pathological pymol run cannot bloat the log; that's enough to keep the
+ * actual error message at the end of the stream.
+ * @param {{
+ *   pdbId: string,
+ *   width: number,
+ *   height: number,
+ *   stage?: 'pymol' | 'graphicsmagick',
+ *   exitCode?: number | null,
+ *   signal?: string | null,
+ *   error: string,
+ *   stderr?: string,
+ *   stdout?: string,
+ *   cmd?: string,
+ * }} entry - Failure record to persist.
  */
 function logPymolFailure(entry) {
   const line = JSON.stringify({
@@ -173,11 +187,19 @@ export async function processPdbAssembly(filename, options = {}) {
         `pymol render failed for ${id} ${size.width}x${size.height}:`,
         message,
       );
+      const stderr = typeof error?.stderr === 'string' ? error.stderr : '';
+      const stdout = typeof error?.stdout === 'string' ? error.stdout : '';
       logPymolFailure({
         pdbId: id,
         width: size.width,
         height: size.height,
+        stage: error?.stage ?? 'pymol',
+        exitCode: error?.code,
+        signal: error?.signal,
         error: message,
+        stderr: stderr.slice(-2000),
+        stdout: stdout.slice(-500),
+        cmd: error?.cmd,
       });
     }
   }

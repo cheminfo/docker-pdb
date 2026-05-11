@@ -1,6 +1,6 @@
-import { HTMLTable } from '@blueprintjs/core';
+import { Button, ButtonGroup, HTMLTable } from '@blueprintjs/core';
 import type { KeyboardEvent } from 'react';
-import { useEffect, useRef } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 
 import type { PdbDoc } from '../../shared/api/types.ts';
 
@@ -14,6 +14,9 @@ interface PdbTableProps {
 }
 
 const PAGE_STEP = 10;
+
+type ThumbnailSize = 0 | 100 | 200 | 400;
+const THUMBNAIL_SIZES: ThumbnailSize[] = [0, 100, 200, 400];
 
 /**
  * List of PDB entries (ID, title). Clicking a row promotes that entry to
@@ -35,6 +38,7 @@ export default function PdbTable({
 }: PdbTableProps) {
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const selectedRowRef = useRef<HTMLTableRowElement | null>(null);
+  const [thumbnailSize, setThumbnailSize] = useState<ThumbnailSize>(0);
 
   useEffect(() => {
     selectedRowRef.current?.scrollIntoView({ block: 'nearest' });
@@ -76,55 +80,95 @@ export default function PdbTable({
   }
 
   return (
-    <div
-      ref={wrapperRef}
-      className="pdb-table-wrapper"
-      tabIndex={0}
-      role="listbox"
-      aria-activedescendant={selectedId ? `pdb-row-${selectedId}` : undefined}
-      onKeyDown={handleKeyDown}
-    >
-      <HTMLTable className="pdb-table" interactive compact>
-        <colgroup>
-          <col className="col-id" />
-          <col />
-        </colgroup>
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Title</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => {
-            const isSelected = row._id === selectedId;
-            return (
-              <tr
-                key={row._id}
-                id={`pdb-row-${row._id}`}
-                ref={isSelected ? selectedRowRef : undefined}
-                role="option"
-                aria-selected={isSelected}
-                className={isSelected ? 'selected' : undefined}
-                onClick={() => {
-                  onSelect(row._id);
-                  wrapperRef.current?.focus();
-                }}
-              >
-                <td className="mono">{row._id}</td>
-                <td className="title-cell" title={row.title}>
-                  {row.title}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </HTMLTable>
-      {rows.length === 0 && (
-        <p className="placeholder pdb-table-empty">
-          No entries match the current search.
-        </p>
-      )}
+    <div className="pdb-table-host">
+      <div className="pdb-table-toolbar">
+        <span className="pdb-table-toolbar-label">Thumbnail</span>
+        <ButtonGroup>
+          {THUMBNAIL_SIZES.map((size) => (
+            <Button
+              key={size}
+              size="small"
+              active={thumbnailSize === size}
+              onClick={() => setThumbnailSize(size)}
+            >
+              {size === 0 ? 'Off' : `${String(size)}px`}
+            </Button>
+          ))}
+        </ButtonGroup>
+      </div>
+      <div
+        ref={wrapperRef}
+        className="pdb-table-wrapper"
+        tabIndex={0}
+        role="listbox"
+        aria-activedescendant={selectedId ? `pdb-row-${selectedId}` : undefined}
+        onKeyDown={handleKeyDown}
+      >
+        <HTMLTable className="pdb-table" interactive compact>
+          <colgroup>
+            <col className="col-id" />
+            <col />
+          </colgroup>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Title</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => {
+              const isSelected = row._id === selectedId;
+              const handleClick = () => {
+                onSelect(row._id);
+                wrapperRef.current?.focus();
+              };
+              return (
+                <Fragment key={row._id}>
+                  <tr
+                    id={`pdb-row-${row._id}`}
+                    ref={isSelected ? selectedRowRef : undefined}
+                    role="option"
+                    aria-selected={isSelected}
+                    className={isSelected ? 'selected' : undefined}
+                    onClick={handleClick}
+                  >
+                    <td className="mono">{row._id}</td>
+                    <td className="title-cell" title={row.title}>
+                      {row.title}
+                    </td>
+                  </tr>
+                  {thumbnailSize > 0 && (
+                    <tr
+                      className={
+                        isSelected ? 'pdb-thumb-row selected' : 'pdb-thumb-row'
+                      }
+                      onClick={handleClick}
+                    >
+                      <td colSpan={2} className="pdb-thumb-cell">
+                        <img
+                          src={`/v1/assemblies/${row._id}/image/${String(thumbnailSize)}x${String(thumbnailSize)}`}
+                          alt=""
+                          width={thumbnailSize}
+                          height={thumbnailSize}
+                          loading="lazy"
+                          onError={(event) => {
+                            event.currentTarget.classList.add('is-missing');
+                          }}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
+          </tbody>
+        </HTMLTable>
+        {rows.length === 0 && (
+          <p className="placeholder pdb-table-empty">
+            No entries match the current search.
+          </p>
+        )}
+      </div>
     </div>
   );
 }

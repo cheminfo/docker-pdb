@@ -121,6 +121,36 @@ export default function AboutPage() {
           to the wwPDB partner sites: they offer richer search, validation
           reports, and the authoritative version of every record.
         </p>
+        <p>
+          Every interactive 3D structure on this site is rendered in the browser
+          by{' '}
+          <a
+            href="https://molstar.org/"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Mol*
+          </a>
+          , the open-source molecular visualization toolkit jointly developed by
+          PDBe and RCSB PDB. We are grateful to the Mol* team for making such a
+          powerful viewer freely available. If you use figures or views
+          generated through this site in a publication, please also cite:
+        </p>
+        <p className="about-citations">
+          <strong>
+            Sehnal, D., Bittrich, S., Deshpande, M., Svobodová, R., Berka, K.,
+            Bazgier, V., Velankar, S., Burley, S. K., Koča, J. &amp; Rose, A. S.
+          </strong>{' '}
+          Mol*: Towards a common library and tools for web molecular graphics.{' '}
+          <em>Nucleic Acids Research</em> 49, W431–W437 (2021).{' '}
+          <a
+            href="https://doi.org/10.1093/nar/gkab314"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            doi:10.1093/nar/gkab314
+          </a>
+        </p>
       </Card>
 
       <h2>How to cite</h2>

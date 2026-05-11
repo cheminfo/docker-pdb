@@ -47,10 +47,13 @@ export default async function pymol(id, pdb, outputPath, options) {
   await mkdir(dirname(outputPath), { recursive: true });
 
   return new Promise((resolve, reject) => {
-    exec(cmd, (error) => {
+    exec(cmd, { maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
       tryUnlink(tmpPdb);
       if (error) {
         debug('error executing pymol command', error);
+        error.stdout = stdout;
+        error.stderr = stderr;
+        error.cmd = cmd;
         reject(error);
         return;
       }
@@ -60,6 +63,7 @@ export default async function pymol(id, pdb, outputPath, options) {
           tryUnlink(tmpPng);
           if (err) {
             debug(`ERROR for ${id}: ${err.toString()}`);
+            err.stage = 'graphicsmagick';
             reject(err);
             return;
           }

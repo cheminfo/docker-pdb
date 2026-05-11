@@ -1,6 +1,9 @@
+import { useNavigate } from 'react-router';
+
 import { fetchHelixKindHist } from '../../shared/api/client.ts';
 import HistogramBar from '../../shared/charts/HistogramBar.tsx';
 import Panel from '../../shared/charts/Panel.tsx';
+import { browseHref } from '../../shared/charts/browseLink.ts';
 import { useAsync } from '../../shared/useAsync.ts';
 
 const KIND_LABELS: Record<number, string> = {
@@ -19,30 +22,41 @@ const KIND_LABELS: Record<number, string> = {
 /**
  * Render a horizontal bar chart of helix kinds (PDB HELIX kind column).
  * Each bar's value is the total number of helix records of that kind
- * across the entire DB.
+ * across the entire DB. Clicking a bar opens Browse filtered to entries
+ * containing at least one helix of that kind.
  * @returns Panel React element with the chart.
  */
 export default function HelixKindChart() {
   const state = useAsync(fetchHelixKindHist);
+  const navigate = useNavigate();
   return (
     <Panel
       title="Helix kinds"
-      description="Total helix annotations across the DB, grouped by the PDB HELIX kind code."
+      description="Total helix annotations across the DB, grouped by the PDB HELIX kind code. Click a bar to browse entries containing that kind."
       state={state}
       errorPrefix="Could not load helix-kind distribution"
     >
       {(data) => {
-        const chartData = data.rows
-          .toSorted((left, right) => right.value - left.value)
-          .map((row) => ({
-            index: KIND_LABELS[row.key] ?? `Kind ${row.key}`,
-            count: row.value,
-          }));
+        const sortedRows = data.rows.toSorted(
+          (left, right) => right.value - left.value,
+        );
+        const labelToKind = new Map<string, number>();
+        const chartData = sortedRows.map((row) => {
+          const label = KIND_LABELS[row.key] ?? `Kind ${row.key}`;
+          labelToKind.set(label, row.key);
+          return { index: label, count: row.value };
+        });
         return (
           <HistogramBar
             data={chartData}
             layout="horizontal"
             valueLabel=" helices"
+            onBarClick={(index) => {
+              const kind = labelToKind.get(index);
+              if (kind !== undefined) {
+                void navigate(browseHref({ helixKind: kind }));
+              }
+            }}
           />
         );
       }}

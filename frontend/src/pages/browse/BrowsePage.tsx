@@ -1,6 +1,6 @@
 import { Button, Card, Tab, Tabs, Tag } from '@blueprintjs/core';
-import { useCallback, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router';
 
 import type { FocusSpec, PdbViewerHandle } from '../../shared/PdbViewer.tsx';
 import PdbViewer from '../../shared/PdbViewer.tsx';
@@ -31,7 +31,11 @@ import PdbTable from './PdbTable.tsx';
 import StructureTable from './StructureTable.tsx';
 import ViewerControls from './ViewerControls.tsx';
 import type { FilterState } from './filters.ts';
-import { emptyFilterState, filtersToFindParams } from './filters.ts';
+import {
+  filterStateFromUrl,
+  filterStateToUrl,
+  filtersToFindParams,
+} from './filters.ts';
 
 /**
  * Page mounted at `/browse`. Drives every list update from a single
@@ -45,10 +49,30 @@ export default function BrowsePage() {
   const stats = useAsync(fetchRangeStats);
   const methodView = useAsync(fetchByExperiment);
 
-  const [query, setQuery] = useState('');
-  const [smart, setSmart] = useState('');
-  const [filters, setFilters] = useState<FilterState>(emptyFilterState);
+  const [searchParams, setSearchParams] = useSearchParams();
+  // Initial state is read from the URL once (lazy initializer). Subsequent
+  // updates flow filters → URL, and we also re-hydrate when the URL changes
+  // from outside (e.g. browser back/forward).
+  const initial = useMemo(
+    () => filterStateFromUrl(searchParams),
+    // Only on mount — onwards we sync the other direction.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+  const [query, setQuery] = useState(initial.query);
+  const [smart, setSmart] = useState(initial.smart);
+  const [filters, setFilters] = useState<FilterState>(initial.filters);
   const [pickedId, setPickedId] = useState<string | undefined>(undefined);
+
+  // Push state changes into the URL so deep-links from the stats page work and
+  // the back button restores the previous filter combination.
+  useEffect(() => {
+    const next = filterStateToUrl(filters, query, smart);
+    const current = searchParams.toString();
+    if (next.toString() !== current) {
+      setSearchParams(next, { replace: true });
+    }
+  }, [filters, query, smart, searchParams, setSearchParams]);
 
   // Debounce the inputs so the keyword box doesn't fire one search query per
   // keystroke and slider drags are smooth.
@@ -366,7 +390,6 @@ function SideTabs({ doc, selectedKey, onFocus }: SideTabsProps) {
         id="browse-side-tabs"
         selectedTabId={active}
         onChange={(tabId) => setActive(tabId as SideTab)}
-        size="large"
       >
         {tabs.map((tab) => (
           <Tab
