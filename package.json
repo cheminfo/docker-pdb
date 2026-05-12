@@ -41,7 +41,7 @@
     "rebuild": "npm run rebuild -w backend",
     "seed": "npm run seed -w backend",
     "seed-ccd": "npm run seed-ccd -w backend",
-    "test": "npm run test-only && npm run check-types && npm run eslint && npm run prettier",
+    "test": "npm run dev:seed && npm run test-only && npm run check-types && npm run eslint && npm run prettier",
     "test-only": "npm run test-only -w backend",
     "update": "npm run update -w backend"
   },

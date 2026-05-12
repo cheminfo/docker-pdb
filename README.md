@@ -185,9 +185,14 @@ and `rsync`, and should run `npm run cron` (or `npm run rebuild` /
 unless `HAS_PYMOL=1` is set.
 
 ```sh
-npm run test       # tests + lint + format
+npm run test       # seed sqlite + tests + lint + format
 npm run test-only  # vitest with coverage
 ```
+
+`npm run test` runs `npm run dev:seed` first, so a fresh clone is left with
+a populated `data/sqlite/ligands.db` (including `8ZXR` for the scripting
+playground) — open `/scripting` and load right away, no extra setup. The
+seed is idempotent and reuses fixtures from `backend/fixtures/pdb/`.
 
 ### Frontend-only commands
 
