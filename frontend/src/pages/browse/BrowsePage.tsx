@@ -1,6 +1,7 @@
 import { Button, Card, Tab, Tabs, Tag } from '@blueprintjs/core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
+import { FullScreenProvider, useFullscreen } from 'react-science/ui';
 
 import type { FocusSpec, PdbViewerHandle } from '../../shared/PdbViewer.tsx';
 import PdbViewer from '../../shared/PdbViewer.tsx';
@@ -12,6 +13,7 @@ import {
   findDocuments,
 } from '../../shared/api/client.ts';
 import type { PdbDoc } from '../../shared/api/types.ts';
+import type { AsyncState } from '../../shared/useAsync.ts';
 import { useAsync } from '../../shared/useAsync.ts';
 import { useDebouncedValue } from '../../shared/useDebouncedValue.ts';
 import type {
@@ -297,10 +299,14 @@ function SelectedEntry({ doc }: SelectedEntryProps) {
           <div className="browse-entry-title">{doc.title}</div>
         </Card>
         <div className="browse-entry-grid">
-          <Card className="panel browse-viewer">
-            {pdbText.status === 'success' && (
-              <div className="browse-viewer-header">
-                <ViewerControls
+          <FullScreenProvider>
+            {(fullscreenRef) => (
+              <div
+                ref={fullscreenRef}
+                className="browse-viewer-fullscreen-wrap"
+              >
+                <BrowseViewerCard
+                  pdbText={pdbText}
                   representation={representation}
                   onRepresentationChange={setRepresentation}
                   color={color}
@@ -309,29 +315,11 @@ function SelectedEntry({ doc }: SelectedEntryProps) {
                   onSpinToggle={() => setSpin((value) => !value)}
                   background={background}
                   onBackgroundChange={setBackground}
-                  onResetView={() => viewerHandleRef.current?.resetCamera()}
+                  viewerHandleRef={viewerHandleRef}
                 />
               </div>
             )}
-            {pdbText.status === 'loading' && (
-              <p className="placeholder">Loading PDB file…</p>
-            )}
-            {pdbText.status === 'error' && (
-              <p className="placeholder">
-                Could not load PDB file: {pdbText.error.message}
-              </p>
-            )}
-            {pdbText.status === 'success' && (
-              <PdbViewer
-                ref={viewerHandleRef}
-                pdb={pdbText.data}
-                representation={representation}
-                color={color}
-                spin={spin}
-                background={background}
-              />
-            )}
-          </Card>
+          </FullScreenProvider>
           <Card className="panel browse-pdb-text">
             {pdbText.status === 'success' ? (
               <PdbHeader pdb={pdbText.data} />
@@ -437,5 +425,83 @@ function SideTabs({ doc, selectedKey, onFocus }: SideTabsProps) {
         {renderTabBody()}
       </div>
     </div>
+  );
+}
+
+interface BrowseViewerCardProps {
+  pdbText: AsyncState<string>;
+  representation: RepresentationName;
+  onRepresentationChange: (value: RepresentationName) => void;
+  color: ColorName;
+  onColorChange: (value: ColorName) => void;
+  spin: boolean;
+  onSpinToggle: () => void;
+  background: BackgroundName;
+  onBackgroundChange: (value: BackgroundName) => void;
+  viewerHandleRef: { current: PdbViewerHandle | null };
+}
+
+/**
+ * Card that renders the Mol* viewer plus its toolbar. Lives inside the
+ * `FullScreenProvider` so it can call `useFullscreen()` directly and wire
+ * the toolbar's fullscreen button to the browser's full-screen API. When
+ * the wrapping div is fullscreened, the card stretches to fill the screen
+ * (see the `:fullscreen` CSS rules) and only the protein + its controls
+ * remain visible.
+ * @param props - Component props.
+ * @returns Viewer card React element.
+ */
+function BrowseViewerCard(props: BrowseViewerCardProps) {
+  const {
+    pdbText,
+    representation,
+    onRepresentationChange,
+    color,
+    onColorChange,
+    spin,
+    onSpinToggle,
+    background,
+    onBackgroundChange,
+    viewerHandleRef,
+  } = props;
+  const fullscreen = useFullscreen();
+  return (
+    <Card className="panel browse-viewer">
+      {pdbText.status === 'success' && (
+        <div className="browse-viewer-header">
+          <ViewerControls
+            representation={representation}
+            onRepresentationChange={onRepresentationChange}
+            color={color}
+            onColorChange={onColorChange}
+            spin={spin}
+            onSpinToggle={onSpinToggle}
+            background={background}
+            onBackgroundChange={onBackgroundChange}
+            onResetView={() => viewerHandleRef.current?.resetCamera()}
+            isFullScreen={fullscreen.isFullScreen}
+            onToggleFullscreen={fullscreen.toggle}
+          />
+        </div>
+      )}
+      {pdbText.status === 'loading' && (
+        <p className="placeholder">Loading PDB file…</p>
+      )}
+      {pdbText.status === 'error' && (
+        <p className="placeholder">
+          Could not load PDB file: {pdbText.error.message}
+        </p>
+      )}
+      {pdbText.status === 'success' && (
+        <PdbViewer
+          ref={viewerHandleRef}
+          pdb={pdbText.data}
+          representation={representation}
+          color={color}
+          spin={spin}
+          background={background}
+        />
+      )}
+    </Card>
   );
 }

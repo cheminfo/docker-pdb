@@ -21,6 +21,10 @@ interface ViewerControlsProps {
   background: BackgroundName;
   onBackgroundChange: (value: BackgroundName) => void;
   onResetView: () => void;
+  /** Whether the viewer panel is currently displayed full-screen. */
+  isFullScreen: boolean;
+  /** Toggle the viewer panel in / out of the browser's full-screen mode. */
+  onToggleFullscreen: () => void;
 }
 
 /**
@@ -36,6 +40,8 @@ interface ViewerControlsProps {
  * @param props.background - Current background color preset.
  * @param props.onBackgroundChange - Called when the background changes.
  * @param props.onResetView - Called when the reset button is clicked.
+ * @param props.isFullScreen - Whether the panel is currently displayed full-screen.
+ * @param props.onToggleFullscreen - Toggles the panel into / out of full-screen.
  * @returns Control bar React element.
  */
 export default function ViewerControls({
@@ -48,6 +54,8 @@ export default function ViewerControls({
   background,
   onBackgroundChange,
   onResetView,
+  isFullScreen,
+  onToggleFullscreen,
 }: ViewerControlsProps) {
   return (
     <div className="viewer-controls">
@@ -98,6 +106,12 @@ export default function ViewerControls({
           onClick={onResetView}
           title="Reset view"
           aria-label="Reset view"
+        />
+        <Button
+          icon={isFullScreen ? 'minimize' : 'fullscreen'}
+          onClick={onToggleFullscreen}
+          title={isFullScreen ? 'Exit full screen' : 'Full screen'}
+          aria-label={isFullScreen ? 'Exit full screen' : 'Full screen'}
         />
       </ButtonGroup>
     </div>

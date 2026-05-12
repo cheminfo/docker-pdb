@@ -990,11 +990,28 @@ code {
   min-height: 0;
 }
 
+.browse-viewer-fullscreen-wrap {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.browse-viewer-fullscreen-wrap:fullscreen {
+  background: white;
+  padding: 0;
+}
+
+.browse-viewer-fullscreen-wrap:fullscreen .browse-viewer {
+  border-radius: 0;
+  height: 100%;
+}
+
 .browse-viewer {
   display: flex;
   flex-direction: column;
   padding: 10px 12px 12px;
   min-height: 0;
+  height: 100%;
 }
 
 .browse-viewer h3 {
