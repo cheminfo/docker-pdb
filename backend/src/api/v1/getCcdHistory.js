@@ -29,6 +29,7 @@ export function ccdHistoryRowToDoc(row) {
 
 function rowToDoc(row) {
   return {
+    id: row.id,
     startedAt: row.started_at,
     finishedAt: row.finished_at,
     durationMs: row.duration_ms,
@@ -37,5 +38,7 @@ function rowToDoc(row) {
     skippedCount: row.skipped_count,
     bytesOnDisk: row.bytes_on_disk,
     error: row.error,
+    pid: row.pid,
+    lastHeartbeatAt: row.last_heartbeat_at,
   };
 }

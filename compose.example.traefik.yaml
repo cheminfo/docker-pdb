@@ -75,8 +75,9 @@ services:
   pdb-api-cron:
     # Periodically refreshes data/sqlite/ligands.db from the wwPDB
     # Chemical Component Dictionary (weekly upstream cadence). Idle most
-    # of the time. Independent of pdb-api: on a fresh deploy pdb-api
-    # writes the initial copy and this cron sleeps until next week.
+    # of the time, but the import phase synchronously parses ~40k CCD
+    # entries through openchemlib and can briefly use >1 GiB of heap —
+    # the generous mem_limit keeps it well clear of the OOM-killer.
     image: ghcr.io/cheminfo/pdb-quickview:latest
     build: .
     volumes:
@@ -85,9 +86,12 @@ services:
       - .env
     environment:
       DEBUG: '*'
+      NODE_OPTIONS: '--max-old-space-size=6144'
     restart: unless-stopped
     init: true
     pids_limit: 256
+    mem_limit: 8g
+    memswap_limit: 8g
     ulimits:
       core: 0
     logging:

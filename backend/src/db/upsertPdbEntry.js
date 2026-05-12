@@ -249,6 +249,10 @@ export async function recordRsyncHistory(run) {
  * (whether it succeeded or failed). Failures inside this helper are
  * surfaced to the caller; the cron loop must decide whether to swallow
  * them — same contract as {@link recordRsyncHistory}.
+ *
+ * Prefer {@link startCcdHistory} + {@link finalizeCcdHistory} for new code:
+ * those persist the row at start so a SIGKILL/OOM mid-import leaves a
+ * `status='running'` breadcrumb instead of silently vanishing.
  * @param {{ startedAt: string, finishedAt: string, durationMs: number,
  *   status: 'success' | 'failed', importedCount: number,
  *   skippedCount: number, bytesOnDisk: number | null,
@@ -266,5 +270,65 @@ export async function recordCcdHistory(run) {
     run.skippedCount,
     run.bytesOnDisk,
     run.error,
+  );
+}
+
+/**
+ * Insert a `ccd_history` row in the `running` state and return its rowid.
+ * Called at the very start of a CCD refresh so a crash during the
+ * multi-minute parse phase still leaves a row behind that the Settings
+ * page (and /v1/diagnostics) can surface.
+ * @param {{ startedAt: string, pid: number }} run - Start metadata.
+ * @returns {Promise<number>} Auto-generated rowid for the new history row.
+ */
+export async function startCcdHistory(run) {
+  const db = await getLigandsDB();
+  const info = db.insertCcdHistoryStart.run(
+    run.startedAt,
+    run.pid,
+    run.startedAt,
+  );
+  return Number(info.lastInsertRowid);
+}
+
+/**
+ * Update the running counters + heartbeat timestamp on a `ccd_history` row.
+ * Called periodically during the import so external observers can tell a
+ * live run apart from an orphaned `running` row left by a crash.
+ * @param {{ id: number, importedCount: number, skippedCount: number,
+ *   heartbeatAt: string }} update - Heartbeat payload.
+ * @returns {Promise<void>}
+ */
+export async function heartbeatCcdHistory(update) {
+  const db = await getLigandsDB();
+  db.updateCcdHistoryHeartbeat.run(
+    update.importedCount,
+    update.skippedCount,
+    update.heartbeatAt,
+    update.id,
+  );
+}
+
+/**
+ * Finalize a previously-started `ccd_history` row with success/failure status,
+ * final counts and duration.
+ * @param {{ id: number, finishedAt: string, durationMs: number,
+ *   status: 'success' | 'failed', importedCount: number,
+ *   skippedCount: number, bytesOnDisk: number | null,
+ *   error: string | null }} run - Completed CCD refresh summary.
+ * @returns {Promise<void>}
+ */
+export async function finalizeCcdHistory(run) {
+  const db = await getLigandsDB();
+  db.finalizeCcdHistory.run(
+    run.finishedAt,
+    run.durationMs,
+    run.status,
+    run.importedCount,
+    run.skippedCount,
+    run.bytesOnDisk,
+    run.error,
+    run.finishedAt,
+    run.id,
   );
 }

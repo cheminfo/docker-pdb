@@ -84,6 +84,7 @@ test('GET /v1/ccd-history surfaces inserted refresh rows in DESC order', async (
 
   expect(body.rows).toHaveLength(2);
   expect(body.rows[0]).toStrictEqual({
+    id: 2,
     startedAt: '2026-04-08T00:00:00.000Z',
     finishedAt: '2026-04-08T00:00:02.000Z',
     durationMs: 2_000,
@@ -92,6 +93,8 @@ test('GET /v1/ccd-history surfaces inserted refresh rows in DESC order', async (
     skippedCount: 0,
     bytesOnDisk: null,
     error: 'HTTP 503',
+    pid: null,
+    lastHeartbeatAt: null,
   });
   expect(body.rows[1].status).toBe('success');
 
@@ -158,4 +161,46 @@ test('POST /v1/sync/trigger rejects an unknown kind', async () => {
 
   expect(response.statusCode).toBe(400);
   expect(response.json().error).toContain('rsync');
+});
+
+test('GET /v1/diagnostics surfaces ligand/pdb/pymol state in one snapshot', async () => {
+  const response = await app.inject({ method: 'GET', url: '/v1/diagnostics' });
+
+  expect(response.statusCode).toBe(200);
+
+  const body = response.json();
+
+  expect(body.process).toMatchObject({
+    pid: expect.any(Number),
+    nodeVersion: expect.any(String),
+  });
+  expect(typeof body.process.rssMb).toBe('number');
+  expect(typeof body.process.uptimeSeconds).toBe('number');
+
+  expect(body.database).toStrictEqual({
+    ligandCount: 0,
+    pdbCount: 0,
+    assemblyCount: 0,
+    ligandsLooksEmpty: true,
+  });
+
+  expect(body.sync.kinds).toStrictEqual(['rsync', 'ccd']);
+  // Two ccd_history rows were inserted by the earlier test; the most
+  // recent (id 2) is the failed one.
+  expect(body.sync.lastCcdRefresh).toMatchObject({
+    status: 'failed',
+    error: 'HTTP 503',
+  });
+
+  // PyMol samples are emitted for the hand-picked id list, with three
+  // size-presence flags each, even when the directory does not exist.
+  expect(body.data.pymolSamples.samples).toHaveLength(5);
+
+  for (const sample of body.data.pymolSamples.samples) {
+    expect(Object.keys(sample.sizes).toSorted()).toStrictEqual([
+      '100x100',
+      '200x200',
+      '400x400',
+    ]);
+  }
 });

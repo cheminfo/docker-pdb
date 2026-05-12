@@ -564,6 +564,32 @@ export class LigandsDB {
 
   // -- ccd_history --
 
+  get insertCcdHistoryStart() {
+    return this.statement(
+      `INSERT INTO ccd_history
+         (started_at, status, pid, last_heartbeat_at)
+       VALUES (?, 'running', ?, ?)`,
+    );
+  }
+
+  get updateCcdHistoryHeartbeat() {
+    return this.statement(
+      `UPDATE ccd_history
+         SET imported_count = ?, skipped_count = ?, last_heartbeat_at = ?
+       WHERE id = ?`,
+    );
+  }
+
+  get finalizeCcdHistory() {
+    return this.statement(
+      `UPDATE ccd_history
+         SET finished_at = ?, duration_ms = ?, status = ?,
+             imported_count = ?, skipped_count = ?,
+             bytes_on_disk = ?, error = ?, last_heartbeat_at = ?
+       WHERE id = ?`,
+    );
+  }
+
   get insertCcdHistory() {
     return this.statement(
       `INSERT INTO ccd_history
@@ -575,20 +601,22 @@ export class LigandsDB {
 
   get selectCcdHistory() {
     return this.statement(
-      `SELECT started_at, finished_at, duration_ms, status,
-              imported_count, skipped_count, bytes_on_disk, error
+      `SELECT id, started_at, finished_at, duration_ms, status,
+              imported_count, skipped_count, bytes_on_disk, error,
+              pid, last_heartbeat_at
        FROM ccd_history
-       ORDER BY finished_at DESC
+       ORDER BY id DESC
        LIMIT ?`,
     );
   }
 
   get selectLastCcdRefresh() {
     return this.statement(
-      `SELECT started_at, finished_at, duration_ms, status,
-              imported_count, skipped_count, bytes_on_disk, error
+      `SELECT id, started_at, finished_at, duration_ms, status,
+              imported_count, skipped_count, bytes_on_disk, error,
+              pid, last_heartbeat_at
        FROM ccd_history
-       ORDER BY finished_at DESC
+       ORDER BY id DESC
        LIMIT 1`,
     );
   }

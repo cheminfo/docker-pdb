@@ -15,12 +15,19 @@
 // Settings page can request an immediate refresh without waiting up to a
 // week for the next natural cycle.
 
+import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
+import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import { pino } from 'pino';
 
-import { recordCcdHistory } from '../db/upsertPdbEntry.js';
+import {
+  finalizeCcdHistory,
+  heartbeatCcdHistory,
+  recordCcdHistory,
+  startCcdHistory,
+} from '../db/upsertPdbEntry.js';
 import {
   clearRunning,
   clearTrigger,
@@ -43,6 +50,35 @@ const TRIGGER_POLL_MS = 5 * 1000;
 
 /** Cron kind, used for the matching trigger / running marker filenames. */
 const KIND = 'ccd';
+
+/**
+ * JSON-lines log of every CCD refresh failure. Lives next to the sqlite
+ * file so operators can `tail -f data/sqlite/ccd-failures.log` without
+ * scraping pino output. Mirrors `data/pymol/failures.log`.
+ */
+const dataDir = process.env.DATA_DIR
+  ? process.env.DATA_DIR.replace(/\/$/, '')
+  : '/app/data';
+const ccdFailuresLogPath = join(dataDir, 'sqlite', 'ccd-failures.log');
+
+/**
+ * Append a CCD refresh failure to the on-disk JSON-lines log. Failures of
+ * the log write itself (full disk, permissions) are swallowed so a bad
+ * log never crashes the cron loop and triggers a tight restart.
+ * @param {{ historyId: number | null, startedAt: string, durationMs: number, importedCount: number, skippedCount: number, error: string }} entry - Failure record.
+ */
+function logCcdFailure(entry) {
+  try {
+    const dir = join(dataDir, 'sqlite');
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    appendFileSync(
+      ccdFailuresLogPath,
+      `${JSON.stringify({ timestamp: new Date().toISOString(), ...entry })}\n`,
+    );
+  } catch {
+    // ignore
+  }
+}
 
 await runForever();
 
@@ -91,11 +127,19 @@ async function runForever() {
 }
 
 /**
- * Refresh the CCD once, wrapped with the running marker so the API can
- * report live state. Errors are caught here so a single network blip
- * never crashes the process and triggers a restart loop. Every run —
- * success or failure — is appended to `ccd_history` so the Settings
- * page can render a refresh log alongside the rsync one.
+ * Refresh the CCD once. Lifecycle:
+ *
+ * 1. Insert a `status='running'` row in `ccd_history` so a SIGKILL/OOM
+ *    during the multi-minute parse phase still leaves a breadcrumb.
+ * 2. Run `seedCCD`, heartbeating imported/skipped counts on every batch
+ *    commit so external observers can tell a live import apart from an
+ *    orphaned `running` row left by a crash.
+ * 3. Finalise the row to `success` or `failed` with final counts/duration
+ *    in a `finally` block — and additionally append failures to
+ *    `data/sqlite/ccd-failures.log` for offline triage.
+ *
+ * Errors are caught here so a single network blip never crashes the
+ * process and triggers a restart loop.
  */
 async function runOnce() {
   await clearTrigger(KIND);
@@ -107,34 +151,95 @@ async function runOnce() {
     type: KIND,
     pid: process.pid,
   });
+
+  // Persist the 'running' breadcrumb FIRST so a SIGKILL during the multi-
+  // minute parse phase still leaves a row behind. We previously wrote the
+  // row only in the `finally` block, which silently dropped any crash
+  // before that point — the failure mode we hit on test.epfl.ch.
+  let historyId = null;
+  try {
+    historyId = await startCcdHistory({ startedAt, pid: process.pid });
+  } catch (error) {
+    logger.error(
+      { error: String(error) },
+      'Failed to insert ccd-history start row; refresh will still proceed',
+    );
+  }
+
   let status = 'success';
   let importedCount = 0;
   let skippedCount = 0;
   let errorMessage = null;
   try {
-    const result = await seedCCD({ force: true });
+    const result = await seedCCD({
+      force: true,
+      onProgress: async (counts) => {
+        importedCount = counts.imported;
+        skippedCount = counts.skipped;
+        if (historyId === null) return;
+        try {
+          await heartbeatCcdHistory({
+            id: historyId,
+            importedCount,
+            skippedCount,
+            heartbeatAt: new Date().toISOString(),
+          });
+        } catch (heartbeatError) {
+          logger.warn(
+            { error: String(heartbeatError) },
+            'Failed to write ccd-history heartbeat',
+          );
+        }
+      },
+    });
     importedCount = result.imported;
     skippedCount = result.skipped;
   } catch (error) {
     status = 'failed';
-    errorMessage = String(error);
+    errorMessage = String(error?.stack ?? error);
     logger.error(
       { error: errorMessage },
       'CCD refresh failed; will retry next cycle',
     );
+    logCcdFailure({
+      historyId,
+      startedAt,
+      durationMs: Date.now() - startedAtMs,
+      importedCount,
+      skippedCount,
+      error: errorMessage,
+    });
   } finally {
     await clearRunning(KIND);
+    const finishedAt = new Date().toISOString();
+    const durationMs = Date.now() - startedAtMs;
+    const bytesOnDisk = await getArchiveSize();
     try {
-      await recordCcdHistory({
-        startedAt,
-        finishedAt: new Date().toISOString(),
-        durationMs: Date.now() - startedAtMs,
-        status,
-        importedCount,
-        skippedCount,
-        bytesOnDisk: await getArchiveSize(),
-        error: errorMessage,
-      });
+      if (historyId === null) {
+        // Fallback when the start-row insert itself failed: drop a single
+        // legacy-shape row so /v1/ccd-history still records the run.
+        await recordCcdHistory({
+          startedAt,
+          finishedAt,
+          durationMs,
+          status,
+          importedCount,
+          skippedCount,
+          bytesOnDisk,
+          error: errorMessage,
+        });
+      } else {
+        await finalizeCcdHistory({
+          id: historyId,
+          finishedAt,
+          durationMs,
+          status,
+          importedCount,
+          skippedCount,
+          bytesOnDisk,
+          error: errorMessage,
+        });
+      }
     } catch (error) {
       logger.error(
         { error: String(error) },

@@ -47,10 +47,12 @@ export const ccdGzPath = join(ccdDir, 'components.cif.gz');
  * Single-atom entries (ions like NA, CL, ZN) and entries OCL cannot
  * encode (unknown elements, malformed bonds) are skipped — they cannot
  * be the target of a substructure search anyway.
- * @param {{ force?: boolean }} [options] - Pass `force: true` to re-download the CCD archive AND re-run the import even if the table already looks populated.
+ * @param {{ force?: boolean, onProgress?: (counts: { imported: number, skipped: number }) => void | Promise<void> }} [options]
+ *   Pass `force: true` to re-download the CCD archive AND re-run the import even if the table already looks populated.
+ *   `onProgress` is invoked after every BATCH_SIZE rows so the caller can heartbeat external observers (ccd_history).
  * @returns {Promise<{ imported: number, skipped: number }>} Counts of successfully imported and skipped CCD entries.
  */
-export async function seedCCD({ force = false } = {}) {
+export async function seedCCD({ force = false, onProgress } = {}) {
   const db = await getLigandsDB();
 
   // Fast path: when not forced, skip the multi-minute re-import if the
@@ -104,6 +106,17 @@ export async function seedCCD({ force = false } = {}) {
           { imported, skipped, total: imported + skipped },
           'CCD import progress',
         );
+        // Heartbeat after each commit, when the write lock is briefly free,
+        // so concurrent `pdb_ligands` writers in the rsync container are not
+        // stalled by a long held BEGIN…COMMIT envelope.
+        try {
+          await onProgress?.({ imported, skipped });
+        } catch (heartbeatError) {
+          logger.warn(
+            { error: String(heartbeatError) },
+            'CCD heartbeat failed',
+          );
+        }
         db.db.exec('BEGIN');
         inBatch = 0;
       }

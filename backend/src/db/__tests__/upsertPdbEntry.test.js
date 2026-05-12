@@ -279,6 +279,7 @@ test('ccd_history records both success and failure runs', async () => {
 
   expect(rows).toHaveLength(2);
   expect(rows[0]).toStrictEqual({
+    id: 2,
     started_at: '2026-01-08T00:00:00.000Z',
     finished_at: '2026-01-08T00:00:01.000Z',
     duration_ms: 1_000,
@@ -287,6 +288,8 @@ test('ccd_history records both success and failure runs', async () => {
     skipped_count: 0,
     bytes_on_disk: null,
     error: 'HTTP 503',
+    pid: null,
+    last_heartbeat_at: null,
   });
   expect(rows[1].status).toBe('success');
   expect(rows[1].imported_count).toBe(30_000);
@@ -297,6 +300,63 @@ test('ccd_history records both success and failure runs', async () => {
 
   // Touch recordCcdHistory so the export is exercised.
   expect(typeof recordCcdHistory).toBe('function');
+
+  db.close();
+});
+
+test('startCcdHistory + finalizeCcdHistory persist a running row then close it', async () => {
+  const db = await getInMemoryLigandsDB();
+  const info = db.insertCcdHistoryStart.run(
+    '2026-02-01T00:00:00.000Z',
+    1234,
+    '2026-02-01T00:00:00.000Z',
+  );
+  const id = Number(info.lastInsertRowid);
+
+  const running = db.selectLastCcdRefresh.get();
+
+  expect(running).toMatchObject({
+    id,
+    started_at: '2026-02-01T00:00:00.000Z',
+    finished_at: null,
+    duration_ms: null,
+    status: 'running',
+    pid: 1234,
+    last_heartbeat_at: '2026-02-01T00:00:00.000Z',
+  });
+
+  db.updateCcdHistoryHeartbeat.run(1000, 7, '2026-02-01T00:01:00.000Z', id);
+  const heartbeated = db.selectLastCcdRefresh.get();
+
+  expect(heartbeated).toMatchObject({
+    status: 'running',
+    imported_count: 1000,
+    skipped_count: 7,
+    last_heartbeat_at: '2026-02-01T00:01:00.000Z',
+  });
+
+  db.finalizeCcdHistory.run(
+    '2026-02-01T00:05:00.000Z',
+    300_000,
+    'success',
+    30_000,
+    42,
+    250_000_000,
+    null,
+    '2026-02-01T00:05:00.000Z',
+    id,
+  );
+  const finalized = db.selectLastCcdRefresh.get();
+
+  expect(finalized).toMatchObject({
+    id,
+    status: 'success',
+    finished_at: '2026-02-01T00:05:00.000Z',
+    duration_ms: 300_000,
+    imported_count: 30_000,
+    skipped_count: 42,
+    bytes_on_disk: 250_000_000,
+  });
 
   db.close();
 });

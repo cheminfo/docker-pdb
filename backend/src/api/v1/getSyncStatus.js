@@ -56,15 +56,22 @@ async function getRsyncStatus(db) {
 }
 
 async function getCcdStatus(db) {
-  // Prefer the database row written at the end of each cron pass — it
-  // carries the full success/failure outcome and the import counts. Fall
-  // back to the cached archive's mtime for the first-boot window
-  // (pdb-api has seeded the archive but the cron container hasn't
-  // written a `ccd_history` row yet).
+  // Prefer the database row written at the start of each cron pass — it
+  // carries the full success/failure/running outcome and the import
+  // counts (heartbeated every batch). Fall back to the cached archive's
+  // mtime ONLY when no ccd_history row exists at all (e.g. cron-ccd
+  // never managed to insert even the start row — a sign that the
+  // container is not running, or that the first invocation crashed
+  // before the sqlite handle was opened).
   const lastRow = db.selectLastCcdRefresh.get();
   const lastRefresh = lastRow ? ccdHistoryRowToDoc(lastRow) : null;
 
-  let lastRefreshedAt = lastRefresh ? lastRefresh.finishedAt : null;
+  // For a row still in 'running' status, finishedAt is NULL — surface
+  // `startedAt` instead so the UI shows *something* recent rather than
+  // "never refreshed".
+  let lastRefreshedAt = lastRefresh
+    ? (lastRefresh.finishedAt ?? lastRefresh.startedAt)
+    : null;
   let bytesOnDisk = lastRefresh ? lastRefresh.bytesOnDisk : null;
   if (!lastRefreshedAt || bytesOnDisk === null) {
     try {
@@ -76,7 +83,7 @@ async function getCcdStatus(db) {
         bytesOnDisk = stats.size;
       }
     } catch {
-      // No CCD archive yet — pdb-api hasn't seeded the initial copy.
+      // No CCD archive yet — cron-ccd has not even downloaded it.
     }
   }
   return {
