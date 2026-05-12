@@ -238,6 +238,13 @@ export interface ScriptApi {
   echo: (text: string, options?: EchoOptions) => void;
   clearEcho: () => void;
 
+  /**
+   * Toggle the viewer pane's full-screen mode. `true` enters, `false` exits;
+   * omit (or pass `undefined`) to flip the current state. Implementation
+   * behind `ms.fullscreen(...)`.
+   */
+  setFullscreen: (on?: boolean) => void;
+
   delay: (seconds: number) => Promise<void>;
 
   /**
@@ -365,6 +372,14 @@ export interface ScriptApiContext {
    * even when the swap completes in milliseconds.
    */
   setSwapping: (swapping: boolean) => void;
+  /**
+   * Drive the viewer-pane full-screen toggle from a script. Calling with
+   * `true` enters fullscreen, `false` exits, `undefined` flips the current
+   * state. Wired by the page to a ref populated inside the
+   * `react-science` `FullScreenProvider` (so the actual `useFullscreen`
+   * context is bridged out to the script API).
+   */
+  setFullscreen: (on?: boolean) => void;
 }
 
 /**
@@ -678,6 +693,8 @@ export function createScriptApi(context: ScriptApiContext): ScriptApi {
       });
       applyTrackball(plugin, 'off', 0);
     },
+
+    setFullscreen: (on) => context.setFullscreen(on),
 
     echo: (text, options) => {
       context.setEchoEntry({

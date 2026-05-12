@@ -1769,6 +1769,36 @@ code {
   width: 90px;
 }
 
+.scripting-viewer-fullscreen-wrap {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.scripting-viewer-fullscreen-wrap:fullscreen {
+  background: white;
+  padding: 0;
+}
+
+.scripting-viewer-fullscreen-wrap:fullscreen .scripting-viewer-panel {
+  border-radius: 0;
+  height: 100%;
+}
+
+.scripting-fullscreen-button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 5;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(2px);
+}
+
+.scripting-fullscreen-button:hover {
+  background: rgba(255, 255, 255, 1);
+}
+
 .scripting-viewer-panel {
   position: relative;
   padding: 0;

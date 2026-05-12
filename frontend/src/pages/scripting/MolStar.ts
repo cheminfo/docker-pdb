@@ -356,6 +356,13 @@ export interface MolStarInstance {
    */
   fit: (factor?: number, options?: CameraTransitionOptions) => Promise<void>;
   selectionHalos: (on: boolean) => Promise<void>;
+  /**
+   * Toggle the viewer pane's full-screen mode. `true` enters fullscreen
+   * (only the protein + its toolbar remain on the page), `false` exits;
+   * omit to flip the current state. Use to drive animations that briefly
+   * switch into a full-screen close-up before returning to the editor view.
+   */
+  fullscreen: (on?: boolean) => void;
   echo: (text: string, options?: EchoOptions) => void;
   clearEcho: () => void;
   clear: () => Promise<void>;
@@ -510,6 +517,9 @@ export function createMolStarClass(api: ScriptApi): MolStarConstructor {
     }
     selectionHalos(on: boolean) {
       return api.selectionHalos(on);
+    }
+    fullscreen(on?: boolean) {
+      api.setFullscreen(on);
     }
     echo(text: string, options?: EchoOptions) {
       api.echo(text, options);

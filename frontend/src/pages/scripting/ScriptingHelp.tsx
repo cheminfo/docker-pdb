@@ -240,6 +240,12 @@ const MS_METHODS: MethodEntry[] = [
     example: 'ms.selectionHalos(true);',
   },
   {
+    signature: 'ms.fullscreen(on?)',
+    description:
+      'Toggle the viewer pane into / out of full-screen mode (only the protein and its toolbar remain on screen). Pass `true` to enter, `false` to exit, or call without an argument to flip the current state. Useful for animations that briefly switch into a cinematic close-up.',
+    example: 'ms.fullscreen(true); delay(3); ms.fullscreen(false);',
+  },
+  {
     signature: 'ms.echo(text, options?)',
     description:
       "On-canvas title (HTML overlay). Options: `{ position: 'top'|'middle'|'bottom', size, bold, italic, color }`. Independent of any loaded molecule.",

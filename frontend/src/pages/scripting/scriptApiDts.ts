@@ -367,6 +367,13 @@ declare class MolStar {
   fit(factor?: number, options?: CameraTransitionOptions): void;
   /** Show / hide Mol*'s yellow halos around the persistent selection. */
   selectionHalos(on: boolean): void;
+  /**
+   * Toggle the viewer pane's full-screen mode. \`true\` enters (only the
+   * protein and its toolbar remain on screen), \`false\` exits; omit to
+   * flip the current state. Use to drive animations that briefly switch
+   * into full-screen for a cinematic close-up.
+   */
+  fullscreen(on?: boolean): void;
   /** Show a text overlay on the canvas (independent of any molecule). */
   echo(text: string, options?: EchoOptions): void;
   /** Remove the current echo overlay. */

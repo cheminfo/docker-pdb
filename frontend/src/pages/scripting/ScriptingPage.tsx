@@ -10,6 +10,7 @@ import {
 } from '@blueprintjs/core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
+import { FullScreenProvider, useFullscreen } from 'react-science/ui';
 
 import FloatingWindow from '../../shared/FloatingWindow.tsx';
 import type { PdbViewerHandle } from '../../shared/PdbViewer.tsx';
@@ -90,6 +91,20 @@ export default function ScriptingPage() {
   // Controls cancellation of the currently-running script. The Stop button
   // calls `abort()`; the per-run `delay` then rejects with AbortError.
   const abortControllerRef = useRef<AbortController | null>(null);
+  // Populated by `FullscreenBridge`, which lives inside `FullScreenProvider`
+  // and forwards `useFullscreen()` out to the script API. Scripts call
+  // `ms.fullscreen(...)` which lands here.
+  const fullscreenControlRef = useRef<{
+    isFullScreen: boolean;
+    toggle: () => void;
+  } | null>(null);
+
+  const setFullscreen = useCallback((on?: boolean) => {
+    const control = fullscreenControlRef.current;
+    if (!control) return;
+    const desired = on === undefined ? !control.isFullScreen : on;
+    if (desired !== control.isFullScreen) control.toggle();
+  }, []);
 
   const fetchTask = useCallback(() => fetchPdbText(loadedId), [loadedId]);
   const pdbText = useAsync(fetchTask);
@@ -258,6 +273,7 @@ export default function ScriptingPage() {
         pdbText: pdbText.data,
         loadedPdbRef,
         setSwapping,
+        setFullscreen,
       });
       const controller = new AbortController();
       abortControllerRef.current = controller;
@@ -294,6 +310,7 @@ export default function ScriptingPage() {
       interactions,
       shapes,
       pdbText,
+      setFullscreen,
     ],
   );
 
@@ -355,6 +372,7 @@ export default function ScriptingPage() {
       pdbText: pdbText.data,
       loadedPdbRef,
       setSwapping,
+      setFullscreen,
     });
     // `api.reset()` does the full restore: clear every script-added
     // representation, drop the persistent selection, AND snap the camera
@@ -370,6 +388,7 @@ export default function ScriptingPage() {
     interactions,
     shapes,
     pdbText,
+    setFullscreen,
   ]);
 
   function handleLoadPdb() {
@@ -399,37 +418,45 @@ export default function ScriptingPage() {
     shapes !== null;
 
   const viewerPane = (
-    <Card className="panel scripting-viewer-panel">
-      {pdbText.status === 'loading' && (
-        <p className="placeholder">Loading {loadedId}…</p>
-      )}
-      {pdbText.status === 'error' && (
-        <p className="placeholder">
-          Could not load {loadedId}: {pdbText.error.message}
-        </p>
-      )}
-      {pdbText.status === 'success' && (
-        <div
-          className={
-            swapping
-              ? 'scripting-viewer-stack scripting-viewer-stack--swapping'
-              : 'scripting-viewer-stack'
-          }
-        >
-          <PdbViewer
-            ref={viewerHandleRef}
-            pdb={pdbText.data}
-            representation="auto"
-            spin={false}
-            background="white"
-            onPresetApplied={(plugin) =>
-              applyScriptingLoadDefaults(plugin as PluginContext)
-            }
-          />
-          <EchoOverlay entry={echoEntry} />
+    <FullScreenProvider>
+      {(fullscreenRef) => (
+        <div ref={fullscreenRef} className="scripting-viewer-fullscreen-wrap">
+          <FullscreenBridge controlRef={fullscreenControlRef} />
+          <Card className="panel scripting-viewer-panel">
+            {pdbText.status === 'loading' && (
+              <p className="placeholder">Loading {loadedId}…</p>
+            )}
+            {pdbText.status === 'error' && (
+              <p className="placeholder">
+                Could not load {loadedId}: {pdbText.error.message}
+              </p>
+            )}
+            {pdbText.status === 'success' && (
+              <div
+                className={
+                  swapping
+                    ? 'scripting-viewer-stack scripting-viewer-stack--swapping'
+                    : 'scripting-viewer-stack'
+                }
+              >
+                <PdbViewer
+                  ref={viewerHandleRef}
+                  pdb={pdbText.data}
+                  representation="auto"
+                  spin={false}
+                  background="white"
+                  onPresetApplied={(plugin) =>
+                    applyScriptingLoadDefaults(plugin as PluginContext)
+                  }
+                />
+                <EchoOverlay entry={echoEntry} />
+                <FullscreenToggleButton />
+              </div>
+            )}
+          </Card>
         </div>
       )}
-    </Card>
+    </FullScreenProvider>
   );
 
   const editorPane = (
@@ -580,6 +607,63 @@ function makeAbortAwareApi(api: ScriptApi, signal: AbortSignal): ScriptApi {
       };
     },
   });
+}
+
+interface FullscreenControl {
+  isFullScreen: boolean;
+  toggle: () => void;
+}
+
+interface FullscreenBridgeProps {
+  /** Page-owned ref that receives the live `useFullscreen()` state. */
+  controlRef: { current: FullscreenControl | null };
+}
+
+/**
+ * Lives inside `FullScreenProvider` so it can read the `useFullscreen()`
+ * context and forward the live `{ isFullScreen, toggle }` pair into the
+ * ref the page owns. That ref is what `ms.fullscreen(...)` ultimately
+ * pokes — the provider's context is not visible outside its subtree, so
+ * a bridge component is the cleanest way to surface it to the script API.
+ * @param props - Component props.
+ * @returns `null` (the component is purely side-effectful).
+ */
+function FullscreenBridge(props: FullscreenBridgeProps) {
+  const { controlRef } = props;
+  const fullscreen = useFullscreen();
+  useEffect(() => {
+    controlRef.current = {
+      isFullScreen: fullscreen.isFullScreen,
+      toggle: fullscreen.toggle,
+    };
+  });
+  return null;
+}
+
+/**
+ * Small floating button rendered at the top-right corner of the Mol*
+ * canvas. Clicking it enters or leaves full-screen via the
+ * `react-science` fullscreen context. The icon swaps between `expand-all`
+ * and `minimize` so the user can see at a glance which direction the
+ * click will take them.
+ * @returns Blueprint icon button.
+ */
+function FullscreenToggleButton() {
+  const fullscreen = useFullscreen();
+  return (
+    <Tooltip
+      content={fullscreen.isFullScreen ? 'Exit full screen' : 'Full screen'}
+      placement="left"
+    >
+      <Button
+        icon={fullscreen.isFullScreen ? 'minimize' : 'fullscreen'}
+        variant="minimal"
+        size="small"
+        className="scripting-fullscreen-button"
+        onClick={fullscreen.toggle}
+      />
+    </Tooltip>
+  );
 }
 
 function makeCancellableDelay(signal: AbortSignal): Delay {
