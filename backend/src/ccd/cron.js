@@ -22,6 +22,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 import { pino } from 'pino';
 
+import { getLigandsDB } from '../db/getDB.js';
 import {
   finalizeCcdHistory,
   heartbeatCcdHistory,
@@ -86,6 +87,13 @@ await runForever();
  * Forever loop: check cache age, refresh if stale, sleep until the next
  * refresh window. A periodic-task body wrapped in try/catch so a single
  * network blip never crashes the process and triggers a restart loop.
+ *
+ * The age-based "is the gz stale?" check is not enough on its own: a
+ * crashed earlier run leaves a fresh-mtime gz on disk with an empty
+ * `ligands` table, and the cron would then sleep for the full 7-day TTL
+ * before retrying. So we also force a refresh whenever the table itself
+ * looks empty — a self-healing path that recovers from any crashed
+ * predecessor on the next container restart.
  */
 async function runForever() {
   // Stale state from a previous crash would lock the UI into "running" forever.
@@ -95,8 +103,9 @@ async function runForever() {
   while (true) {
     const ageMs = await getCacheAgeMs();
     const triggered = triggerExists(KIND);
+    const ligandsEmpty = await isLigandsTableEmpty();
 
-    if (triggered || ageMs >= REFRESH_INTERVAL_MS) {
+    if (triggered || ageMs >= REFRESH_INTERVAL_MS || ligandsEmpty) {
       logger.info(
         {
           ageHours:
@@ -104,10 +113,13 @@ async function runForever() {
               ? null
               : Math.round(ageMs / 3_600_000),
           triggered,
+          ligandsEmpty,
         },
-        triggered
-          ? 'CCD refresh triggered manually'
-          : 'CCD cache stale; refreshing',
+        ligandsEmpty
+          ? 'Ligands table empty; running CCD seed regardless of gz mtime'
+          : triggered
+            ? 'CCD refresh triggered manually'
+            : 'CCD cache stale; refreshing',
       );
       await runOnce();
       continue;
@@ -124,6 +136,29 @@ async function runForever() {
     await sleepUntilTrigger(sleepMs);
   }
   /* eslint-enable no-await-in-loop */
+}
+
+/**
+ * Cheap check: does the `ligands` table look empty? Used as a second
+ * trigger for `runOnce` so the cron self-heals after any crashed
+ * predecessor that left a fresh gz on disk but never imported the rows.
+ * Errors are swallowed (cron should not crash because the DB is briefly
+ * unavailable) and treated as "not empty" — better to sleep than to
+ * thrash a half-open database.
+ * @returns {Promise<boolean>} True when the table has zero rows.
+ */
+async function isLigandsTableEmpty() {
+  try {
+    const db = await getLigandsDB();
+    const row = db.countLigands.get();
+    return (row?.n ?? 0) === 0;
+  } catch (error) {
+    logger.warn(
+      { error: String(error) },
+      'countLigands probe failed; assuming non-empty',
+    );
+    return false;
+  }
 }
 
 /**
