@@ -1,3 +1,4 @@
+/* eslint-disable no-console -- one-shot CLI script; plain stdout is the user-facing UX */
 // Local-development seed: ensures the sqlite database is initialized and
 // seeds the exact same deterministic set of PDB entries every time, so
 // `npm run dev` always produces the same database for every developer.
@@ -17,19 +18,16 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-import createDebug from 'debug';
-
 import * as common from './common.js';
 import getConfig from './config.js';
 import { getLigandsDB } from './db/getDB.js';
 import { SEED_IDS } from './seed.js';
 
-const debug = createDebug('pdb-sync:dev');
 const config = getConfig();
 
 const FIXTURES_DIR = join(import.meta.dirname, '../fixtures/pdb');
 
-await getLigandsDB();
+const db = await getLigandsDB();
 
 const files = [];
 const missing = [];
@@ -49,18 +47,19 @@ for (const pdbId of SEED_IDS) {
 }
 
 if (missing.length > 0) {
-  debug(
-    `Missing fixtures for ${missing.length} ids (run the rsync or add fixtures): ${missing.join(', ')}`,
+  console.warn(
+    `dev:seed — missing fixtures for ${missing.length} id(s): ${missing.join(', ')}`,
   );
 }
 
 if (files.length === 0) {
-  debug(
-    `No SEED_IDS files found under ${config.asymetrical.rsync.destination} or ${FIXTURES_DIR}.`,
+  console.warn(
+    `dev:seed — no SEED_IDS files found under ${config.asymetrical.rsync.destination} or ${FIXTURES_DIR}; database left untouched.`,
   );
 } else {
-  debug(`Ingesting ${files.length} SEED_IDS entries into sqlite.`);
+  console.log(`dev:seed — ingesting ${files.length} SEED_IDS entries…`);
   await common.processPdbs(files);
 }
 
-debug(`Dev seed complete. Try GET /v1/pdbs/<id>.`);
+const { n } = db.countPdbEntries.get();
+console.log(`dev:seed — done; pdb_entries now has ${n} row(s).`);
