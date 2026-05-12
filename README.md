@@ -158,8 +158,13 @@ on any machine with Node ≥ 22 installed.
 
 ```sh
 npm install
-npm run dev        # seed sqlite, then run the Fastify API + Vite dev server
+cp .env.example .env   # required: dev/test refuse to start without it
+npm run dev            # seed sqlite, then run the Fastify API + Vite dev server
 ```
+
+Both `npm run dev` and `npm run test` start with a `check-env` step that
+exits immediately with `ERROR: .env is required.` if `.env` is missing —
+better than the silent half-broken state you get otherwise.
 
 Under the hood it:
 
