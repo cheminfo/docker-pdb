@@ -9,7 +9,6 @@ import { createGunzip } from 'node:zlib';
 import { pino } from 'pino';
 
 import { getLigandsDB } from '../db/getDB.js';
-import { computeSSIndex } from '../util/computeSSIndex.js';
 
 import { buildMoleculeFromCcdBlock } from './buildMolecule.js';
 import { parseCcdMmcif } from './parseCcdMmcif.js';
@@ -32,8 +31,9 @@ const ccdDir = join(dataDir, 'ccd');
 export const ccdGzPath = join(ccdDir, 'components.cif.gz');
 
 /**
- * Seed (or refresh) the `ligands` and `ligand_ss_index` tables from the
- * wwPDB Chemical Component Dictionary.
+ * Seed (or refresh) the `ligands` table and its companion `ocl_ss_index`
+ * fingerprint table (managed by openchemlib-sqlite) from the wwPDB
+ * Chemical Component Dictionary.
  *
  * Steps:
  * 1. Download `components.cif.gz` to `data/ccd/` if it does not exist
@@ -41,8 +41,9 @@ export const ccdGzPath = join(ccdDir, 'components.cif.gz');
  * 2. Stream-gunzip + line-parse the file, yielding one chem_comp block
  * at a time.
  * 3. For each block, build an OCL Molecule from the atoms+bonds, derive
- * idCode + coordinates + MF + MW + SS index, and INSERT-OR-REPLACE
- * into SQLite.
+ * idCode + coordinates + MF + MW, UPSERT into `ligands`, and let
+ * `db.molecules.insert(id, molecule)` compute and persist the
+ * 512-bit fingerprint into `ocl_ss_index`.
  *
  * Single-atom entries (ions like NA, CL, ZN) and entries OCL cannot
  * encode (unknown elements, malformed bonds) are skipped — they cannot
@@ -77,9 +78,6 @@ export async function seedCCD({ force = false, onProgress } = {}) {
     logger.info({ path: ccdGzPath }, 'Reusing cached CCD archive');
   }
 
-  const insertLigand = db.upsertLigand;
-  const insertSSIndex = db.upsertLigandSSIndex;
-
   // Insert in small transactions (1000 rows each). One big transaction
   // gave better raw throughput, but it holds an exclusive write lock for
   // the full 5–30 min run, blocking the cron container's writes to
@@ -96,7 +94,7 @@ export async function seedCCD({ force = false, onProgress } = {}) {
     const lines = createInterface({ input: stream, crlfDelay: Infinity });
 
     for await (const block of parseCcdMmcif(lines)) {
-      const result = importBlock(block, insertLigand, insertSSIndex);
+      const result = importBlock(block, db);
       if (result === 'imported') imported++;
       else skipped++;
       inBatch++;
@@ -160,11 +158,10 @@ async function downloadCcd() {
  * `'imported'` on success or `'skipped'` for blocks we cannot handle
  * (single-atom ions, unknown elements, OCL encoding failure).
  * @param {object} block - One parsed CCD chem_comp block.
- * @param {{ run: (...args: unknown[]) => unknown }} insertLigand - Prepared INSERT for the `ligands` table.
- * @param {{ run: (...args: unknown[]) => unknown }} insertSSIndex - Prepared INSERT for the `ligand_ss_index` table.
+ * @param {import('../db/getDB.js').LigandsDB} db - Open ligands database.
  * @returns {'imported' | 'skipped'} Whether the block produced a row.
  */
-function importBlock(block, insertLigand, insertSSIndex) {
+function importBlock(block, db) {
   const molecule = buildMoleculeFromCcdBlock(block);
   if (!molecule) return 'skipped';
   let idCode;
@@ -181,7 +178,7 @@ function importBlock(block, insertLigand, insertSSIndex) {
   }
   if (!idCode) return 'skipped';
 
-  insertLigand.run(
+  const row = db.upsertLigand.get(
     block.code,
     block.name,
     block.formula,
@@ -192,18 +189,9 @@ function importBlock(block, insertLigand, insertSSIndex) {
     mw,
     block.atoms.length,
   );
-  const ssIndex = computeSSIndex(molecule);
-  insertSSIndex.run(
-    block.code,
-    ssIndex.ss_index0,
-    ssIndex.ss_index1,
-    ssIndex.ss_index2,
-    ssIndex.ss_index3,
-    ssIndex.ss_index4,
-    ssIndex.ss_index5,
-    ssIndex.ss_index6,
-    ssIndex.ss_index7,
-  );
+  // openchemlib-sqlite computes the 512-bit fingerprint and writes the
+  // matching row to the runtime-managed `ocl_ss_index` table.
+  db.molecules.insert(row.id, molecule);
   return 'imported';
 }
 

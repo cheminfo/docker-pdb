@@ -18,8 +18,8 @@ test('migrations create the full sqlite schema in an empty database', async () =
   );
   for (const expected of [
     'ccd_history',
-    'ligand_ss_index',
     'ligands',
+    'ocl_ss_index',
     'pdb_chains',
     'pdb_entries',
     'pdb_formulas',
@@ -31,6 +31,8 @@ test('migrations create the full sqlite schema in an empty database', async () =
     'pdb_sheets',
     'pdb_title_fts',
     'rsync_history',
+    'stats_omega_by_year',
+    'stats_omega_pairs_by_year',
   ]) {
     expect(tables.has(expected), `missing table ${expected}`).toBe(true);
   }
@@ -39,10 +41,7 @@ test('migrations create the full sqlite schema in an empty database', async () =
 
 test('insert + read round-trip through the prepared-statement wrapper', async () => {
   const db = await getInMemoryLigandsDB();
-  db.statement(
-    `INSERT INTO ligands (code, name, formula, type, id_code, coordinates, mf, mw, nb_atoms)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
+  const inserted = db.upsertLigand.get(
     'BNZ',
     'BENZENE',
     'C6 H6',
@@ -54,52 +53,23 @@ test('insert + read round-trip through the prepared-statement wrapper', async ()
     6,
   );
 
+  expect(typeof inserted.id).toBe('number');
+
   const row = db
     .statement(
-      'SELECT code, name, mf, mw, nb_atoms FROM ligands WHERE code = ?',
+      'SELECT id, code, name, mf, mw, nb_atoms FROM ligands WHERE code = ?',
     )
     .get('BNZ');
 
   // node:sqlite rows have a null prototype, so spread into a plain object.
   expect({ ...row }).toStrictEqual({
+    id: inserted.id,
     code: 'BNZ',
     name: 'BENZENE',
     mf: 'C6H6',
     mw: 78.114,
     nb_atoms: 6,
   });
-
-  db.close();
-});
-
-test('ss-index row writes and reads as bigint', async () => {
-  const db = await getInMemoryLigandsDB();
-  db.statement(
-    `INSERT INTO ligands (code, name, formula, type, id_code, coordinates, mf, mw, nb_atoms)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    'BNZ',
-    'BENZENE',
-    'C6 H6',
-    'NON-POLYMER',
-    'gFp@DiTt@@@',
-    '!coords',
-    'C6H6',
-    78.114,
-    6,
-  );
-  db.statement(
-    `INSERT INTO ligand_ss_index
-       (code, ss_index0, ss_index1, ss_index2, ss_index3, ss_index4, ss_index5, ss_index6, ss_index7)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run('BNZ', 1n, 2n, 3n, 4n, 5n, 6n, 7n, 8n);
-
-  const indexRow = db
-    .statement('SELECT * FROM ligand_ss_index WHERE code = ?')
-    .get('BNZ');
-
-  expect(indexRow.ss_index0).toBe(1);
-  expect(indexRow.ss_index7).toBe(8);
 
   db.close();
 });

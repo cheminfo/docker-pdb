@@ -1,13 +1,17 @@
--- Initial sqlite schema for pdb-quickview. Replaces every CouchDB design-doc
--- view and Mango query the previous CouchDB-backed deployment relied on, plus
--- ligand-substructure and per-instance ligand pose tables.
+-- Consolidated initial sqlite schema for pdb-quickview. This single migration
+-- replaces the previous 001..005 chain — the database is rebuilt from scratch
+-- whenever this file changes.
 --
--- Tables broadly group into three areas:
---   * pdb_entries + child tables  → parsed PDB metadata (one row per entry)
---   * ligands + ligand_ss_index   → CCD reference + 8 × 64-bit OCL fingerprint
---   * pdb_ligands + …_instances   → links between PDB entries and ligands
---
--- Plus rsync_history (run log) and pdb_title_fts (FTS5 title search).
+-- Tables broadly group into four areas:
+--   * pdb_entries + child tables     → parsed PDB metadata (one row per entry)
+--   * ligands                        → CCD reference; surrogate INTEGER id
+--                                       used as the foreign key for the
+--                                       openchemlib-sqlite `ocl_ss_index`
+--                                       table that is created at runtime by
+--                                       MoleculesDBSQLite.migrate()
+--   * pdb_ligands + …_instances      → links between PDB entries and ligands
+--   * stats_omega_*, ccd_history,    → derived/operational tables
+--     rsync_history, pdb_title_fts
 
 -- ---- pdb_entries (one row per PDB entry, drives the read API and stats) ----
 
@@ -130,11 +134,19 @@ CREATE TABLE IF NOT EXISTS pdb_omega_pairs (
 
 CREATE INDEX IF NOT EXISTS idx_pdb_omega_pairs_residues ON pdb_omega_pairs(residue1, residue2);
 
--- ---- ligands (CCD reference table + 8 × 64-bit OCL fingerprint) ------------
-
+-- ---- ligands (CCD reference table) -----------------------------------------
+--
+-- `id` is a surrogate INTEGER primary key — required because the
+-- substructure-search index table (`ocl_ss_index`) created at runtime by
+-- openchemlib-sqlite's `MoleculesDBSQLite.migrate()` references this table
+-- via an INTEGER foreign key (`entry_id INTEGER PRIMARY KEY REFERENCES
+-- ligands(id)`). `code` keeps its UNIQUE constraint so all existing
+-- `pdb_ligands.ligand_code` / `pdb_ligand_instances.ligand_code` link rows
+-- continue to point at the human-readable CCD three-letter code.
 CREATE TABLE IF NOT EXISTS ligands
 (
-  code        TEXT    NOT NULL PRIMARY KEY,
+  id          INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  code        TEXT    NOT NULL UNIQUE,
   name        TEXT    NOT NULL DEFAULT '',
   formula     TEXT    NOT NULL DEFAULT '',
   type        TEXT    NOT NULL DEFAULT '',
@@ -148,26 +160,10 @@ CREATE TABLE IF NOT EXISTS ligands
 
 CREATE INDEX IF NOT EXISTS idx_ligands_id_code ON ligands(id_code);
 
--- 8 × 64-bit substructure-search fingerprint per ligand.
--- Computed from OCL's 16 × Uint32 molecule index reinterpreted as BigInt64.
-CREATE TABLE IF NOT EXISTS ligand_ss_index
-(
-  code      TEXT    NOT NULL PRIMARY KEY,
-  ss_index0 INTEGER NOT NULL DEFAULT 0,
-  ss_index1 INTEGER NOT NULL DEFAULT 0,
-  ss_index2 INTEGER NOT NULL DEFAULT 0,
-  ss_index3 INTEGER NOT NULL DEFAULT 0,
-  ss_index4 INTEGER NOT NULL DEFAULT 0,
-  ss_index5 INTEGER NOT NULL DEFAULT 0,
-  ss_index6 INTEGER NOT NULL DEFAULT 0,
-  ss_index7 INTEGER NOT NULL DEFAULT 0,
-  FOREIGN KEY (code) REFERENCES ligands(code) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS idx_ligand_ss_index ON ligand_ss_index(
-  ss_index0, ss_index1, ss_index2, ss_index3,
-  ss_index4, ss_index5, ss_index6, ss_index7
-);
+-- Note: the substructure-search fingerprint table `ocl_ss_index` is not
+-- declared here. It is created (and kept up to date) at runtime by
+-- `openchemlib-sqlite`'s `MoleculesDBSQLite.migrate()` — see
+-- `backend/src/db/getDB.js`.
 
 -- Link table: which PDB entries contain which ligand. Populated incrementally
 -- by the rsync update pipeline as each PDB is parsed.
@@ -218,6 +214,61 @@ CREATE TABLE IF NOT EXISTS rsync_history (
 );
 
 CREATE INDEX IF NOT EXISTS idx_rsync_history_type_finished ON rsync_history(type, finished_at DESC);
+
+-- ---- ccd_history (one row per CCD refresh run) -----------------------------
+--
+-- Mirrors `rsync_history`. Status 'running' covers in-flight imports so that
+-- a SIGKILL/OOM during the multi-minute parse phase still leaves a row to
+-- inspect in /v1/diagnostics. `pid` and `last_heartbeat_at` let the
+-- diagnostics view distinguish a live run from an orphaned crash-leftover.
+
+CREATE TABLE IF NOT EXISTS ccd_history (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  started_at        TEXT    NOT NULL,
+  finished_at       TEXT,
+  duration_ms       INTEGER,
+  status            TEXT    NOT NULL CHECK (status IN ('running', 'success', 'failed')),
+  imported_count    INTEGER NOT NULL DEFAULT 0,
+  skipped_count     INTEGER NOT NULL DEFAULT 0,
+  bytes_on_disk     INTEGER,
+  error             TEXT,
+  pid               INTEGER,
+  last_heartbeat_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_ccd_history_started
+  ON ccd_history(started_at DESC);
+
+-- ---- pre-rolled omega stats ------------------------------------------------
+--
+-- One row per year for the summary cards / per-year bar chart; one row per
+-- (year, residue1, residue2) triple for the pair heatmap. Regenerated at the
+-- end of every rsync cycle (and after the first-boot rebuild-from-disk seed)
+-- from a single transaction: DELETE FROM stats_*; INSERT … SELECT … GROUP BY.
+-- Entries with NULL or non-positive `year` are bucketed under `year = 0`,
+-- so the global summary still picks them up while the per-year and range
+-- queries can filter them out with `WHERE year > 0`.
+
+CREATE TABLE IF NOT EXISTS stats_omega_by_year (
+  year                INTEGER NOT NULL PRIMARY KEY,
+  cis_count           INTEGER NOT NULL DEFAULT 0,
+  trans_count         INTEGER NOT NULL DEFAULT 0,
+  twisted_count       INTEGER NOT NULL DEFAULT 0,
+  peptide_bonds_count INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS stats_omega_pairs_by_year (
+  year          INTEGER NOT NULL,
+  residue1      TEXT    NOT NULL,
+  residue2      TEXT    NOT NULL,
+  cis_count     INTEGER NOT NULL DEFAULT 0,
+  twisted_count INTEGER NOT NULL DEFAULT 0,
+  total_count   INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (year, residue1, residue2)
+);
+
+CREATE INDEX IF NOT EXISTS idx_stats_omega_pairs_by_year_residues
+  ON stats_omega_pairs_by_year(residue1, residue2);
 
 -- ---- pdb_title_fts (FTS5 title keyword search; replaces /find Mango) -------
 

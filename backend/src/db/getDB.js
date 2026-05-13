@@ -2,6 +2,8 @@ import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
+import OCL from 'openchemlib';
+import { MoleculesDBSQLite } from 'openchemlib-sqlite';
 import { pino } from 'pino';
 import Postgrator from 'postgrator';
 
@@ -100,7 +102,7 @@ export async function getInMemoryLigandsDB() {
   const db = new DatabaseSync(':memory:');
   applyPragmas(db);
   await applyMigrations(db);
-  return new LigandsDB(db);
+  return new LigandsDB(db, buildMoleculesDB(db));
 }
 
 async function initDB() {
@@ -110,8 +112,25 @@ async function initDB() {
   const db = new DatabaseSync(dbPath);
   applyPragmas(db);
   await applyMigrations(db);
-  instance = new LigandsDB(db);
+  instance = new LigandsDB(db, buildMoleculesDB(db));
   return instance;
+}
+
+/**
+ * Instantiate the openchemlib-sqlite molecules wrapper against the `ligands`
+ * table and apply its `migrate()` so the runtime-managed `ocl_ss_index`
+ * fingerprint table exists. Called once per `DatabaseSync` connection.
+ * @param {DatabaseSync} db - Open database connection to wrap.
+ * @returns {MoleculesDBSQLite} The configured molecules-db instance.
+ */
+function buildMoleculesDB(db) {
+  const molecules = new MoleculesDBSQLite(db, OCL, {
+    entriesTable: 'ligands',
+    pkColumn: 'id',
+    idCodeColumn: 'id_code',
+  });
+  molecules.migrate();
+  return molecules;
 }
 
 /**
@@ -159,10 +178,14 @@ export class LigandsDB {
   /**
    * Wrap an open database connection.
    * @param {DatabaseSync} db - Open database connection to wrap.
+   * @param {MoleculesDBSQLite} molecules - openchemlib-sqlite wrapper used
+   *   for substructure / exact / similarity searches and for indexing each
+   *   newly-inserted ligand into the `ocl_ss_index` fingerprint table.
    */
-  constructor(db) {
+  constructor(db, molecules) {
     this.db = db;
     this.cache = new Map();
+    this.molecules = molecules;
   }
 
   /**
@@ -458,6 +481,10 @@ export class LigandsDB {
   }
 
   get upsertLigand() {
+    // UPSERT (rather than INSERT OR REPLACE) so the row's `id` survives a
+    // refresh — the runtime-managed `ocl_ss_index.entry_id` foreign key
+    // would otherwise be orphaned on every CCD reseed. RETURNING id lets
+    // the caller pass that id to `db.molecules.insert(id, molecule)`.
     return this.statement(
       `INSERT INTO ligands (code, name, formula, type, id_code, coordinates, mf, mw, nb_atoms, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, cast(unixepoch('subsec') * 1000 as integer))
@@ -470,7 +497,8 @@ export class LigandsDB {
          mf = excluded.mf,
          mw = excluded.mw,
          nb_atoms = excluded.nb_atoms,
-         updated_at = excluded.updated_at`,
+         updated_at = excluded.updated_at
+       RETURNING id`,
     );
   }
 
@@ -490,42 +518,6 @@ export class LigandsDB {
        FROM ligands l
        ORDER BY nbPdbs DESC
        LIMIT ?`,
-    );
-  }
-
-  // -- ligand_ss_index --
-
-  get upsertLigandSSIndex() {
-    return this.statement(
-      `INSERT INTO ligand_ss_index
-         (code, ss_index0, ss_index1, ss_index2, ss_index3, ss_index4, ss_index5, ss_index6, ss_index7)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(code) DO UPDATE SET
-         ss_index0 = excluded.ss_index0,
-         ss_index1 = excluded.ss_index1,
-         ss_index2 = excluded.ss_index2,
-         ss_index3 = excluded.ss_index3,
-         ss_index4 = excluded.ss_index4,
-         ss_index5 = excluded.ss_index5,
-         ss_index6 = excluded.ss_index6,
-         ss_index7 = excluded.ss_index7`,
-    );
-  }
-
-  get screenLigandSSIndex() {
-    return this.statement(
-      `SELECT l.code, l.name, l.mf, l.mw, l.id_code, l.coordinates,
-              COALESCE((SELECT COUNT(*) FROM pdb_ligands p WHERE p.ligand_code = l.code), 0) AS nb_pdbs
-       FROM ligands l
-       JOIN ligand_ss_index x ON x.code = l.code
-       WHERE (x.ss_index0 & ?) = ?
-         AND (x.ss_index1 & ?) = ?
-         AND (x.ss_index2 & ?) = ?
-         AND (x.ss_index3 & ?) = ?
-         AND (x.ss_index4 & ?) = ?
-         AND (x.ss_index5 & ?) = ?
-         AND (x.ss_index6 & ?) = ?
-         AND (x.ss_index7 & ?) = ?`,
     );
   }
 

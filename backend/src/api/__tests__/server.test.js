@@ -2,7 +2,6 @@ import OCL from 'openchemlib';
 import { afterAll, beforeAll, expect, test } from 'vitest';
 
 import { getInMemoryLigandsDB } from '../../db/getDB.js';
-import { computeSSIndex } from '../../util/computeSSIndex.js';
 import { buildApp } from '../server.js';
 
 let db;
@@ -20,10 +19,7 @@ beforeAll(async () => {
     const molecule = OCL.Molecule.fromSmiles(smiles);
     const { idCode, coordinates } = molecule.getIDCodeAndCoordinates();
     const formula = molecule.getMolecularFormula();
-    db.statement(
-      `INSERT INTO ligands (code, name, formula, type, id_code, coordinates, mf, mw, nb_atoms)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
+    const { id } = db.upsertLigand.get(
       code,
       name,
       formula.formula,
@@ -34,22 +30,7 @@ beforeAll(async () => {
       formula.relativeWeight,
       molecule.getAllAtoms(),
     );
-    const ssIndex = computeSSIndex(molecule);
-    db.statement(
-      `INSERT INTO ligand_ss_index
-         (code, ss_index0, ss_index1, ss_index2, ss_index3, ss_index4, ss_index5, ss_index6, ss_index7)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
-      code,
-      ssIndex.ss_index0,
-      ssIndex.ss_index1,
-      ssIndex.ss_index2,
-      ssIndex.ss_index3,
-      ssIndex.ss_index4,
-      ssIndex.ss_index5,
-      ssIndex.ss_index6,
-      ssIndex.ss_index7,
-    );
+    db.molecules.insert(id, molecule);
   }
   // Three PDBs link to BNZ, two to NAP, none to ETH.
   for (const [pdbId, code] of [

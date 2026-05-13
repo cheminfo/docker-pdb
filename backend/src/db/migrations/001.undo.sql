@@ -1,7 +1,17 @@
--- Drop everything 001.do.sql created. Order goes child → parent so foreign
--- keys do not block the drops, and indexes go before their tables.
+-- Drop everything 001.do.sql created, plus the runtime-managed
+-- `ocl_ss_index` table (created by openchemlib-sqlite's
+-- `MoleculesDBSQLite.migrate()` and not declared in 001.do.sql).
+-- Order goes child → parent so foreign keys do not block the drops,
+-- and indexes go before their tables.
 
 DROP TABLE IF EXISTS pdb_title_fts;
+
+DROP INDEX IF EXISTS idx_stats_omega_pairs_by_year_residues;
+DROP TABLE IF EXISTS stats_omega_pairs_by_year;
+DROP TABLE IF EXISTS stats_omega_by_year;
+
+DROP INDEX IF EXISTS idx_ccd_history_started;
+DROP TABLE IF EXISTS ccd_history;
 
 DROP INDEX IF EXISTS idx_rsync_history_type_finished;
 DROP TABLE IF EXISTS rsync_history;
@@ -14,8 +24,7 @@ DROP INDEX IF EXISTS idx_pdb_ligands_pdb;
 DROP INDEX IF EXISTS idx_pdb_ligands_code;
 DROP TABLE IF EXISTS pdb_ligands;
 
-DROP INDEX IF EXISTS idx_ligand_ss_index;
-DROP TABLE IF EXISTS ligand_ss_index;
+DROP TABLE IF EXISTS ocl_ss_index;
 
 DROP INDEX IF EXISTS idx_ligands_id_code;
 DROP TABLE IF EXISTS ligands;
