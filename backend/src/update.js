@@ -17,6 +17,7 @@ import Rsync from 'rsync';
 import * as common from './common.js';
 import getConfig from './config.js';
 import { recordRsyncHistory } from './db/upsertPdbEntry.js';
+import { getPymolConcurrency } from './util/concurrencyPool.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -104,6 +105,8 @@ export default async function update(options = {}) {
   if (asymUnit) {
     debug('Updating asymmetrical units...');
     await options.onPhase?.({ phase: 'rsync-asym' });
+    // Single worker on purpose: asym ingest is sqlite-only and a single
+    // writer avoids busy_timeout contention.
     await doRsync(
       config.asymetrical.rsync.source,
       config.asymetrical.rsync.destination,
@@ -117,6 +120,7 @@ export default async function update(options = {}) {
       options.onActivity
         ? (entry) => options.onActivity({ phase: 'rsync-asym', ...entry })
         : undefined,
+      { workerCount: 1 },
     );
     debug('Done updating asymmetrical units...');
   }
@@ -140,6 +144,10 @@ export default async function update(options = {}) {
       options.onActivity
         ? (entry) => options.onActivity({ phase: 'rsync-assembly', ...entry })
         : undefined,
+      // PyMol is the bottleneck of the assembly phase; fan out so the
+      // freshly-arrived `.pdb1.gz` files render in parallel up to the
+      // operator's `PYMOL_CONCURRENCY` budget.
+      { workerCount: getPymolConcurrency() },
     );
     debug('Done updating biological assemblies...');
   }
@@ -191,6 +199,10 @@ function parseRsyncBytes(text) {
  *   Optional callback fired on sub-phase transitions and after each rsync
  *   `--info=progress2` line. Sub-phase transitions should propagate to the
  *   running marker immediately (do not throttle them away).
+ * @param {{ workerCount?: number }} [options] - Tuning options. `workerCount`
+ *   (default 1) controls how many ingest workers consume from the chokidar
+ *   queue in parallel. Use 1 for sqlite-only ingest (asym phase) and a higher
+ *   value for PyMol-bound ingest (assembly phase).
  */
 async function doRsync(
   source,
@@ -201,7 +213,9 @@ async function doRsync(
   type,
   onProgress,
   onActivity,
+  options = {},
 ) {
+  const workerCount = Math.max(1, options.workerCount ?? 1);
   await mkdir(destination, { recursive: true });
   const startedAt = new Date().toISOString();
 
@@ -216,12 +230,18 @@ async function doRsync(
 
   const changed = { deleted: [], updated: [] };
   const queue = [];
-  let wakeWorker = null;
+  // Each idle worker pushes its `resolve` onto `wakeWorkers` and parks; a
+  // single chokidar `add` event wakes exactly one of them.
+  const wakeWorkers = [];
   let inputClosed = false;
   const waitForSignal = () =>
     new Promise((resolve) => {
-      wakeWorker = resolve;
+      wakeWorkers.push(resolve);
     });
+  const wakeOne = () => {
+    const wake = wakeWorkers.shift();
+    if (wake) wake();
+  };
 
   const watcher = watch(destination, {
     persistent: true,
@@ -235,16 +255,13 @@ async function doRsync(
   watcher.on('add', (file) => {
     if (!file.endsWith('.gz')) return;
     queue.push(file);
-    if (wakeWorker) {
-      wakeWorker();
-      wakeWorker = null;
-    }
+    wakeOne();
   });
 
   let processed = 0;
   const renderStats = { rendered: 0, skipped: 0, failed: 0 };
-  /* eslint-disable no-await-in-loop -- intentional sequential sqlite writes */
-  const workerDone = (async () => {
+  /* eslint-disable no-await-in-loop -- worker pulls items one at a time */
+  const runWorker = async () => {
     while (true) {
       if (queue.length === 0) {
         if (inputClosed) return;
@@ -271,8 +288,11 @@ async function doRsync(
         debug('Process error', file, error);
       }
     }
-  })();
+  };
   /* eslint-enable no-await-in-loop */
+  const workersDone = Promise.all(
+    Array.from({ length: workerCount }, () => runWorker()),
+  );
 
   debug('Rsync from', source, 'to', destination);
   await new Promise((resolve, reject) => {
@@ -366,11 +386,11 @@ async function doRsync(
   // Let chokidar's awaitWriteFinish settle on the last few files.
   await delay(POST_RSYNC_GRACE_MS);
   inputClosed = true;
-  if (wakeWorker) {
-    wakeWorker();
-    wakeWorker = null;
+  // Wake every parked worker so they observe `inputClosed` and exit.
+  while (wakeWorkers.length > 0) {
+    wakeOne();
   }
-  await workerDone;
+  await workersDone;
   await watcher.close();
   debug('All queued files processed');
 

@@ -13,6 +13,11 @@ services:
     restart: unless-stopped
     init: true
     pids_limit: 256
+    # Sized for PYMOL_CONCURRENCY parallel pymol child processes. Both
+    # come from .env so operators can tune them together; bump the
+    # memory cap when raising the worker count.
+    mem_limit: ${PYMOL_MEMORY_LIMIT:-16g}
+    memswap_limit: ${PYMOL_MEMORY_LIMIT:-16g}
     ulimits:
       core: 0
     logging:

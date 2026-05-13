@@ -11,6 +11,7 @@ import { glob } from 'glob';
 import * as common from './common.js';
 import getConfig from './config.js';
 import { getLigandsDB } from './db/getDB.js';
+import { runWithConcurrency } from './util/concurrencyPool.js';
 
 const debug = createDebug('pdb-sync:rebuild');
 const config = getConfig();
@@ -183,8 +184,7 @@ export async function assembly(options = {}) {
   let processed = 0;
   let lastEntryId;
   const renderStats = { rendered: 0, skipped: 0, failed: 0 };
-  /* eslint-disable no-await-in-loop -- pymol is heavy; render sequentially */
-  for (const file of files) {
+  await runWithConcurrency(files, async (file) => {
     try {
       const fileStats = await common.processPdbAssembly(file);
       renderStats.rendered += fileStats.rendered;
@@ -201,8 +201,7 @@ export async function assembly(options = {}) {
       lastEntryId,
       renderStats,
     });
-  }
-  /* eslint-enable no-await-in-loop */
+  });
 
   return { processed, total: files.length, lastEntryId, renderStats };
 }

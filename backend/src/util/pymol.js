@@ -37,8 +37,13 @@ export default async function pymol(id, pdb, outputPath, options) {
   const { width = 200, height = 200 } = options ?? {};
   debug(`pymol ${width} x ${height} -> ${outputPath}`);
 
-  const tmpPdb = `/tmp/${id}${width}x${height}.pdb`;
-  const tmpPng = `/tmp/${id}${width}x${height}.png`;
+  // Per-call random suffix so 32 parallel renders (different PDBs or
+  // re-renders of the same PDB at different sizes) never collide on the
+  // shared /tmp dir even when the same (id, width, height) is in flight
+  // more than once.
+  const tag = `${id}-${width}x${height}-${process.pid}-${crypto.randomUUID()}`;
+  const tmpPdb = `/tmp/${tag}.pdb`;
+  const tmpPng = `/tmp/${tag}.png`;
   await writeFile(tmpPdb, pdb);
 
   const cmd = `pymol -c ${tmpPdb} -d "as ribbon;spectrum count;set seq_view; set all_states; set opaque_background, off;" -g ${tmpPng}`;

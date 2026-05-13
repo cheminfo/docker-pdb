@@ -10,6 +10,7 @@ import getConfig from './config.js';
 import { getLigandsDB } from './db/getDB.js';
 import { replacePdbLigandInstancesSync } from './db/insertPdbLigandInstances.js';
 import { markAssemblySync, upsertPdbEntrySync } from './db/upsertPdbEntry.js';
+import { runWithConcurrency } from './util/concurrencyPool.js';
 import { parse as parsePdb } from './util/pdbParser.js';
 import pymol, { pymolImagePath } from './util/pymol.js';
 
@@ -211,21 +212,25 @@ export async function processPdbAssembly(filename, options = {}) {
 }
 
 /**
- * Process a list of bio-assembly files sequentially. Errors on one file do
+ * Process a list of bio-assembly files with bounded concurrency (`PYMOL_CONCURRENCY`
+ * file workers in flight). Each worker renders that file's sizes sequentially,
+ * so peak concurrent PyMol processes ≈ the pool size. Errors on one file do
  * not stop the remaining files.
  * @param {string[]} files - Paths to `.pdb1.gz` files.
  * @returns {Promise<void>}
  */
 export async function processPdbAssemblies(files) {
-  /* eslint-disable no-await-in-loop -- pymol is heavy; render sequentially */
-  for (const file of files) {
-    try {
+  await runWithConcurrency(
+    files,
+    async (file) => {
       await processPdbAssembly(file);
-    } catch (error) {
-      debug('Exception for file:', file, error);
-    }
-  }
-  /* eslint-enable no-await-in-loop */
+    },
+    {
+      onError: (error, file) => {
+        debug('Exception for file:', file, error);
+      },
+    },
+  );
 }
 
 /**
