@@ -34,4 +34,12 @@ chown app:app \
   /app/data/ccd \
   /app/data/control
 
+# Fix ownership of any subdirectories that were created by root in a prior
+# run (e.g. before gosu was introduced). We only touch directory inodes —
+# never file data — so this finishes in seconds even on a fully-populated
+# install (~2000 directory entries across the three trees).
+find /app/data/pdb /app/data/pdb-assembly /app/data/pymol \
+  -maxdepth 3 -type d ! -user app \
+  -exec chown app:app {} +
+
 exec gosu app "$@"
