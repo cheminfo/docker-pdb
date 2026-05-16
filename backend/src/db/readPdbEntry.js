@@ -14,12 +14,102 @@
 export function readPdbDoc(db, pdbId) {
   const entry = db.selectPdbEntry.get(pdbId);
   if (!entry) return null;
+  return assembleDoc(
+    entry,
+    db.selectPdbChains.all(pdbId),
+    db.selectPdbHelices.all(pdbId),
+    db.selectPdbSheets.all(pdbId),
+    db.selectPdbFormulas.all(pdbId),
+  );
+}
 
-  const chains = db.selectPdbChains.all(pdbId);
-  const helices = db.selectPdbHelices.all(pdbId);
-  const sheets = db.selectPdbSheets.all(pdbId);
-  const formulas = db.selectPdbFormulas.all(pdbId);
+/**
+ * Hydrate multiple PDB entries using 5 batch IN-queries instead of the
+ * N×5 per-entry pattern. Reduces query count from O(n) to O(1) regardless
+ * of result-set size. The returned array preserves the order of `ids` and
+ * silently omits any id that does not exist in the database.
+ * @param {import('./getDB.js').LigandsDB} db - Open ligands database.
+ * @param {string[]} ids - Uppercased PDB ids (preserves caller order).
+ * @returns {object[]} Array of doc-shaped objects (same shape as readPdbDoc).
+ */
+export function readPdbDocs(db, ids) {
+  if (ids.length === 0) return [];
+  const ph = ids.map(() => '?').join(',');
 
+  const entries = db
+    .statement(
+      `SELECT id, title, experiment, year, nb_residues, nb_modified_residues,
+              nb_chains, nb_helices, nb_sheets, nb_ligands, iep,
+              omega_nb_cis, omega_nb_trans, omega_nb_twisted, omega_nb_peptide_bonds,
+              residue_stats_json, percentage_aa_json, has_assembly
+       FROM pdb_entries WHERE id IN (${ph})`,
+    )
+    .all(...ids);
+
+  if (entries.length === 0) return [];
+
+  const entryIds = entries.map((e) => e.id);
+  const eph = entryIds.map(() => '?').join(',');
+
+  const chainRows = db
+    .statement(
+      `SELECT pdb_id, chain_id, molecule, synonym, ec, nb_residues, iep
+       FROM pdb_chains WHERE pdb_id IN (${eph}) ORDER BY pdb_id, chain_id`,
+    )
+    .all(...entryIds);
+
+  const helixRows = db
+    .statement(
+      `SELECT pdb_id, chain, res_from, res_to, kind
+       FROM pdb_helices WHERE pdb_id IN (${eph}) ORDER BY pdb_id, idx`,
+    )
+    .all(...entryIds);
+
+  const sheetRows = db
+    .statement(
+      `SELECT pdb_id, chain, res_from, res_to
+       FROM pdb_sheets WHERE pdb_id IN (${eph}) ORDER BY pdb_id, idx`,
+    )
+    .all(...entryIds);
+
+  const formulaRows = db
+    .statement(
+      `SELECT pdb_id, label, mf, mw, count, name
+       FROM pdb_formulas WHERE pdb_id IN (${eph}) ORDER BY pdb_id, label`,
+    )
+    .all(...entryIds);
+
+  const chainsByPdb = groupByPdbId(chainRows);
+  const helicesByPdb = groupByPdbId(helixRows);
+  const sheetsByPdb = groupByPdbId(sheetRows);
+  const formulasByPdb = groupByPdbId(formulaRows);
+
+  const entryMap = new Map(entries.map((e) => [e.id, e]));
+  return ids
+    .map((id) => {
+      const entry = entryMap.get(id);
+      if (!entry) return null;
+      return assembleDoc(
+        entry,
+        chainsByPdb[id] ?? [],
+        helicesByPdb[id] ?? [],
+        sheetsByPdb[id] ?? [],
+        formulasByPdb[id] ?? [],
+      );
+    })
+    .filter(Boolean);
+}
+
+function groupByPdbId(rows) {
+  const map = {};
+  for (const row of rows) {
+    if (!map[row.pdb_id]) map[row.pdb_id] = [];
+    map[row.pdb_id].push(row);
+  }
+  return map;
+}
+
+function assembleDoc(entry, chains, helices, sheets, formulas) {
   const chain = {};
   for (const row of chains) {
     chain[row.chain_id] = {
@@ -31,7 +121,6 @@ export function readPdbDoc(db, pdbId) {
       iep: row.iep ?? undefined,
     };
   }
-
   return {
     _id: entry.id,
     title: entry.title,
@@ -58,7 +147,6 @@ export function readPdbDoc(db, pdbId) {
     formula: formulas.map((row) => ({
       label: row.label,
       mf: row.mf ?? '',
-      // Frontend treats `mw` as a string (parses it later); preserve that shape.
       mw: row.mw === null ? '' : String(row.mw),
       number: row.count,
       ...(row.name ? { name: row.name } : {}),

@@ -4,22 +4,22 @@ const debug = createDebug('pdb-sync:rollup');
 
 /**
  * Regenerate the omega-stats rollup tables (`stats_omega_by_year`,
- * `stats_omega_pairs_by_year`) from the per-PDB source-of-truth tables
- * (`pdb_entries`, `pdb_omega_pairs`). Runs as a single transaction, so
- * readers never see a half-populated rollup.
+ * `stats_omega_pairs_by_year`) from the per-PDB source-of-truth tables.
+ *
+ * Runs as two separate transactions with an event-loop yield between them
+ * so concurrent writers (rsync container) are never locked out for the full
+ * duration of both rebuilds. Readers using WAL mode are never blocked.
  *
  * Called after the first-boot rebuild-from-disk seed and at the end of
  * every rsync cycle — the rollup is a regenerated derived view, not an
  * incremental aggregate maintained per upsert.
- *
- * Entries with NULL or non-positive `year` are bucketed under
- * `year = 0` so the global summary (sum over all rows) still picks
- * them up while per-year / range queries can filter them out with
- * `WHERE year > 0`.
  * @param {import('./getDB.js').LigandsDB} db - Open ligands DB.
+ * @returns {Promise<void>}
  */
-export function rebuildOmegaStatsRollup(db) {
+export async function rebuildOmegaStatsRollup(db) {
   const startedAt = performance.now();
+
+  // Transaction 1: fast aggregate over pdb_entries columns only.
   db.db.exec('BEGIN IMMEDIATE');
   try {
     db.db.exec(`
@@ -36,7 +36,22 @@ export function rebuildOmegaStatsRollup(db) {
       FROM pdb_entries
       WHERE omega_nb_peptide_bonds > 0
       GROUP BY COALESCE(NULLIF(year, 0), 0);
+    `);
+    db.db.exec('COMMIT');
+  } catch (error) {
+    db.db.exec('ROLLBACK');
+    throw error;
+  }
 
+  // Yield between transactions so concurrent writers can slip through.
+  await new Promise((resolve) => {
+    setImmediate(resolve);
+  });
+
+  // Transaction 2: heavier JOIN + GROUP BY over pdb_omega_pairs.
+  db.db.exec('BEGIN IMMEDIATE');
+  try {
+    db.db.exec(`
       DELETE FROM stats_omega_pairs_by_year;
 
       INSERT INTO stats_omega_pairs_by_year
@@ -57,6 +72,7 @@ export function rebuildOmegaStatsRollup(db) {
     db.db.exec('ROLLBACK');
     throw error;
   }
+
   const durationMs = Math.round(performance.now() - startedAt);
   debug(`omega-stats rollup rebuilt in ${durationMs} ms`);
 }

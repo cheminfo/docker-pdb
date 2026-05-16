@@ -108,7 +108,7 @@ async function runRebuild() {
       });
     }
     /* eslint-enable no-await-in-loop */
-    refreshOmegaRollup(await getLigandsDB());
+    await refreshOmegaRollup(await getLigandsDB());
   } catch (error) {
     debug('rebuild-from-disk failed; continuing into rsync loop:', error);
   } finally {
@@ -182,7 +182,7 @@ async function runOnce() {
       onProgress,
       onActivity,
     });
-    refreshOmegaRollup(await getLigandsDB());
+    await refreshOmegaRollup(await getLigandsDB());
   } catch (error) {
     debug('update failed, will retry next cycle:', error);
   } finally {
@@ -197,9 +197,9 @@ async function runOnce() {
  * the next cycle will rebuild from the same source-of-truth tables.
  * @param {import('./db/getDB.js').LigandsDB} db - Open ligands DB.
  */
-function refreshOmegaRollup(db) {
+async function refreshOmegaRollup(db) {
   try {
-    rebuildOmegaStatsRollup(db);
+    await rebuildOmegaStatsRollup(db);
   } catch (error) {
     debug('omega-stats rollup rebuild failed:', error);
   }

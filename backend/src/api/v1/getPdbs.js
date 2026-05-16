@@ -1,6 +1,6 @@
 import { search } from 'smart-sqlite3-filter';
 
-import { readPdbDoc } from '../../db/readPdbEntry.js';
+import { readPdbDocs } from '../../db/readPdbEntry.js';
 import { addRangeWhere } from '../util/addRangeWhere.js';
 import { clampLimit } from '../util/clampLimit.js';
 
@@ -163,11 +163,7 @@ export function registerGetPdbsRoute(fastify, db) {
       .all(...params, ...orderParams, limit, offset)
       .map((r) => r.id);
 
-    const docs = [];
-    for (const id of ids) {
-      const doc = readPdbDoc(db, id);
-      if (doc) docs.push(doc);
-    }
+    const docs = readPdbDocs(db, ids);
     return reply.send({ docs, fts: useFts, smart: useSmart });
   });
 }

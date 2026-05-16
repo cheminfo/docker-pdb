@@ -78,12 +78,17 @@ export async function seedCCD({ force = false, onProgress } = {}) {
     logger.info({ path: ccdGzPath }, 'Reusing cached CCD archive');
   }
 
-  // Insert in small transactions (1000 rows each). One big transaction
+  // Insert in small transactions (200 rows each). One big transaction
   // gave better raw throughput, but it holds an exclusive write lock for
   // the full 5–30 min run, blocking the cron container's writes to
-  // `pdb_ligands` for `busy_timeout` (5 s) per PDB. Batching keeps each
-  // lock window under ~50 ms so concurrent writers slip through cleanly.
-  const BATCH_SIZE = 1000;
+  // `pdb_ligands` for `busy_timeout` (5 s) per PDB. Batching at 200
+  // keeps each lock window under ~10 ms — 5× shorter than the old 1000-
+  // row batches — so concurrent writers slip through more easily.
+  const BATCH_SIZE = 200;
+  // Yield the event loop every N entries within a batch so other async
+  // tasks (heartbeat callbacks, timers) are not starved by the
+  // synchronous OCL molecule-building loop.
+  const YIELD_EVERY = 50;
   let imported = 0;
   let skipped = 0;
   let inBatch = 0;
@@ -98,6 +103,13 @@ export async function seedCCD({ force = false, onProgress } = {}) {
       if (result === 'imported') imported++;
       else skipped++;
       inBatch++;
+
+      if ((imported + skipped) % YIELD_EVERY === 0) {
+        await new Promise((resolve) => {
+          setImmediate(resolve);
+        });
+      }
+
       if (inBatch >= BATCH_SIZE) {
         db.db.exec('COMMIT');
         logger.info(
