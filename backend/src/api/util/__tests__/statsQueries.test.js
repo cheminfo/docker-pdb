@@ -186,7 +186,7 @@ test('ligandMwHistogram buckets ligand MW and excludes water', () => {
   });
 });
 
-test('pairFrequency returns [cis, total] per ordered residue pair', () => {
+test('pairFrequency returns [cis, total] per ordered residue pair', async () => {
   const omega = {
     nbCis: 1,
     nbTrans: 4,
@@ -197,7 +197,7 @@ test('pairFrequency returns [cis, total] per ordered residue pair', () => {
     pairCounts: { 'ALA:PRO': 5 },
   };
   upsertPdbEntrySync(db, '1AAA', entry({ omega }), { rawSize: 1 });
-  rebuildOmegaStatsRollup(db);
+  await rebuildOmegaStatsRollup(db);
 
   const rows = pairFrequency(db).rows;
   const alaPro = rows.find(
@@ -207,7 +207,7 @@ test('pairFrequency returns [cis, total] per ordered residue pair', () => {
   expect(alaPro).toStrictEqual({ key: ['ALA', 'PRO'], value: [1, 5] });
 });
 
-test('pairFrequencyByYear emits one row per `[year, r1, r2]` triple', () => {
+test('pairFrequencyByYear emits one row per `[year, r1, r2]` triple', async () => {
   upsertPdbEntrySync(
     db,
     '1AAA',
@@ -242,7 +242,7 @@ test('pairFrequencyByYear emits one row per `[year, r1, r2]` triple', () => {
     }),
     { rawSize: 1 },
   );
-  rebuildOmegaStatsRollup(db);
+  await rebuildOmegaStatsRollup(db);
 
   expect(pairFrequencyByYear(db)).toStrictEqual({
     rows: [
