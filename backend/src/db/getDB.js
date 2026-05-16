@@ -66,15 +66,16 @@ function timed(sql, run, extras) {
 }
 
 /**
- * Apply performance PRAGMAs to a database connection. Mirrors the
- * settings used in cheminfo/pipeline.
+ * Apply the standard performance PRAGMAs to a disk-based database connection.
+ * Must not be called on in-memory (`:memory:`) databases.
  * @param {DatabaseSync} db - Database connection to configure.
  */
-function applyPragmas(db) {
+function _applyPragmas(db) {
+  db.exec('PRAGMA busy_timeout = 30000');
   db.exec('PRAGMA journal_mode = WAL');
-  db.exec('PRAGMA synchronous = NORMAL');
+  db.exec('PRAGMA synchronous = OFF');
+  db.exec('PRAGMA cache_size = -131072');
   db.exec('PRAGMA temp_store = MEMORY');
-  db.exec('PRAGMA busy_timeout = 5000');
 }
 
 let instance;
@@ -100,7 +101,6 @@ export function getLigandsDB() {
  */
 export async function getInMemoryLigandsDB() {
   const db = new DatabaseSync(':memory:');
-  applyPragmas(db);
   await applyMigrations(db);
   return new LigandsDB(db, buildMoleculesDB(db));
 }
@@ -110,7 +110,7 @@ async function initDB() {
     mkdirSync(sqliteDir, { recursive: true });
   }
   const db = new DatabaseSync(dbPath);
-  applyPragmas(db);
+  _applyPragmas(db);
   await applyMigrations(db);
   instance = new LigandsDB(db, buildMoleculesDB(db));
   return instance;
