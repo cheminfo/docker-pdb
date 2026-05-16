@@ -1,4 +1,4 @@
-import { Card } from '@blueprintjs/core';
+import { Button, Card, Spinner } from '@blueprintjs/core';
 import { useCallback, useEffect, useState } from 'react';
 
 import {
@@ -18,7 +18,9 @@ import { formatBytes, formatDateTime } from '../../shared/format.ts';
 
 import CcdHistoryTable from './CcdHistoryTable.tsx';
 import HistoryTable from './HistoryTable.tsx';
+import LoginForm from './LoginForm.tsx';
 import SyncCard from './SyncCard.tsx';
+import { useSettingsAuth } from './useSettingsAuth.ts';
 
 /** While a sync is running, refresh status every two seconds. */
 const POLL_INTERVAL_RUNNING_MS = 2_000;
@@ -40,6 +42,31 @@ interface HistoryState {
  * @returns Settings page React element.
  */
 export default function SettingsPage() {
+  const { isAuthenticated, login, logout } = useSettingsAuth();
+
+  if (isAuthenticated === null) {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: '60vh',
+        }}
+      >
+        <Spinner />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <LoginForm onLogin={login} />;
+  }
+
+  return <SettingsDashboard onLogout={logout} />;
+}
+
+function SettingsDashboard({ onLogout }: { onLogout: () => Promise<void> }) {
   const [status, setStatus] = useState<SyncStatusResponse | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [history, setHistory] = useState<HistoryState>({
@@ -148,7 +175,17 @@ export default function SettingsPage() {
   return (
     <div className="container settings-page">
       <header>
-        <h1>Settings</h1>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 16 }}>
+          <h1 style={{ margin: 0 }}>Settings</h1>
+          <Button
+            variant="minimal"
+            icon="log-out"
+            text="Sign out"
+            onClick={() => {
+              void onLogout();
+            }}
+          />
+        </div>
         <p>
           Background data refresh. The wwPDB rsync and Chemical Component
           Dictionary refreshes both run in their own Docker containers — this

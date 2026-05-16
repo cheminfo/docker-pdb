@@ -22,6 +22,7 @@
     "update": "node src/update.js"
   },
   "dependencies": {
+    "@fastify/cookie": "^11.0.2",
     "@fastify/cors": "^11.2.0",
     "@fastify/static": "^9.1.3",
     "chokidar": "^5.0.0",

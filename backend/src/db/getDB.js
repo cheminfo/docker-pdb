@@ -613,6 +613,36 @@ export class LigandsDB {
     );
   }
 
+  // -- credentials --
+
+  get countCredentials() {
+    return this.statement(`SELECT COUNT(*) AS n FROM credentials`);
+  }
+
+  get getCredentialByUsername() {
+    return this.statement(
+      `SELECT username, password_hash AS passwordHash FROM credentials WHERE username = ?`,
+    );
+  }
+
+  get getFirstCredential() {
+    return this.statement(
+      `SELECT username, password_hash AS passwordHash FROM credentials LIMIT 1`,
+    );
+  }
+
+  get insertCredential() {
+    return this.statement(
+      `INSERT INTO credentials (username, password_hash) VALUES (?, ?)`,
+    );
+  }
+
+  get updateCredentialPassword() {
+    return this.statement(
+      `UPDATE credentials SET password_hash = ? WHERE username = ?`,
+    );
+  }
+
   // -- stats: pdb_entries --
 
   get statsByYear() {

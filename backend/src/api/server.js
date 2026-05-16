@@ -1,10 +1,21 @@
+import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import Fastify from 'fastify';
 
 import { getLigandsDB } from '../db/getDB.js';
 
+import { registerAuthRoutes, seedCredentialsIfNeeded } from './auth.js';
 import { registerStatic, resolveStaticDir } from './registerStatic.js';
 import { v1 } from './v1/v1.js';
+
+const PROTECTED_PATHS = new Set([
+  '/v1/sync/status',
+  '/v1/sync/trigger',
+  '/v1/rsync-history',
+  '/v1/ccd-history',
+]);
+
+const DEFAULT_COOKIE_SECRET = 'default-dev-secret-change-in-production';
 
 /**
  * Build a Fastify instance exposing the docker-pdb HTTP API. Wired up here
@@ -23,10 +34,33 @@ import { v1 } from './v1/v1.js';
  * @returns {Promise<import('fastify').FastifyInstance>} A Fastify app ready to listen or be injected.
  */
 export async function buildApp({ db, logger = false, staticDir }) {
+  await seedCredentialsIfNeeded(db);
+
   // eslint-disable-next-line new-cap -- Fastify is invoked as a factory, not a constructor.
   const app = Fastify({ logger });
   await app.register(cors, { origin: true });
+  await app.register(cookie, {
+    secret: process.env.COOKIE_SECRET ?? DEFAULT_COOKIE_SECRET,
+  });
 
+  app.addHook('preHandler', async (request, reply) => {
+    const { pathname } = new URL(request.url, 'http://x');
+    if (!PROTECTED_PATHS.has(pathname)) return;
+
+    const { n } = db.countCredentials.get();
+    if (n === 0) return;
+
+    const sessionCookie = request.cookies.session;
+    if (!sessionCookie) {
+      return reply.code(401).send({ error: 'Unauthorized' });
+    }
+    const result = request.unsignCookie(sessionCookie);
+    if (!result.valid || result.value !== 'authenticated') {
+      return reply.code(401).send({ error: 'Unauthorized' });
+    }
+  });
+
+  registerAuthRoutes(app, db);
   v1(app, db);
   if (staticDir) {
     await registerStatic(app, { staticDir });
