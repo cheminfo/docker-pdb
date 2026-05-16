@@ -171,3 +171,10 @@ test('/assembly/:id/:size mirrors /v1/assemblies/:id/image/:size for error cases
     '/assembly/4HHB/notasize',
   );
 });
+
+test('/assembly/:id/:filename mirrors /v1/assemblies/:id/raw for PDB filenames', async () => {
+  // No .pdb1.gz files on disk in the test environment, so both routes return
+  // 404 — but a filename like "4HHB.pdb1" must not be treated as an image size.
+  await assertParity('/v1/assemblies/4HHB/raw', '/assembly/4HHB/4HHB.pdb1');
+  await assertParity('/v1/assemblies/4HHB/raw', '/assembly/4HHB/4HHB.pdb');
+});
