@@ -18,9 +18,7 @@ test('clicking the Browse link navigates to /browse', async ({ page }) => {
   await page.goto('/');
   await page.locator('.topnav').getByRole('link', { name: 'Browse' }).click();
   await expect(page).toHaveURL(/\/browse$/);
-  await expect(
-    page.getByPlaceholder(/Filter… \(e\.g\. nbResidues/),
-  ).toBeVisible();
+  await expect(page.getByPlaceholder('Search titles…')).toBeVisible();
 });
 
 test('clicking the API link navigates to /api', async ({ page }) => {

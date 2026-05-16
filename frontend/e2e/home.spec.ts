@@ -22,8 +22,8 @@ test('home page renders the four stat cards once the API responds', async ({
   await expect(page.locator('.stat-card')).toContainText([
     'PDB entries',
     'Bio-assembly entries',
-    'Total documents',
-    'Total disk',
+    'Raw archives on disk',
+    'Last rsync',
   ]);
 });
 
@@ -40,11 +40,9 @@ test('home page renders both chart panels', async ({ page }) => {
 test('home page shows an error placeholder when stats fail', async ({
   page,
 }) => {
-  await page.route(/\/pdb\/?$/, (route) =>
+  await page.route(/\/v1\/database\/info/, (route) =>
     route.fulfill({ status: 500, body: 'boom' }),
   );
   await page.goto('/');
-  await expect(
-    page.getByText(/Could not load database stats/),
-  ).toBeVisible();
+  await expect(page.getByText(/Could not load database stats/)).toBeVisible();
 });

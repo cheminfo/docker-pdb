@@ -1,9 +1,8 @@
 import type { Page, Route } from '@playwright/test';
 
-interface DatabaseInfo {
-  doc_count: number;
-  disk_size?: number;
-  sizes?: { file?: number };
+interface DatabaseInfoResponse {
+  pdb: { doc_count?: number; sizes?: { file?: number } };
+  assembly: { doc_count?: number; sizes?: { file?: number } };
 }
 
 interface ViewRow<TKey> {
@@ -15,9 +14,20 @@ interface ViewResponse<TKey> {
   rows: Array<ViewRow<TKey>>;
 }
 
+interface StatsValue {
+  sum: number;
+  count: number;
+  min: number;
+  max: number;
+  sumsqr: number;
+}
+
+interface StatsResponse {
+  rows: Array<{ key: null; value: StatsValue }>;
+}
+
 interface PdbDoc {
   _id: string;
-  _rev: string;
   title: string;
   year?: number;
   experiment?: string;
@@ -42,14 +52,42 @@ interface PdbViewResponse {
   rows: Array<{ id: string; key: null; value: null; doc: PdbDoc }>;
 }
 
-export const pdbInfo: DatabaseInfo = {
-  doc_count: 224517,
-  sizes: { file: 287_309_500_416 },
-};
+interface FindResponse {
+  docs: PdbDoc[];
+}
 
-export const assemblyInfo: DatabaseInfo = {
-  doc_count: 224517,
-  sizes: { file: 12_500_000_000 },
+interface SyncStatusResponse {
+  rsync: {
+    kind: 'rsync';
+    label: string;
+    intervalMs: number;
+    running: null;
+    triggerQueued: null;
+    lastAsymUnit: null;
+    lastBioAssembly: null;
+  };
+  ccd: {
+    kind: 'ccd';
+    label: string;
+    intervalMs: number;
+    running: null;
+    triggerQueued: null;
+    lastRefreshedAt: null;
+    bytesOnDisk: null;
+    lastRefresh: null;
+  };
+  kinds: Array<'rsync' | 'ccd'>;
+}
+
+export const databaseInfo: DatabaseInfoResponse = {
+  pdb: {
+    doc_count: 224517,
+    sizes: { file: 287_309_500_416 },
+  },
+  assembly: {
+    doc_count: 224517,
+    sizes: { file: 12_500_000_000 },
+  },
 };
 
 export const byYear: ViewResponse<number> = {
@@ -63,16 +101,34 @@ export const byYear: ViewResponse<number> = {
 };
 
 export const byExperiment: ViewResponse<string> = {
-  rows: [
-    { key: 'X-RAY DIFFRACTION', value: 180000 },
-    { key: 'SOLUTION NMR', value: 14000 },
-    { key: 'ELECTRON MICROSCOPY', value: 25000 },
-  ],
+  rows: [{ key: 'X-RAY DIFFRACTION', value: 2 }],
+};
+
+export const syncStatus: SyncStatusResponse = {
+  rsync: {
+    kind: 'rsync',
+    label: 'PDB rsync',
+    intervalMs: 86_400_000,
+    running: null,
+    triggerQueued: null,
+    lastAsymUnit: null,
+    lastBioAssembly: null,
+  },
+  ccd: {
+    kind: 'ccd',
+    label: 'CCD refresh',
+    intervalMs: 604_800_000,
+    running: null,
+    triggerQueued: null,
+    lastRefreshedAt: null,
+    bytesOnDisk: null,
+    lastRefresh: null,
+  },
+  kinds: ['rsync', 'ccd'],
 };
 
 const sampleDoc: PdbDoc = {
   _id: '1O8O',
-  _rev: '1-abc',
   title: 'Sample structure for tests',
   year: 2003,
   experiment: 'X-RAY DIFFRACTION',
@@ -90,7 +146,6 @@ const sampleDoc: PdbDoc = {
 const otherDoc: PdbDoc = {
   ...sampleDoc,
   _id: '3QK2',
-  _rev: '1-def',
   title: 'Another lactamase structure',
   year: 2011,
   nbResidues: 320,
@@ -105,6 +160,21 @@ export const jsmolList: PdbViewResponse = {
     { id: sampleDoc._id, key: null, value: null, doc: sampleDoc },
     { id: otherDoc._id, key: null, value: null, doc: otherDoc },
   ],
+};
+
+export const findResponse: FindResponse = {
+  docs: [sampleDoc, otherDoc],
+};
+
+const emptyStatsValue: StatsValue = {
+  sum: 0,
+  count: 100,
+  min: 1,
+  max: 50,
+  sumsqr: 0,
+};
+export const rangeStatsResponse: StatsResponse = {
+  rows: [{ key: null, value: emptyStatsValue }],
 };
 
 const samplePdbText = `HEADER    SAMPLE STRUCTURE
@@ -129,14 +199,37 @@ function fulfillJson(route: Route, body: unknown) {
  * @param page - Playwright page instance for the test.
  */
 export async function mockApi(page: Page): Promise<void> {
-  await page.route(/\/pdb\/?$/, (route) => fulfillJson(route, pdbInfo));
-  await page.route(/\/assembly\/?$/, (route) => fulfillJson(route, assemblyInfo));
+  await page.route(/\/v1\/database\/info/, (route) =>
+    fulfillJson(route, databaseInfo),
+  );
   await page.route(/\/stats\/byYear/, (route) => fulfillJson(route, byYear));
   await page.route(/\/stats\/byExperiment/, (route) =>
     fulfillJson(route, byExperiment),
   );
-  await page.route(/\/view\/jsmol/, (route) => fulfillJson(route, jsmolList));
-  await page.route(/\/pdb\/[^/]+\/[^/]+\.pdb$/, (route) =>
+  await page.route(
+    /\/stats\/(helices|sheets|ligands|residues|year)Stats/,
+    (route) => fulfillJson(route, rangeStatsResponse),
+  );
+  await page.route(/\/v1\/sync\/status/, (route) =>
+    fulfillJson(route, syncStatus),
+  );
+  await page.route(/\/v1\/rsync-history/, (route) =>
+    fulfillJson(route, { rows: [] }),
+  );
+  await page.route(/\/v1\/pdbs\/jsmol/, (route) =>
+    fulfillJson(route, jsmolList),
+  );
+  await page.route(/\/v1\/pdbs\?/, async (route) => {
+    const url = new URL(route.request().url());
+    const q = url.searchParams.get('q') ?? '';
+    const docs = q
+      ? findResponse.docs.filter((doc) =>
+          doc.title.toLowerCase().includes(q.toLowerCase()),
+        )
+      : findResponse.docs;
+    await fulfillJson(route, { docs });
+  });
+  await page.route(/\/v1\/pdbs\/[^/]+\/raw$/, (route) =>
     route.fulfill({
       status: 200,
       contentType: 'text/plain',

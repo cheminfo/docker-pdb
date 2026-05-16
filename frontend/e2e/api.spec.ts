@@ -29,9 +29,6 @@ test('every endpoint card has a clickable example link', async ({ page }) => {
   const examples = page.locator('.endpoint a.example');
   await expect(examples).toHaveCount(endpoints.length);
   for (const [index, endpoint] of endpoints.entries()) {
-    await expect(examples.nth(index)).toHaveAttribute(
-      'href',
-      endpoint.example,
-    );
+    await expect(examples.nth(index)).toHaveAttribute('href', endpoint.example);
   }
 });
