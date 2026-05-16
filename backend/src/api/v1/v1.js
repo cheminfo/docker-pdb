@@ -1,4 +1,5 @@
 import { registerGetAssemblyImageRoute } from './getAssemblyImage.js';
+import { registerGetAssemblyPdbsizeViewRoute } from './getAssemblyPdbsizeView.js';
 import { registerGetAssemblyRawRoute } from './getAssemblyRaw.js';
 import { registerGetCcdHistoryRoute } from './getCcdHistory.js';
 import { registerGetDatabaseInfoRoute } from './getDatabaseInfo.js';
@@ -36,6 +37,7 @@ export function v1(fastify, db) {
   registerGetPdbsRoute(fastify, db);
   registerGetJsmolPdbsRoute(fastify, db);
   registerGetAssemblyRawRoute(fastify);
+  registerGetAssemblyPdbsizeViewRoute(fastify, db);
   registerGetAssemblyImageRoute(fastify);
   registerGetPairFrequencyStatsRoute(fastify, db);
   registerGetStatsByViewRoute(fastify, db);
