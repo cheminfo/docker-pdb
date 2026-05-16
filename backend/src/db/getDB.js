@@ -22,7 +22,7 @@ const dataDir = process.env.DATA_DIR
   ? process.env.DATA_DIR.replace(/\/$/, '')
   : join(import.meta.dirname, '..', '..', '..', 'data');
 const sqliteDir = join(dataDir, 'sqlite');
-const dbPath = join(sqliteDir, 'ligands.db');
+const dbPath = join(sqliteDir, 'db.sqlite');
 const slowQueryLogPath = join(sqliteDir, 'slow-queries.log');
 
 /**

@@ -1,4 +1,4 @@
-// Long-running cron loop that keeps `data/sqlite/ligands.db` in sync with
+// Long-running cron loop that keeps `data/sqlite/db.sqlite` in sync with
 // the wwPDB Chemical Component Dictionary. wwPDB publishes CCD updates
 // weekly (every Wednesday); this loop refreshes whenever the cached
 // archive is older than 7 days, and otherwise sleeps until the next

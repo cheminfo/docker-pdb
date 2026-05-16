@@ -35,9 +35,9 @@ Two core containers, plus a CCD-refresh sidecar, wired together by
 | --------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | `pdb-api`       | Fastify server: HTTP API (parsed metadata, stats aggregates, raw file streaming, substructure search) **and** the React/Vite homepage SPA, baked into the image at build time |
 | `node-pdb-sync` | Daily cron: `rsync` the wwPDB tree, parse new files, render PyMol images, write to sqlite                                  |
-| `pdb-api-cron`  | Weekly cron: refreshes `data/sqlite/ligands.db` from the wwPDB Chemical Component Dictionary                               |
+| `pdb-api-cron`  | Weekly cron: refreshes `data/sqlite/db.sqlite` from the wwPDB Chemical Component Dictionary                               |
 
-All persistent state lives in `data/sqlite/ligands.db` (parsed metadata,
+All persistent state lives in `data/sqlite/db.sqlite` (parsed metadata,
 ligand fingerprints, rsync history) plus the rsynced `.gz` archives.
 
 ## Deployment
@@ -123,7 +123,7 @@ data/
   pdb/                  # rsynced PDB asymmetric units (*.ent.gz)
   pdb-assembly/         # rsynced biological assemblies (*.pdb1.gz)
   pymol/<sub>/<id>/     # PyMol-rendered thumbnails (mirrors RCSB layout)
-  sqlite/               # ligands.db (parsed metadata, fingerprints, rsync history)
+  sqlite/               # db.sqlite (parsed metadata, fingerprints, rsync history)
   ccd/                  # cached components.cif.gz from wwPDB
   logs/                 # rsync change logs
 ```
@@ -134,7 +134,7 @@ The first sync downloads the entire wwPDB tree and renders every thumbnail
 ### Rebuild the database from local files
 
 If the sqlite index ever needs to be regenerated (corruption, schema
-upgrade, restoring from a partial backup), wipe `data/sqlite/ligands.db`
+upgrade, restoring from a partial backup), wipe `data/sqlite/db.sqlite`
 and run:
 
 ```sh
@@ -169,7 +169,7 @@ better than the silent half-broken state you get otherwise.
 Under the hood it:
 
 1. Runs [`backend/src/dev.js`](./backend/src/dev.js) once to apply migrations
-   on `data/sqlite/ligands.db` and seed a deterministic set of PDB entries
+   on `data/sqlite/db.sqlite` and seed a deterministic set of PDB entries
    from [`backend/fixtures/pdb/`](./backend/fixtures/pdb) (or from your
    local rsync tree under `data/pdb/`, if you have one).
 2. Starts the Fastify API on `http://localhost:3000` under `node --watch`,
@@ -195,7 +195,7 @@ npm run test-only  # vitest with coverage
 ```
 
 `npm run test` runs `npm run dev:seed` first, so a fresh clone is left with
-a populated `data/sqlite/ligands.db` (including `8ZXR` for the scripting
+a populated `data/sqlite/db.sqlite` (including `8ZXR` for the scripting
 playground) — open `/scripting` and load right away, no extra setup. The
 seed is idempotent and reuses fixtures from `backend/fixtures/pdb/`.
 

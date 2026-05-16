@@ -42,4 +42,9 @@ find /app/data/pdb /app/data/pdb-assembly /app/data/pymol \
   -maxdepth 3 -type d ! -user app \
   -exec chown app:app {} +
 
+# Migrate legacy database filename: ligands.db → db.sqlite (one-time rename).
+if [ -f /app/data/sqlite/ligands.db ] && [ ! -f /app/data/sqlite/db.sqlite ]; then
+  mv /app/data/sqlite/ligands.db /app/data/sqlite/db.sqlite
+fi
+
 exec gosu app "$@"

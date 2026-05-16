@@ -37,7 +37,7 @@ services:
     # stats aggregates, raw file streaming) AND the React/Vite bundle baked
     # into the image at /app/backend/public. Traefik routes everything
     # straight here — no separate nginx hop. On first start it seeds
-    # data/sqlite/ligands.db from the wwPDB Chemical Component Dictionary
+    # data/sqlite/db.sqlite from the wwPDB Chemical Component Dictionary
     # if the `ligands` table is empty.
     # Use the released image by default. To build locally instead, run:
     #   docker compose up -d --build
@@ -78,7 +78,7 @@ services:
     command: npm run api
 
   pdb-api-cron:
-    # Periodically refreshes data/sqlite/ligands.db from the wwPDB
+    # Periodically refreshes data/sqlite/db.sqlite from the wwPDB
     # Chemical Component Dictionary (weekly upstream cadence). Idle most
     # of the time, but the import phase synchronously parses ~40k CCD
     # entries through openchemlib and can briefly use >1 GiB of heap —
