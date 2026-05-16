@@ -6,10 +6,10 @@ test.beforeEach(async ({ page }) => {
   await mockApi(page);
 });
 
-test('the Molecules nav link is exposed', async ({ page }) => {
+test('the Molecules nav tab is exposed', async ({ page }) => {
   await page.goto('/');
   await expect(
-    page.locator('.topnav').getByRole('link', { name: 'Molecules' }),
+    page.locator('.topnav').getByRole('tab', { name: 'Molecules' }),
   ).toBeVisible();
 });
 
