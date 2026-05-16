@@ -10,7 +10,7 @@ services:
     image: ghcr.io/cheminfo/pdb-quickview:latest
     build: .
     volumes:
-      - ./data:/app/data
+      - ./data:/app/data:z
     env_file:
       - .env
     environment:
@@ -44,7 +44,7 @@ services:
     image: ghcr.io/cheminfo/pdb-quickview:latest
     build: .
     volumes:
-      - ./data:/app/data
+      - ./data:/app/data:z
     env_file:
       - .env
     environment:
@@ -86,7 +86,7 @@ services:
     image: ghcr.io/cheminfo/pdb-quickview:latest
     build: .
     volumes:
-      - ./data:/app/data
+      - ./data:/app/data:z
     env_file:
       - .env
     environment:

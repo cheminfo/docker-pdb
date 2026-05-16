@@ -5,7 +5,7 @@ services:
     image: ghcr.io/cheminfo/pdb-quickview:latest
     build: .
     volumes:
-      - ./data:/app/data
+      - ./data:/app/data:z
     env_file:
       - .env
     environment:
@@ -40,7 +40,7 @@ services:
     ports:
       - '127.0.0.1:${PUBLIC_PORT}:3000'
     volumes:
-      - ./data:/app/data
+      - ./data:/app/data:z
     env_file:
       - .env
     environment:
@@ -70,7 +70,7 @@ services:
     image: ghcr.io/cheminfo/pdb-quickview:latest
     build: .
     volumes:
-      - ./data:/app/data
+      - ./data:/app/data:z
     env_file:
       - .env
     environment:
