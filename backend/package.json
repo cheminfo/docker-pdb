@@ -8,7 +8,7 @@
     "api": "node src/api/server.js",
     "cron": "node src/cron.js",
     "cron-ccd": "node src/ccd/cron.js",
-    "dev": "DATA_DIR=../data node --watch src/devServer.js",
+    "dev": "DATA_DIR=fixtures node --watch src/devServer.js",
     "dev:seed": "DATA_DIR=../data node --env-file=../.env src/dev.js",
     "eslint": "eslint src",
     "eslint-fix": "eslint src --fix",
