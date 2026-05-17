@@ -15,6 +15,8 @@ export interface DatabaseInfo {
 export interface DatabaseInfoResponse {
   pdb: DatabaseInfo;
   assembly: DatabaseInfo;
+  /** Number of PDB entries deposited in the current calendar year. */
+  thisYear?: number;
 }
 
 /** A single row returned by a grouped stats query. */

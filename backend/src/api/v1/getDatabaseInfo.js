@@ -19,6 +19,7 @@ export function registerGetDatabaseInfoRoute(fastify, db) {
         doc_count: totals?.assembly_count ?? 0,
         sizes: { file: totals?.assembly_bytes ?? 0 },
       },
+      thisYear: totals?.this_year_count ?? 0,
     });
   });
 }

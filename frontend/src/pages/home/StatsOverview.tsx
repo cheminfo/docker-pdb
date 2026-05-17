@@ -11,6 +11,8 @@ import {
 interface StatsOverviewProps {
   pdb: DatabaseInfo;
   assembly: DatabaseInfo;
+  /** Number of PDB entries deposited in the current calendar year. */
+  thisYear: number;
   /** Most recent asym-unit rsync run, if one has been recorded. */
   lastAsymRsync: RsyncHistoryDoc | null;
   /** Most recent bio-assembly rsync run, if one has been recorded. */
@@ -43,6 +45,7 @@ function getDecompressedSize(info: DatabaseInfo): number {
  * @param props - Component props.
  * @param props.pdb - Counts and decompressed-byte total for the asym archive.
  * @param props.assembly - Counts and decompressed-byte total for the bio-assembly archive.
+ * @param props.thisYear - Number of entries deposited in the current calendar year.
  * @param props.lastAsymRsync - Most recent asym-unit rsync run, or `null`.
  * @param props.lastBioAssemblyRsync - Most recent bio-assembly rsync run, or `null`.
  * @returns Stats grid React element.
@@ -50,6 +53,7 @@ function getDecompressedSize(info: DatabaseInfo): number {
 export default function StatsOverview({
   pdb,
   assembly,
+  thisYear,
   lastAsymRsync,
   lastBioAssemblyRsync,
 }: StatsOverviewProps) {
@@ -67,6 +71,11 @@ export default function StatsOverview({
         label="PDB entries"
         value={formatInteger(pdbCount)}
         sub={`${formatBytes(pdbDecompressed)} parsed · ${formatBytes(pdbRaw ?? undefined)} raw`}
+      />
+      <StatCard
+        label={`Added in ${new Date().getFullYear()}`}
+        value={formatInteger(thisYear)}
+        sub="new depositions this calendar year"
       />
       <StatCard
         label="Bio-assembly entries"

@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react';
 
 import {
-  fetchAssemblyInfo,
   fetchByExperiment,
   fetchByYear,
+  fetchDatabaseInfo,
   fetchLastAsymRsync,
   fetchLastBioAssemblyRsync,
-  fetchPdbInfo,
   fetchSyncStatus,
 } from '../../shared/api/client.ts';
 import Panel from '../../shared/charts/Panel.tsx';
@@ -17,13 +16,13 @@ import LastEntryPanel from './LastEntryPanel.tsx';
 import StatsOverview from './StatsOverview.tsx';
 import YearChart from './YearChart.tsx';
 
-function fetchOverview() {
-  return Promise.all([
-    fetchPdbInfo(),
-    fetchAssemblyInfo(),
+async function fetchOverview() {
+  const [dbInfo, lastAsymRsync, lastBioAssemblyRsync] = await Promise.all([
+    fetchDatabaseInfo(),
     fetchLastAsymRsync(),
     fetchLastBioAssemblyRsync(),
   ]);
+  return { ...dbInfo, lastAsymRsync, lastBioAssemblyRsync };
 }
 
 /** Re-fetch the overview every 5 s while a sync is running. */
@@ -111,19 +110,21 @@ export default function HomePage() {
         </p>
       ) : (
         <StatsOverview
-          pdb={overview.data[0]}
-          assembly={overview.data[1]}
-          lastAsymRsync={overview.data[2]}
-          lastBioAssemblyRsync={overview.data[3]}
+          pdb={overview.data.pdb}
+          assembly={overview.data.assembly}
+          thisYear={overview.data.thisYear ?? 0}
+          lastAsymRsync={overview.data.lastAsymRsync}
+          lastBioAssemblyRsync={overview.data.lastBioAssemblyRsync}
         />
       )}
 
-      {overview.status === 'success' && overview.data[2]?.lastEntryId && (
-        <>
-          <h2>Last imported entry</h2>
-          <LastEntryPanel pdbId={overview.data[2].lastEntryId} />
-        </>
-      )}
+      {overview.status === 'success' &&
+        overview.data.lastAsymRsync?.lastEntryId && (
+          <>
+            <h2>Last imported entry</h2>
+            <LastEntryPanel pdbId={overview.data.lastAsymRsync.lastEntryId} />
+          </>
+        )}
 
       <div className="charts">
         <Panel

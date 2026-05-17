@@ -105,6 +105,18 @@ export async function getInMemoryLigandsDB() {
   return new LigandsDB(db, buildMoleculesDB(db));
 }
 
+/**
+ * Inject a pre-built `LigandsDB` as the module-level singleton so that all
+ * subsequent `getLigandsDB()` calls return this instance. Use this in the dev
+ * server to share one in-memory database between the seed step and the Fastify
+ * routes without touching disk.
+ * @param {LigandsDB} db - The instance to promote to singleton.
+ */
+export function setLigandsDB(db) {
+  instance = db;
+  initPromise = Promise.resolve(db);
+}
+
 async function initDB() {
   if (!existsSync(sqliteDir)) {
     mkdirSync(sqliteDir, { recursive: true });
@@ -284,10 +296,11 @@ export class LigandsDB {
 
   get pdbDatabaseTotals() {
     return this.statement(
-      `SELECT COUNT(*)                                      AS pdb_count,
-              COALESCE(SUM(raw_size), 0)                    AS pdb_bytes,
-              SUM(CASE WHEN has_assembly = 1 THEN 1 ELSE 0 END) AS assembly_count,
-              COALESCE(SUM(CASE WHEN has_assembly = 1 THEN assembly_size ELSE 0 END), 0) AS assembly_bytes
+      `SELECT COUNT(*)                                                                    AS pdb_count,
+              COALESCE(SUM(raw_size), 0)                                                  AS pdb_bytes,
+              SUM(CASE WHEN has_assembly = 1 THEN 1 ELSE 0 END)                          AS assembly_count,
+              COALESCE(SUM(CASE WHEN has_assembly = 1 THEN assembly_size ELSE 0 END), 0) AS assembly_bytes,
+              SUM(CASE WHEN year = CAST(strftime('%Y', 'now') AS INTEGER) THEN 1 ELSE 0 END) AS this_year_count
        FROM pdb_entries`,
     );
   }
