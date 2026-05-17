@@ -36,20 +36,6 @@ const STANDARD_AA = [
 ];
 const NUCLEIC_BASES = ['DA', 'DC', 'DG', 'DT', 'DU', 'A', 'C', 'G', 'U', 'T'];
 
-const RESIDUES_HISTOGRAM_BINS = [50, 100, 200, 500, 1000, 2000, 5000, 10000];
-
-/**
- * Wrap a sequence of `[key, value]` pairs into the grouped-reduce envelope
- * expected by the chart components.
- * @param {Array<[unknown, number]>} pairs - Key/value pairs.
- * @returns {{ rows: Array<{ key: unknown, value: number }> }} Wrapped response.
- */
-function asGroupedRows(pairs) {
-  return {
-    rows: Array.from(pairs, ([key, value]) => ({ key, value })),
-  };
-}
-
 /**
  * Strip every column except `key` and `value` and wrap into the grouped-reduce
  * envelope. Convenience for SQL queries that already alias the columns to
@@ -59,40 +45,6 @@ function asGroupedRows(pairs) {
  */
 function rowsAsGroupedRows(rows) {
   return { rows: rows.map(({ key, value }) => ({ key, value })) };
-}
-
-/**
- * Build a histogram by lower-bound bucketing. Each row contributes 1 to the
- * bucket whose lower bound is the largest entry in `bins` strictly less than
- * or equal to the value (`0` for the first bucket). Empty buckets are
- * dropped, and the result is wrapped in the grouped-reduce envelope.
- * @param {object[]} rows - Rows yielding the values to bucket.
- * @param {number[]} bins - Strictly-increasing upper bounds (last bin's upper bound is `Infinity`).
- * @param {(row: unknown) => number} valueOf - Extract the numeric value to bucket from each row.
- * @returns {{ rows: Array<{ key: number, value: number }> }} Grouped-reduce envelope sorted by lower bound.
- */
-function histogram(rows, bins, valueOf) {
-  const buckets = new Map();
-  for (const lower of [0, ...bins]) buckets.set(lower, 0);
-  for (const row of rows) {
-    const value = valueOf(row);
-    let lower = 0;
-    let placed = false;
-    for (const bin of bins) {
-      if (value < bin) {
-        buckets.set(lower, (buckets.get(lower) ?? 0) + 1);
-        placed = true;
-        break;
-      }
-      lower = bin;
-    }
-    if (!placed) buckets.set(lower, (buckets.get(lower) ?? 0) + 1);
-  }
-  return asGroupedRows(
-    Array.from(buckets.entries())
-      .filter(([, value]) => value > 0)
-      .toSorted(([a], [b]) => a - b),
-  );
 }
 
 /**
@@ -275,8 +227,7 @@ export function secondaryStructurePresence(db) {
 }
 
 export function residuesHistogram(db) {
-  const all = db.selectResidueCountsForHistogram.all();
-  return histogram(all, RESIDUES_HISTOGRAM_BINS, (row) => row.nb_residues);
+  return rowsAsGroupedRows(db.statsResiduesHistogram.all());
 }
 
 export function chainsHistogram(db) {
@@ -308,20 +259,7 @@ export function ligandMwHistogram(db) {
 }
 
 export function ligandsByYear(db) {
-  const rows = db
-    .statement(
-      `SELECT year                          AS key,
-              COALESCE(SUM(nb_ligands), 0)  AS sum,
-              COUNT(*)                      AS count,
-              COALESCE(MIN(nb_ligands), 0)  AS min,
-              COALESCE(MAX(nb_ligands), 0)  AS max,
-              COALESCE(SUM(nb_ligands*nb_ligands), 0) AS sumsqr
-       FROM pdb_entries
-       WHERE year IS NOT NULL AND year > 0
-       GROUP BY year
-       ORDER BY year`,
-    )
-    .all();
+  const rows = db.statsLigandsByYear.all();
   return {
     rows: rows.map((row) => ({
       key: row.key,

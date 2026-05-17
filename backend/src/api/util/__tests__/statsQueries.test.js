@@ -51,12 +51,13 @@ beforeEach(async () => {
   db = await getInMemoryLigandsDB();
 });
 
-test('residuesHistogram buckets by configured edges and drops empty buckets', () => {
+test('residuesHistogram buckets by configured edges and drops empty buckets', async () => {
   upsertPdbEntrySync(db, '1AAA', entry({ nbResidues: 30 }), { rawSize: 1 });
   upsertPdbEntrySync(db, '2AAA', entry({ nbResidues: 75 }), { rawSize: 1 });
   upsertPdbEntrySync(db, '3AAA', entry({ nbResidues: 90 }), { rawSize: 1 });
   upsertPdbEntrySync(db, '4AAA', entry({ nbResidues: 250 }), { rawSize: 1 });
   upsertPdbEntrySync(db, '5AAA', entry({ nbResidues: 12345 }), { rawSize: 1 });
+  await rebuildStatsRollup(db);
 
   // 30   → bucket 0     (under 50)
   // 75,90 → bucket 50    (≥50, <100)
@@ -139,7 +140,7 @@ test('secondaryStructurePresence labels every entry by helix/sheet presence', ()
   });
 });
 
-test('ligandFrequency excludes water and ranks by total occurrences', () => {
+test('ligandFrequency excludes water and ranks by total occurrences', async () => {
   const formula = [
     { label: 'HOH', mf: 'O', mw: '18', number: 50 },
     { label: 'ATP', mf: 'C10H16N5O13P3', mw: '507', number: 1 },
@@ -152,6 +153,7 @@ test('ligandFrequency excludes water and ranks by total occurrences', () => {
     entry({ formula: [{ label: 'ATP', mf: 'C10', mw: '507', number: 3 }] }),
     { rawSize: 1 },
   );
+  await rebuildStatsRollup(db);
 
   expect(ligandFrequency(db)).toStrictEqual({
     rows: [
@@ -161,7 +163,7 @@ test('ligandFrequency excludes water and ranks by total occurrences', () => {
   });
 });
 
-test('ligandMwHistogram buckets ligand MW and excludes water', () => {
+test('ligandMwHistogram buckets ligand MW and excludes water', async () => {
   const formula = [
     { label: 'HOH', mf: 'O', mw: '18', number: 1 },
     { label: 'A50', mf: 'C', mw: '50', number: 1 },
@@ -170,6 +172,7 @@ test('ligandMwHistogram buckets ligand MW and excludes water', () => {
     { label: 'A9999', mf: 'C', mw: '9999', number: 1 },
   ];
   upsertPdbEntrySync(db, '1AAA', entry({ formula }), { rawSize: 1 });
+  await rebuildStatsRollup(db);
 
   // Bins: 100, 250, 500, 1000, 2000, 5000.
   // 50    → bucket 0

@@ -171,6 +171,127 @@ export async function rebuildStatsRollup(db) {
     throw error;
   }
 
+  await new Promise((resolve) => {
+    setImmediate(resolve);
+  });
+
+  // Transaction 5: pdb_formulas aggregations (ligand frequency + MW histogram).
+  // These are the two heaviest queries (701 ms + 265 ms) — a full scan of the
+  // large pdb_formulas table each time they're read. Pre-computing here cuts
+  // read latency to <5 ms.
+  db.db.exec('BEGIN IMMEDIATE');
+  try {
+    db.db.exec(`
+      DELETE FROM stats_ligand_freq;
+      INSERT INTO stats_ligand_freq (label, value)
+      SELECT label, SUM(count)
+      FROM pdb_formulas
+      WHERE label <> 'HOH'
+      GROUP BY label;
+
+      DELETE FROM stats_ligand_mw_hist;
+      INSERT INTO stats_ligand_mw_hist (key, value)
+      SELECT
+        CASE
+          WHEN mw <  100 THEN 0
+          WHEN mw <  250 THEN 100
+          WHEN mw <  500 THEN 250
+          WHEN mw < 1000 THEN 500
+          WHEN mw < 2000 THEN 1000
+          WHEN mw < 5000 THEN 2000
+          ELSE 5000
+        END AS key,
+        COUNT(*) AS value
+      FROM pdb_formulas
+      WHERE label <> 'HOH' AND mw IS NOT NULL AND mw > 0
+      GROUP BY key;
+    `);
+    db.db.exec('COMMIT');
+  } catch (error) {
+    db.db.exec('ROLLBACK');
+    throw error;
+  }
+
+  await new Promise((resolve) => {
+    setImmediate(resolve);
+  });
+
+  // Transaction 6: EC class distribution (pdb_chains COUNT DISTINCT, 198 ms).
+  db.db.exec('BEGIN IMMEDIATE');
+  try {
+    db.db.exec(`
+      DELETE FROM stats_ec_classes;
+      INSERT INTO stats_ec_classes (head, value)
+      SELECT head, COUNT(DISTINCT pdb_id) AS value
+      FROM (
+        SELECT pdb_id, substr(ec, 1, 1) AS head
+        FROM pdb_chains
+        WHERE ec IS NOT NULL
+          AND length(ec) > 0
+          AND substr(ec, 1, 1) BETWEEN '1' AND '7'
+      )
+      GROUP BY head;
+    `);
+    db.db.exec('COMMIT');
+  } catch (error) {
+    db.db.exec('ROLLBACK');
+    throw error;
+  }
+
+  await new Promise((resolve) => {
+    setImmediate(resolve);
+  });
+
+  // Transaction 7: residues histogram (replaces 239 k-row fetch to JS).
+  // Buckets match RESIDUES_HISTOGRAM_BINS = [50,100,200,500,1000,2000,5000,10000].
+  db.db.exec('BEGIN IMMEDIATE');
+  try {
+    db.db.exec(`
+      DELETE FROM stats_residues_histogram;
+      INSERT INTO stats_residues_histogram (key, value)
+      SELECT
+        CASE
+          WHEN nb_residues <    50 THEN 0
+          WHEN nb_residues <   100 THEN 50
+          WHEN nb_residues <   200 THEN 100
+          WHEN nb_residues <   500 THEN 200
+          WHEN nb_residues <  1000 THEN 500
+          WHEN nb_residues <  2000 THEN 1000
+          WHEN nb_residues <  5000 THEN 2000
+          WHEN nb_residues < 10000 THEN 5000
+          ELSE 10000
+        END AS key,
+        COUNT(*) AS value
+      FROM pdb_entries
+      WHERE nb_residues > 0
+      GROUP BY key;
+    `);
+    db.db.exec('COMMIT');
+  } catch (error) {
+    db.db.exec('ROLLBACK');
+    throw error;
+  }
+
+  await new Promise((resolve) => {
+    setImmediate(resolve);
+  });
+
+  // Transaction 8: refresh ligands.nb_pdbs (cached count replaces correlated
+  // subquery on every ligand-browse request).
+  db.db.exec('BEGIN IMMEDIATE');
+  try {
+    db.db.exec(`
+      UPDATE ligands
+      SET nb_pdbs = (
+        SELECT COUNT(*) FROM pdb_ligands WHERE pdb_ligands.ligand_code = ligands.code
+      );
+    `);
+    db.db.exec('COMMIT');
+  } catch (error) {
+    db.db.exec('ROLLBACK');
+    throw error;
+  }
+
   const durationMs = Math.round(performance.now() - startedAt);
   debug(`stats rollup rebuilt in ${durationMs} ms`);
 }

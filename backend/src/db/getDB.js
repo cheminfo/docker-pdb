@@ -555,8 +555,7 @@ export class LigandsDB {
   get selectLigandByCode() {
     return this.statement(
       `SELECT l.code, l.name, l.formula, l.type, l.mf, l.mw, l.nb_atoms AS nbAtoms,
-              l.id_code AS idCode, l.coordinates,
-              COALESCE((SELECT COUNT(*) FROM pdb_ligands p WHERE p.ligand_code = l.code), 0) AS nbPdbs
+              l.id_code AS idCode, l.coordinates, l.nb_pdbs AS nbPdbs
        FROM ligands l WHERE l.code = ?`,
     );
   }
@@ -564,9 +563,9 @@ export class LigandsDB {
   get selectLigandsByDefaultRanking() {
     return this.statement(
       `SELECT l.code, l.name, l.mf, l.mw, l.id_code AS idCode, l.coordinates,
-              COALESCE((SELECT COUNT(*) FROM pdb_ligands p WHERE p.ligand_code = l.code), 0) AS nbPdbs
+              l.nb_pdbs AS nbPdbs
        FROM ligands l
-       ORDER BY nbPdbs DESC
+       ORDER BY nb_pdbs DESC
        LIMIT ?`,
     );
   }
@@ -758,9 +757,9 @@ export class LigandsDB {
     );
   }
 
-  get selectResidueCountsForHistogram() {
+  get statsResiduesHistogram() {
     return this.statement(
-      `SELECT nb_residues FROM pdb_entries WHERE nb_residues > 0`,
+      `SELECT key, value FROM stats_residues_histogram ORDER BY key`,
     );
   }
 
@@ -907,45 +906,19 @@ export class LigandsDB {
 
   get statsEcClasses() {
     return this.statement(
-      `SELECT head AS key, COUNT(DISTINCT pdb_id) AS value FROM (
-         SELECT pdb_id, substr(ec, 1, 1) AS head
-         FROM pdb_chains
-         WHERE ec IS NOT NULL
-           AND length(ec) > 0
-           AND substr(ec, 1, 1) BETWEEN '1' AND '7'
-       )
-       GROUP BY head
-       ORDER BY head`,
+      `SELECT head AS key, value FROM stats_ec_classes ORDER BY head`,
     );
   }
 
   get statsLigandFrequency() {
     return this.statement(
-      `SELECT label AS key, SUM(count) AS value
-       FROM pdb_formulas
-       WHERE label <> 'HOH'
-       GROUP BY label
-       ORDER BY value DESC`,
+      `SELECT label AS key, value FROM stats_ligand_freq ORDER BY value DESC`,
     );
   }
 
   get statsLigandMwHist() {
     return this.statement(
-      `SELECT
-         CASE
-           WHEN mw <  100  THEN 0
-           WHEN mw <  250  THEN 100
-           WHEN mw <  500  THEN 250
-           WHEN mw < 1000  THEN 500
-           WHEN mw < 2000  THEN 1000
-           WHEN mw < 5000  THEN 2000
-           ELSE 5000
-         END AS key,
-         COUNT(*) AS value
-       FROM pdb_formulas
-       WHERE label <> 'HOH' AND mw IS NOT NULL AND mw > 0
-       GROUP BY key
-       ORDER BY key`,
+      `SELECT key, value FROM stats_ligand_mw_hist ORDER BY key`,
     );
   }
 

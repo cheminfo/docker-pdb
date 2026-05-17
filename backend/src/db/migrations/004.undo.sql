@@ -1,0 +1,11 @@
+DROP TABLE IF EXISTS stats_residues_histogram;
+DROP TABLE IF EXISTS stats_ec_classes;
+DROP TABLE IF EXISTS stats_ligand_mw_hist;
+DROP TABLE IF EXISTS stats_ligand_freq;
+ALTER TABLE ligands DROP COLUMN nb_pdbs;
+DROP INDEX IF EXISTS idx_pdb_entries_year_nb_residues;
+DROP INDEX IF EXISTS idx_pdb_entries_year_nb_ligands;
+DROP INDEX IF EXISTS idx_pdb_entries_year_experiment;
+DROP INDEX IF EXISTS idx_pdb_entries_modified_residues;
+DROP INDEX IF EXISTS idx_pdb_entries_iep;
+DROP INDEX IF EXISTS idx_pdb_entries_chains;

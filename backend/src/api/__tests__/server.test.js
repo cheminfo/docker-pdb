@@ -2,6 +2,7 @@ import OCL from 'openchemlib';
 import { afterAll, beforeAll, expect, test } from 'vitest';
 
 import { getInMemoryLigandsDB } from '../../db/getDB.js';
+import { rebuildStatsRollup } from '../../db/rebuildStatsRollup.js';
 import { buildApp } from '../server.js';
 
 let db;
@@ -44,6 +45,7 @@ beforeAll(async () => {
       `INSERT INTO pdb_ligands (pdb_id, ligand_code, count) VALUES (?, ?, 1)`,
     ).run(pdbId, code);
   }
+  await rebuildStatsRollup(db);
   app = await buildApp({ db });
 });
 
