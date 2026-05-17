@@ -4,6 +4,7 @@ import { ccdGzPath } from '../../ccd/seedCCD.js';
 import { SYNC_KINDS, readRunning, readTrigger } from '../../syncControl.js';
 
 import { ccdHistoryRowToDoc } from './getCcdHistory.js';
+import { rsyncHistoryRowToDoc } from './getRsyncHistory.js';
 
 /** wwPDB rsync cron sleeps 24 h between passes. */
 const RSYNC_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -31,18 +32,7 @@ async function getRsyncStatus(db) {
   const lastByType = {};
   for (const type of ['asymUnit', 'bioAssembly']) {
     const row = db.selectLastRsyncRun.get(type);
-    lastByType[type] = row
-      ? {
-          type: row.type,
-          startedAt: row.started_at,
-          finishedAt: row.finished_at,
-          durationMs: row.duration_ms,
-          updatedCount: row.updated_count,
-          deletedCount: row.deleted_count,
-          lastEntryId: row.last_entry_id,
-          bytesOnDisk: row.bytes_on_disk,
-        }
-      : null;
+    lastByType[type] = row ? rsyncHistoryRowToDoc(row) : null;
   }
   return {
     kind: 'rsync',

@@ -1,5 +1,5 @@
 import { Button, Card, ProgressBar, Spinner } from '@blueprintjs/core';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import {
   fetchDiagnostics,
@@ -13,6 +13,9 @@ import type {
   RebuildTitlesState,
   RenderThumbnailsState,
 } from '../../shared/api/types.ts';
+import { formatNumber } from '../../shared/format.ts';
+
+import { useJobPoller } from './useJobPoller.ts';
 
 /** Poll the render job status every 2 s while it is running. */
 const RENDER_POLL_INTERVAL_MS = 2_000;
@@ -40,96 +43,28 @@ export default function DiagnosticsCard() {
   const [diag, setDiag] = useState<DiagnosticsResponse | null>(null);
   const [diagError, setDiagError] = useState<string | null>(null);
 
-  const [renderState, setRenderState] = useState<RenderThumbnailsState | null>(
-    null,
-  );
   const [renderLoading, setRenderLoading] = useState(false);
   const [nmrRenderLoading, setNmrRenderLoading] = useState(false);
   const [forceRenderLoading, setForceRenderLoading] = useState(false);
   const [jobLabel, setJobLabel] = useState('');
-  const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const [titlesState, setTitlesState] = useState<RebuildTitlesState | null>(
-    null,
-  );
   const [titlesLoading, setTitlesLoading] = useState(false);
-  const titlesPollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const stopPolling = useCallback(() => {
-    if (pollTimer.current) {
-      clearTimeout(pollTimer.current);
-      pollTimer.current = null;
-    }
-  }, []);
-
-  const startPolling = useCallback(() => {
-    stopPolling();
-    const tick = () => {
-      fetchRenderThumbnailsStatus().then(
-        ({ state }) => {
-          setRenderState(state);
-          if (state?.running) {
-            pollTimer.current = setTimeout(tick, RENDER_POLL_INTERVAL_MS);
-          }
-        },
-        () => {
-          pollTimer.current = setTimeout(tick, RENDER_POLL_INTERVAL_MS);
-        },
-      );
-    };
-    tick();
-  }, [stopPolling]);
-
-  const stopTitlesPolling = useCallback(() => {
-    if (titlesPollTimer.current) {
-      clearTimeout(titlesPollTimer.current);
-      titlesPollTimer.current = null;
-    }
-  }, []);
-
-  const startTitlesPolling = useCallback(() => {
-    stopTitlesPolling();
-    const tick = () => {
-      fetchRebuildTitlesStatus().then(
-        ({ state }) => {
-          setTitlesState(state);
-          if (state?.running) {
-            titlesPollTimer.current = setTimeout(tick, TITLES_POLL_INTERVAL_MS);
-          }
-        },
-        () => {
-          titlesPollTimer.current = setTimeout(tick, TITLES_POLL_INTERVAL_MS);
-        },
-      );
-    };
-    tick();
-  }, [stopTitlesPolling]);
-
-  useEffect(() => () => stopPolling(), [stopPolling]);
-  useEffect(() => () => stopTitlesPolling(), [stopTitlesPolling]);
+  const { state: renderState, startPolling } =
+    useJobPoller<RenderThumbnailsState>(
+      fetchRenderThumbnailsStatus,
+      RENDER_POLL_INTERVAL_MS,
+    );
+  const { state: titlesState, startPolling: startTitlesPolling } =
+    useJobPoller<RebuildTitlesState>(
+      fetchRebuildTitlesStatus,
+      TITLES_POLL_INTERVAL_MS,
+    );
 
   // On mount, probe both job statuses so an already-running job is shown
   // without the user having to click a trigger button first.
   useEffect(() => {
-    fetchRenderThumbnailsStatus().then(
-      ({ state }) => {
-        if (state?.running) {
-          setRenderState(state);
-          setJobLabel('Rendering thumbnails…');
-          startPolling();
-        }
-      },
-      () => undefined,
-    );
-    fetchRebuildTitlesStatus().then(
-      ({ state }) => {
-        if (state?.running) {
-          setTitlesState(state);
-          startTitlesPolling();
-        }
-      },
-      () => undefined,
-    );
+    startPolling();
+    startTitlesPolling();
   }, [startPolling, startTitlesPolling]);
 
   const handleRunDiagnostics = useCallback(() => {
@@ -150,8 +85,7 @@ export default function DiagnosticsCard() {
   const handleRebuildTitles = useCallback(() => {
     setTitlesLoading(true);
     triggerRebuildTitles().then(
-      ({ state }) => {
-        setTitlesState(state);
+      () => {
         setTitlesLoading(false);
         startTitlesPolling();
       },
@@ -175,8 +109,7 @@ export default function DiagnosticsCard() {
         setJobLabel('Rendering missing thumbnails…');
       }
       triggerRenderThumbnails(options).then(
-        ({ state }) => {
-          setRenderState(state);
+        () => {
           setRenderLoading(false);
           setNmrRenderLoading(false);
           setForceRenderLoading(false);
@@ -240,7 +173,7 @@ export default function DiagnosticsCard() {
       {diagStatus === 'done' && diag ? (
         <dl className="settings-sync-meta">
           <dt>PDB entries</dt>
-          <dd>{pdbCount.toLocaleString()}</dd>
+          <dd>{formatNumber(pdbCount)}</dd>
 
           <dt>Empty titles</dt>
           <dd>
@@ -250,7 +183,7 @@ export default function DiagnosticsCard() {
               </span>
             ) : (
               <span>
-                {emptyTitleCount.toLocaleString()} (
+                {formatNumber(emptyTitleCount)} (
                 {((emptyTitleCount / pdbCount) * 100).toFixed(2)}%) — PDB files
                 without a TITLE record
               </span>
@@ -267,9 +200,8 @@ export default function DiagnosticsCard() {
                         style={{ margin: '0 0 6px' }}
                         className="settings-muted"
                       >
-                        Rebuilding titles…{' '}
-                        {titlesState.processed.toLocaleString()} /{' '}
-                        {titlesState.total.toLocaleString()}
+                        Rebuilding titles… {formatNumber(titlesState.processed)}{' '}
+                        / {formatNumber(titlesState.total)}
                       </p>
                       <ProgressBar
                         value={
@@ -283,16 +215,16 @@ export default function DiagnosticsCard() {
                         style={{ margin: '6px 0 0' }}
                         className="settings-muted"
                       >
-                        Fixed: {titlesState.fixed.toLocaleString()} · Skipped:{' '}
-                        {titlesState.skipped.toLocaleString()}
+                        Fixed: {formatNumber(titlesState.fixed)} · Skipped:{' '}
+                        {formatNumber(titlesState.skipped)}
                       </p>
                     </>
                   ) : (
                     <p style={{ margin: 0 }}>
-                      Done — fixed {titlesState.fixed.toLocaleString()} title
+                      Done — fixed {formatNumber(titlesState.fixed)} title
                       {titlesState.fixed !== 1 ? 's' : ''}
                       {titlesState.skipped > 0
-                        ? `, ${titlesState.skipped.toLocaleString()} could not be recovered`
+                        ? `, ${formatNumber(titlesState.skipped)} could not be recovered`
                         : ''}
                       .
                     </p>
@@ -312,9 +244,9 @@ export default function DiagnosticsCard() {
 
           <dt>FTS-indexed</dt>
           <dd>
-            {ftsTitleCount.toLocaleString()}{' '}
+            {formatNumber(ftsTitleCount)}{' '}
             <span className="settings-muted">
-              ({(pdbCount - emptyTitleCount).toLocaleString()} expected)
+              ({formatNumber(pdbCount - emptyTitleCount)} expected)
             </span>
           </dd>
 
@@ -324,14 +256,14 @@ export default function DiagnosticsCard() {
               <span className="settings-muted">no assembly entries found</span>
             ) : (
               <span>
-                {(assemblyTotal - assemblyMissing).toLocaleString()} /{' '}
-                {assemblyTotal.toLocaleString()} have a PNG
+                {formatNumber(assemblyTotal - assemblyMissing)} /{' '}
+                {formatNumber(assemblyTotal)} have a PNG
                 {assemblyMissing === 0 ? (
                   <span className="settings-ok"> ✓</span>
                 ) : (
                   <span className="settings-muted">
                     {' '}
-                    — {assemblyMissing.toLocaleString()} missing
+                    — {formatNumber(assemblyMissing)} missing
                   </span>
                 )}
               </span>
@@ -354,23 +286,24 @@ export default function DiagnosticsCard() {
               {renderState.running ? (
                 <>
                   <p style={{ margin: '0 0 6px' }} className="settings-muted">
-                    {jobLabel} {renderState.processed.toLocaleString()} /{' '}
-                    {renderState.total.toLocaleString()}
+                    {jobLabel || 'Rendering thumbnails…'}{' '}
+                    {formatNumber(renderState.processed)} /{' '}
+                    {formatNumber(renderState.total)}
                   </p>
                   <ProgressBar value={renderProgress} intent="primary" />
                   <p style={{ margin: '6px 0 0' }} className="settings-muted">
-                    Rendered: {renderState.rendered.toLocaleString()} · Skipped:{' '}
-                    {renderState.skipped.toLocaleString()} · Failed:{' '}
-                    {renderState.failed.toLocaleString()}
+                    Rendered: {formatNumber(renderState.rendered)} · Skipped:{' '}
+                    {formatNumber(renderState.skipped)} · Failed:{' '}
+                    {formatNumber(renderState.failed)}
                   </p>
                 </>
               ) : (
                 <p style={{ margin: 0 }}>
-                  Done — rendered {renderState.rendered.toLocaleString()} new
-                  PNG{renderState.rendered !== 1 ? 's' : ''}, skipped{' '}
-                  {renderState.skipped.toLocaleString()} existing
+                  Done — rendered {formatNumber(renderState.rendered)} new PNG
+                  {renderState.rendered !== 1 ? 's' : ''}, skipped{' '}
+                  {formatNumber(renderState.skipped)} existing
                   {renderState.failed > 0
-                    ? `, ${renderState.failed.toLocaleString()} failed`
+                    ? `, ${formatNumber(renderState.failed)} failed`
                     : ''}
                   .
                 </p>

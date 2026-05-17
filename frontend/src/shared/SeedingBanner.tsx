@@ -6,6 +6,7 @@ import type {
   SyncRunningInfo,
   SyncStatusResponse,
 } from './api/types.ts';
+import { formatNumber } from './format.ts';
 
 const POLL_INTERVAL_RUNNING_MS = 2_000;
 const POLL_INTERVAL_IDLE_MS = 30_000;
@@ -82,8 +83,8 @@ export default function SeedingBanner() {
       : null;
   const counter =
     typeof total === 'number' && total > 0
-      ? `${processed.toLocaleString()} / ${total.toLocaleString()}`
-      : `${processed.toLocaleString()} files`;
+      ? `${formatNumber(processed)} / ${formatNumber(total)}`
+      : `${formatNumber(processed)} files`;
 
   return (
     <div
@@ -99,9 +100,9 @@ export default function SeedingBanner() {
           {percent !== null ? ` (${percent}%)` : ''}
           {running.lastEntryId ? ` · last: ${running.lastEntryId}` : ''}
           {running.renderStats
-            ? ` · pymol: ${running.renderStats.rendered.toLocaleString()} rendered, ${running.renderStats.skipped.toLocaleString()} skipped${
+            ? ` · pymol: ${formatNumber(running.renderStats.rendered)} rendered, ${formatNumber(running.renderStats.skipped)} skipped${
                 running.renderStats.failed > 0
-                  ? `, ${running.renderStats.failed.toLocaleString()} failed`
+                  ? `, ${formatNumber(running.renderStats.failed)} failed`
                   : ''
               }`
             : ''}

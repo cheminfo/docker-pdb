@@ -38,12 +38,9 @@ export function registerGetLigandsRoute(fastify, db) {
              FROM ligands l
              WHERE l.code IN (${placeholders})`,
           )
-          .all(...codes)
-          .map((row) => ({ ...row }));
+          .all(...codes);
       } else {
-        ligands = db.selectLigandsByDefaultRanking
-          .all(limit)
-          .map((row) => ({ ...row }));
+        ligands = db.selectLigandsByDefaultRanking.all(limit);
       }
       return reply.send({
         ligands,

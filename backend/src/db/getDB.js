@@ -593,6 +593,17 @@ export class LigandsDB {
     );
   }
 
+  get selectRsyncHistoryWithEntry() {
+    return this.statement(
+      `SELECT type, started_at, finished_at, duration_ms, updated_count,
+              deleted_count, last_entry_id, bytes_on_disk
+       FROM rsync_history
+       WHERE type = ? AND last_entry_id IS NOT NULL
+       ORDER BY finished_at DESC
+       LIMIT ?`,
+    );
+  }
+
   get selectLastRsyncRun() {
     return this.statement(
       `SELECT type, started_at, finished_at, duration_ms, updated_count,

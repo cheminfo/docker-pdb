@@ -1,15 +1,15 @@
-import { setTimeout as delay } from 'node:timers/promises';
-
 import createDebug from 'debug';
 
 import { getLigandsDB } from './db/getDB.js';
 import { rebuildStatsRollup } from './db/rebuildStatsRollup.js';
+import { recordRsyncHistory } from './db/upsertPdbEntry.js';
 import * as rebuild from './rebuild.js';
 import {
   clearRunning,
   clearTrigger,
   markRunning,
-  triggerExists,
+  sleepUntilTrigger,
+  throttle,
   updateRunning,
 } from './syncControl.js';
 import update from './update.js';
@@ -18,8 +18,6 @@ const debug = createDebug('pdb-sync:cron');
 
 const SLEEP_HOURS = 24;
 const SLEEP_MS = SLEEP_HOURS * 3600 * 1000;
-/** How often to check for an instant-trigger marker while sleeping. */
-const TRIGGER_POLL_MS = 5 * 1000;
 /** Cron kind, used for the matching trigger / running marker filenames. */
 const KIND = 'rsync';
 /** Throttle live-marker writes: at most one update every 2 s per phase. */
@@ -48,7 +46,7 @@ async function cron() {
 
   /* eslint-disable no-await-in-loop -- intentional sequential cron loop */
   while (true) {
-    await sleepUntilTrigger(SLEEP_MS);
+    await sleepUntilTrigger(SLEEP_MS, KIND, { logProgress: true });
     await runOnce();
   }
   /* eslint-enable no-await-in-loop */
@@ -72,6 +70,8 @@ async function runRebuild() {
     processed: 0,
     total: 0,
   });
+  let asymFinal;
+  let assemblyFinal;
   try {
     /* eslint-disable no-await-in-loop -- two phases, run sequentially */
     for (const phase of ['rebuild-asym', 'rebuild-assembly']) {
@@ -97,6 +97,8 @@ async function runRebuild() {
       );
       const fn = phase === 'rebuild-asym' ? rebuild.pdb : rebuild.assembly;
       const final = await fn({ onStart, onProgress });
+      if (phase === 'rebuild-asym') asymFinal = final;
+      else assemblyFinal = final;
       // Flush the final state so the UI shows 100% even if the last
       // onProgress fired within the throttle window.
       await updateRunning(KIND, {
@@ -109,6 +111,47 @@ async function runRebuild() {
     }
     /* eslint-enable no-await-in-loop */
     await refreshStatsRollup(await getLigandsDB());
+    // Record synthetic rsync_history rows so the home-page "Last imported
+    // entry" panel has a lastEntryId to display after a first-boot rebuild.
+    // The weekly rsync path records these automatically; the rebuild path
+    // did not, leaving the panel permanently blank on fresh deployments.
+    const finishedAt = new Date().toISOString();
+    const durationMs = Date.parse(finishedAt) - Date.parse(startedAt);
+    if (asymFinal?.lastEntryId) {
+      try {
+        await recordRsyncHistory({
+          type: 'asymUnit',
+          startedAt,
+          finishedAt,
+          durationMs,
+          updatedCount: asymFinal.processed,
+          deletedCount: 0,
+          lastEntryId: asymFinal.lastEntryId,
+          bytesOnDisk: null,
+        });
+      } catch (error) {
+        debug('Failed to record rebuild rsync-history row (asymUnit):', error);
+      }
+    }
+    if (assemblyFinal?.lastEntryId) {
+      try {
+        await recordRsyncHistory({
+          type: 'bioAssembly',
+          startedAt,
+          finishedAt,
+          durationMs,
+          updatedCount: assemblyFinal.processed,
+          deletedCount: 0,
+          lastEntryId: assemblyFinal.lastEntryId,
+          bytesOnDisk: null,
+        });
+      } catch (error) {
+        debug(
+          'Failed to record rebuild rsync-history row (bioAssembly):',
+          error,
+        );
+      }
+    }
   } catch (error) {
     debug('rebuild-from-disk failed; continuing into rsync loop:', error);
   } finally {
@@ -204,52 +247,4 @@ async function refreshStatsRollup(db) {
   } catch (error) {
     debug('stats rollup rebuild failed:', error);
   }
-}
-
-/**
- * Wrap an async callback so it fires at most once every `intervalMs`. Calls
- * within the window are dropped — callers are expected to issue an explicit
- * final call (or to clear the marker) once the underlying work finishes,
- * since this throttle is "leading-edge only". Bounds the number of
- * marker-file writes during long rebuilds.
- * @param {(value: unknown) => Promise<void>} fn - Underlying callback.
- * @param {number} intervalMs - Minimum gap between consecutive invocations.
- * @returns {(value: unknown) => Promise<void>} Throttled wrapper.
- */
-function throttle(fn, intervalMs) {
-  let last = 0;
-  return async (value) => {
-    const now = Date.now();
-    if (now - last < intervalMs) return;
-    last = now;
-    await fn(value);
-  };
-}
-
-/**
- * Sleep up to `maxMs`, returning early as soon as a trigger marker appears.
- * Polls every `TRIGGER_POLL_MS` so the worst-case latency for an
- * instant-sync click is a few seconds rather than the full 24 h cycle.
- * @param {number} maxMs - Maximum time to sleep, in milliseconds.
- * @returns {Promise<'triggered' | 'timeout'>} How the wait ended.
- */
-async function sleepUntilTrigger(maxMs) {
-  const start = Date.now();
-  let lastLoggedHour = -1;
-  /* eslint-disable no-await-in-loop -- intentional poll loop */
-  /* eslint-disable no-console -- legacy log format consumed by ops dashboards */
-  while (Date.now() - start < maxMs) {
-    if (triggerExists(KIND)) return 'triggered';
-    const remainingMs = maxMs - (Date.now() - start);
-    const remainingHours = Math.ceil(remainingMs / 3_600_000);
-    if (remainingHours !== lastLoggedHour && remainingHours > 0) {
-      console.log(
-        `${new Date().toISOString()} - Still waiting ${remainingHours}h`,
-      );
-      lastLoggedHour = remainingHours;
-    }
-    await delay(Math.min(TRIGGER_POLL_MS, remainingMs));
-  }
-  /* eslint-enable no-await-in-loop, no-console */
-  return 'timeout';
 }

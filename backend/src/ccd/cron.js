@@ -18,7 +18,6 @@
 import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { join } from 'node:path';
-import { setTimeout as delay } from 'node:timers/promises';
 
 import { pino } from 'pino';
 
@@ -33,6 +32,7 @@ import {
   clearRunning,
   clearTrigger,
   markRunning,
+  sleepUntilTrigger,
   triggerExists,
 } from '../syncControl.js';
 
@@ -45,9 +45,6 @@ const REFRESH_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** Minimum sleep between iterations to avoid a tight loop on bugs. */
 const MIN_SLEEP_MS = 60 * 1000;
-
-/** How often to check the trigger marker while sleeping. */
-const TRIGGER_POLL_MS = 5 * 1000;
 
 /** Cron kind, used for the matching trigger / running marker filenames. */
 const KIND = 'ccd';
@@ -133,7 +130,7 @@ async function runForever() {
       },
       'CCD cache fresh; sleeping until next refresh window',
     );
-    await sleepUntilTrigger(sleepMs);
+    await sleepUntilTrigger(sleepMs, KIND);
   }
   /* eslint-enable no-await-in-loop */
 }
@@ -296,25 +293,6 @@ async function getArchiveSize() {
   } catch {
     return null;
   }
-}
-
-/**
- * Sleep up to `maxMs`, returning early as soon as a trigger marker appears.
- * Polls every `TRIGGER_POLL_MS` so the worst-case latency for a manual
- * refresh is a few seconds rather than the full 7-day cycle.
- * @param {number} maxMs - Maximum time to sleep, in milliseconds.
- * @returns {Promise<'triggered' | 'timeout'>} How the wait ended.
- */
-async function sleepUntilTrigger(maxMs) {
-  const start = Date.now();
-  /* eslint-disable no-await-in-loop -- intentional poll loop */
-  while (Date.now() - start < maxMs) {
-    if (triggerExists(KIND)) return 'triggered';
-    const remainingMs = maxMs - (Date.now() - start);
-    await delay(Math.min(TRIGGER_POLL_MS, remainingMs));
-  }
-  /* eslint-enable no-await-in-loop */
-  return 'timeout';
 }
 
 /**

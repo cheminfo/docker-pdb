@@ -11,6 +11,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 
 const dataDir = process.env.DATA_DIR
   ? process.env.DATA_DIR.replace(/\/$/, '')
@@ -148,4 +149,62 @@ function readJson(path) {
   } catch {
     return null;
   }
+}
+
+/** How often to poll for a trigger marker while sleeping. */
+const TRIGGER_POLL_MS = 5 * 1000;
+
+/**
+ * Sleep up to `maxMs`, returning early as soon as a trigger marker appears.
+ * Polls every 5 s so the worst-case latency for a manual trigger is a few
+ * seconds rather than the full sleep interval.
+ * @param {number} maxMs - Maximum time to sleep, in milliseconds.
+ * @param {'rsync' | 'ccd'} kind - Which trigger file to watch.
+ * @param {{ logProgress?: boolean }} [options] - When `logProgress` is true,
+ *   logs remaining hours each time the hour count decreases (ops-dashboard
+ *   format consumed by the rsync cron). Defaults to `false`.
+ * @returns {Promise<'triggered' | 'timeout'>} How the wait ended.
+ */
+export async function sleepUntilTrigger(maxMs, kind, options = {}) {
+  const logProgress = options.logProgress ?? false;
+  const start = Date.now();
+  let lastLoggedHour = -1;
+  /* eslint-disable no-await-in-loop -- intentional poll loop */
+  /* eslint-disable no-console -- legacy log format consumed by ops dashboards */
+  while (Date.now() - start < maxMs) {
+    if (triggerExists(kind)) return 'triggered';
+    const remainingMs = maxMs - (Date.now() - start);
+    if (logProgress) {
+      const remainingHours = Math.ceil(remainingMs / 3_600_000);
+      if (remainingHours !== lastLoggedHour && remainingHours > 0) {
+        console.log(
+          `${new Date().toISOString()} - Still waiting ${remainingHours}h`,
+        );
+        lastLoggedHour = remainingHours;
+      }
+    }
+    await delay(Math.min(TRIGGER_POLL_MS, remainingMs));
+  }
+  /* eslint-enable no-await-in-loop, no-console */
+  return 'timeout';
+}
+
+/**
+ * Wrap an async callback so it fires at most once every `intervalMs`. Calls
+ * within the window are dropped — callers are expected to issue an explicit
+ * final call (or clear the marker) once the underlying work finishes, since
+ * this throttle is "leading-edge only". Bounds the number of marker-file
+ * writes during long rebuilds.
+ * @param {(value: unknown) => Promise<void>} fn - Underlying callback.
+ * @param {number} intervalMs - Minimum gap between consecutive invocations.
+ * @returns {(value: unknown) => Promise<void>} Throttled wrapper.
+ */
+export function throttle(fn, intervalMs) {
+  let last = 0;
+  return async (value) => {
+    const now = Date.now();
+    if (now - last < intervalMs) return;
+    last = now;
+    await fn(value);
+  };
 }

@@ -335,23 +335,25 @@ export function fetchPdbDoc(pdbId: string): Promise<PdbDoc> {
 }
 
 /**
- * Fetch the most recent rsync-history record for the asymmetric-unit archive.
- * @returns Promise resolving to the most recent run, or `null` if none exists.
+ * Fetch the most recent rsync-history record for the asymmetric-unit archive
+ * that has a non-null {@link RsyncHistoryDoc.lastEntryId}.
+ * @returns Promise resolving to the most recent run with an entry, or `null` if none exists.
  */
 export async function fetchLastAsymRsync(): Promise<RsyncHistoryDoc | null> {
   const response = await fetchJson<RsyncHistoryResponse>(
-    '/v1/rsync-history?type=asymUnit&limit=1',
+    '/v1/rsync-history?type=asymUnit&limit=1&hasEntry=true',
   );
   return response.rows[0] ?? null;
 }
 
 /**
- * Fetch the most recent rsync-history record for the bio-assembly archive.
- * @returns Promise resolving to the most recent run, or `null` if none exists.
+ * Fetch the most recent rsync-history record for the bio-assembly archive
+ * that has a non-null {@link RsyncHistoryDoc.lastEntryId}.
+ * @returns Promise resolving to the most recent run with an entry, or `null` if none exists.
  */
 export async function fetchLastBioAssemblyRsync(): Promise<RsyncHistoryDoc | null> {
   const response = await fetchJson<RsyncHistoryResponse>(
-    '/v1/rsync-history?type=bioAssembly&limit=1',
+    '/v1/rsync-history?type=bioAssembly&limit=1&hasEntry=true',
   );
   return response.rows[0] ?? null;
 }
@@ -417,6 +419,7 @@ export function fetchDiagnostics(): Promise<DiagnosticsResponse> {
 
 /**
  * Start (or report the status of) the background thumbnail render job.
+ * @param options
  * @param options.force - Re-render existing PNGs. Defaults to false.
  * @param options.nmrOnly - Restrict to NMR entries (implies force). Defaults to false.
  * @returns Promise resolving to the trigger response.

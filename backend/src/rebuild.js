@@ -105,6 +105,57 @@ function getAssemblyFiles() {
 const REBUILD_PDB_BATCH_SIZE = 100;
 
 /**
+ * Shared scaffolding for both rebuild phases. Discovers files, fires
+ * `onStart`, tracks `processed` / `lastEntryId` / optional `renderStats`,
+ * and delegates the actual processing to `run`. Callers call `advance(file,
+ * extra)` inside `run` after each file to bump the counter and queue an
+ * `onProgress` notification.
+ * @param {() => Promise<string[]>} getPhaseFiles - Returns the ordered file list.
+ * @param {(files: string[], advance: (file: string, extra?: object, count?: number) => Promise<void>) => Promise<void>} run
+ *   Processing loop. Must call `advance(file)` after each file (or group of
+ *   files) is handled so the progress counter stays accurate. Pass `count`
+ *   when one `advance` call accounts for multiple files (e.g. a batch).
+ * @param {RebuildOptions} [options] - Progress callbacks.
+ * @param {object} [initExtra] - Extra fields merged into the initial `onStart`
+ *   payload and carried through to every `onProgress` call (e.g. `renderStats`
+ *   for the assembly phase).
+ * @returns {Promise<RebuildProgress>} Final progress snapshot.
+ */
+async function runRebuildPhase(
+  getPhaseFiles,
+  run,
+  options = {},
+  initExtra = {},
+) {
+  const files = await getPhaseFiles();
+  await options.onStart?.({
+    processed: 0,
+    total: files.length,
+    lastEntryId: undefined,
+    ...initExtra,
+  });
+
+  let processed = 0;
+  let lastEntryId;
+  const extra = { ...initExtra };
+
+  const advance = async (phaseFile, fileExtra = {}, count = 1) => {
+    processed += count;
+    lastEntryId = common.getIdFromFileName(phaseFile).toUpperCase();
+    Object.assign(extra, fileExtra);
+    await options.onProgress?.({
+      processed,
+      total: files.length,
+      lastEntryId,
+      ...extra,
+    });
+  };
+
+  await run(files, advance);
+  return { processed, total: files.length, lastEntryId, ...extra };
+}
+
+/**
  * Rebuild every asymmetrical-unit row from the local `data/pdb/` tree.
  * Idempotent: replaces existing rows in-place. Files are processed in
  * batches sharing a single outer transaction, which collapses the per-file
@@ -116,44 +167,37 @@ const REBUILD_PDB_BATCH_SIZE = 100;
  */
 export async function pdb(options = {}) {
   const db = await getLigandsDB();
-  const files = await getPdbFiles();
-  debug(`Pdb database: about to process ${files.length} files.`);
-  await options.onStart?.({
-    processed: 0,
-    total: files.length,
-    lastEntryId: undefined,
-  });
-
-  let processed = 0;
-  let lastEntryId;
-  /* eslint-disable no-await-in-loop -- intentional sequential sqlite writes */
-  for (let start = 0; start < files.length; start += REBUILD_PDB_BATCH_SIZE) {
-    const batch = files.slice(start, start + REBUILD_PDB_BATCH_SIZE);
-    db.db.exec('BEGIN');
-    try {
-      for (const file of batch) {
+  debug('Pdb database: discovering files…');
+  return runRebuildPhase(
+    getPdbFiles,
+    /* eslint-disable no-await-in-loop -- intentional sequential sqlite writes */
+    async (files, advance) => {
+      for (
+        let start = 0;
+        start < files.length;
+        start += REBUILD_PDB_BATCH_SIZE
+      ) {
+        const batch = files.slice(start, start + REBUILD_PDB_BATCH_SIZE);
+        db.db.exec('BEGIN');
         try {
-          await common.processPdb(file, { skipTransaction: true });
-          lastEntryId = common.getIdFromFileName(file).toUpperCase();
+          for (const batchFile of batch) {
+            try {
+              await common.processPdb(batchFile, { skipTransaction: true });
+            } catch (error) {
+              debug('Exception for file:', batchFile, error);
+            }
+          }
+          db.db.exec('COMMIT');
         } catch (error) {
-          debug('Exception for file:', file, error);
+          db.db.exec('ROLLBACK');
+          throw error;
         }
+        await advance(batch.at(-1), {}, batch.length);
       }
-      db.db.exec('COMMIT');
-    } catch (error) {
-      db.db.exec('ROLLBACK');
-      throw error;
-    }
-    processed += batch.length;
-    await options.onProgress?.({
-      processed,
-      total: files.length,
-      lastEntryId,
-    });
-  }
-  /* eslint-enable no-await-in-loop */
-
-  return { processed, total: files.length, lastEntryId };
+    },
+    /* eslint-enable no-await-in-loop */
+    options,
+  );
 }
 
 /**
@@ -171,39 +215,26 @@ export async function pdb(options = {}) {
  *   on success), including the aggregated PyMol render stats.
  */
 export async function assembly(options = {}) {
-  await getLigandsDB();
-  const files = await getAssemblyFiles();
-  debug(`Pdb bio assembly database: about to process ${files.length} files.`);
-  await options.onStart?.({
-    processed: 0,
-    total: files.length,
-    lastEntryId: undefined,
-    renderStats: { rendered: 0, skipped: 0, failed: 0 },
-  });
-
-  let processed = 0;
-  let lastEntryId;
+  debug('Pdb bio assembly database: discovering files…');
   const renderStats = { rendered: 0, skipped: 0, failed: 0 };
-  await runWithConcurrency(files, async (file) => {
-    try {
-      const fileStats = await common.processPdbAssembly(file);
-      renderStats.rendered += fileStats.rendered;
-      renderStats.skipped += fileStats.skipped;
-      renderStats.failed += fileStats.failed;
-      lastEntryId = common.getIdFromFileName(file).toUpperCase();
-    } catch (error) {
-      debug('Exception for file:', file, error);
-    }
-    processed++;
-    await options.onProgress?.({
-      processed,
-      total: files.length,
-      lastEntryId,
-      renderStats,
-    });
-  });
-
-  return { processed, total: files.length, lastEntryId, renderStats };
+  return runRebuildPhase(
+    getAssemblyFiles,
+    async (files, advance) => {
+      await runWithConcurrency(files, async (assemblyFile) => {
+        try {
+          const fileStats = await common.processPdbAssembly(assemblyFile);
+          renderStats.rendered += fileStats.rendered;
+          renderStats.skipped += fileStats.skipped;
+          renderStats.failed += fileStats.failed;
+        } catch (error) {
+          debug('Exception for file:', assemblyFile, error);
+        }
+        await advance(assemblyFile, { renderStats });
+      });
+    },
+    options,
+    { renderStats },
+  );
 }
 
 if (process.argv[1] === import.meta.filename) {

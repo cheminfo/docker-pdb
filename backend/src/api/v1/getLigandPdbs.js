@@ -16,9 +16,7 @@ export function registerGetLigandPdbsRoute(fastify, db) {
     const offset = clampLimit(query.offset, 0, 0, 1_000_000);
 
     const total = db.countPdbsByLigandCode.get(code).n;
-    const pdbs = db.selectPdbsByLigandCode
-      .all(code, limit, offset)
-      .map((row) => ({ ...row }));
+    const pdbs = db.selectPdbsByLigandCode.all(code, limit, offset);
     return reply.send({ total, limit, offset, pdbs });
   });
 }
