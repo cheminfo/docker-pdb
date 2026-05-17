@@ -12,10 +12,13 @@ services:
       DEBUG: '*'
     restart: unless-stopped
     init: true
-    pids_limit: 256
-    # Sized for PYMOL_CONCURRENCY parallel pymol child processes. Both
-    # come from .env so operators can tune them together; bump the
-    # memory cap when raising the worker count.
+    # PyMol hard-caps concurrent processes at min(PYMOL_CONCURRENCY, 8).
+    # Each child spawns ~15 OS threads (Python + OpenMP), so the worst case
+    # is 8 × 15 = 120 PyMol threads + ~30 Node threads ≈ 150 total PIDs —
+    # well within 1024.
+    pids_limit: 1024
+    # 16 GB covers 8 simultaneous PyMol renders (≈ 500 MB each) plus
+    # headroom for Node, rsync, and chokidar.
     mem_limit: ${PYMOL_MEMORY_LIMIT:-16g}
     memswap_limit: ${PYMOL_MEMORY_LIMIT:-16g}
     ulimits:
@@ -48,7 +51,7 @@ services:
       PORT: '3000'
     restart: unless-stopped
     init: true
-    pids_limit: 256
+    pids_limit: 1024
     ulimits:
       core: 0
     logging:
@@ -80,7 +83,7 @@ services:
       NODE_OPTIONS: '--max-old-space-size=6144'
     restart: unless-stopped
     init: true
-    pids_limit: 256
+    pids_limit: 1024
     mem_limit: 8g
     memswap_limit: 8g
     ulimits:

@@ -1,12 +1,43 @@
 import { exec } from 'node:child_process';
 import { existsSync, unlinkSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
+import { cpus } from 'node:os';
 import { dirname, join } from 'node:path';
 
 import createDebug from 'debug';
 import gm from 'gm';
 
 const debug = createDebug('pdb-sync:pymol');
+
+// Global hard limit on simultaneous `exec('pymol …')` calls across ALL
+// callers (rsync path + on-demand repair endpoint combined). Each PyMol child
+// is ~500 MB RSS and spawns several Python/OpenMP threads; more than ~8
+// concurrent processes routinely causes libgomp thread exhaustion or
+// segfaults inside PyMol itself.
+//
+// Default formula: min(8, max(1, floor(cpus / 2))).
+// Override at deploy time via the PYMOL_CONCURRENCY env var (still hard-
+// capped at 8 to protect the container regardless of the configured value).
+const DEFAULT_EXEC_LIMIT = Math.min(
+  8,
+  Math.max(1, Math.floor(cpus().length / 2)),
+);
+
+function getExecLimit() {
+  const raw = process.env.PYMOL_CONCURRENCY;
+  if (!raw) return DEFAULT_EXEC_LIMIT;
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < 1) return DEFAULT_EXEC_LIMIT;
+  // Hard cap — protect the container even when PYMOL_CONCURRENCY is set high.
+  return Math.min(parsed, 8);
+}
+
+// Initialized once at module load so all callers share a single semaphore.
+const execSemaphore = new Semaphore(getExecLimit());
+
+// Retry once on transient failures (segfault, OOM spike). A second attempt
+// succeeds once the semaphore drains and memory pressure drops.
+const MAX_RETRIES = 1;
 
 /**
  * Render a PyMol PNG of `pdb` and persist it to disk at `outputPath`.
@@ -37,10 +68,8 @@ export default async function pymol(id, pdb, outputPath, options) {
   const { width = 200, height = 200 } = options ?? {};
   debug(`pymol ${width} x ${height} -> ${outputPath}`);
 
-  // Per-call random suffix so 32 parallel renders (different PDBs or
-  // re-renders of the same PDB at different sizes) never collide on the
-  // shared /tmp dir even when the same (id, width, height) is in flight
-  // more than once.
+  // Per-call random suffix so parallel renders never collide on /tmp even
+  // when the same (id, width, height) is in flight more than once.
   const tag = `${id}-${width}x${height}-${process.pid}-${crypto.randomUUID()}`;
   const tmpPdb = `/tmp/${tag}.pdb`;
   const tmpPng = `/tmp/${tag}.png`;
@@ -52,16 +81,54 @@ export default async function pymol(id, pdb, outputPath, options) {
   await mkdir(dirname(outputPath), { recursive: true });
 
   // OMP_NUM_THREADS=1 prevents each PyMol process from spawning OpenMP worker
-  // threads. Without it, running PYMOL_CONCURRENCY instances simultaneously
-  // exhausts the OS thread limit ("libgomp: Thread creation failed").
+  // threads on top of the semaphore-enforced process limit.
   const execEnv = { ...process.env, OMP_NUM_THREADS: '1' };
 
+  let lastError;
+  try {
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      if (attempt > 0) {
+        debug(`pymol retry ${attempt} for ${id}`);
+        // eslint-disable-next-line no-await-in-loop -- intentional: back off before retry
+        await new Promise((r) => {
+          setTimeout(r, 1000);
+        });
+      }
+      // eslint-disable-next-line no-await-in-loop -- intentional: sequential semaphore acquire
+      await execSemaphore.acquire();
+      try {
+        // eslint-disable-next-line no-await-in-loop -- intentional: one exec at a time per slot
+        await execAndResize(
+          cmd,
+          tmpPng,
+          outputPath,
+          width,
+          height,
+          id,
+          execEnv,
+        );
+        return { outputPath, status: 'rendered' };
+      } catch (error) {
+        lastError = error;
+        debug(
+          `pymol attempt ${attempt + 1}/${MAX_RETRIES + 1} failed for ${id}: ${error.message}`,
+        );
+      } finally {
+        execSemaphore.release();
+      }
+    }
+  } finally {
+    tryUnlink(tmpPdb);
+  }
+  throw lastError;
+}
+
+function execAndResize(cmd, tmpPng, outputPath, width, height, id, execEnv) {
   return new Promise((resolve, reject) => {
     exec(
       cmd,
       { maxBuffer: 10 * 1024 * 1024, env: execEnv },
       (error, stdout, stderr) => {
-        tryUnlink(tmpPdb);
         if (error) {
           debug('error executing pymol command', error);
           error.stdout = stdout;
@@ -80,7 +147,7 @@ export default async function pymol(id, pdb, outputPath, options) {
               reject(err);
               return;
             }
-            resolve({ outputPath, status: 'rendered' });
+            resolve();
           });
       },
     );
@@ -92,6 +159,36 @@ function tryUnlink(path) {
     unlinkSync(path);
   } catch {
     // ignore
+  }
+}
+
+// Simple counting semaphore — resolves immediately when a slot is free,
+// otherwise queues the caller until a slot is released.
+class Semaphore {
+  constructor(max) {
+    this._max = max;
+    this._count = 0;
+    this._queue = [];
+  }
+
+  acquire() {
+    return new Promise((resolve) => {
+      if (this._count < this._max) {
+        this._count++;
+        resolve();
+      } else {
+        this._queue.push(resolve);
+      }
+    });
+  }
+
+  release() {
+    const next = this._queue.shift();
+    if (next) {
+      next();
+    } else {
+      this._count--;
+    }
   }
 }
 
