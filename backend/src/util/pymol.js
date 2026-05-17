@@ -44,7 +44,7 @@ export default async function pymol(id, pdb, outputPath, options) {
   const tmpPng = `/tmp/${tag}.png`;
   await writeFile(tmpPdb, pdb);
 
-  const cmd = `pymol -c ${tmpPdb} -d "as ribbon;spectrum count;set seq_view; set all_states; set opaque_background, off;" -g ${tmpPng}`;
+  const cmd = `pymol -c ${tmpPdb} -d "as ribbon;spectrum count;set seq_view;set opaque_background, off;" -g ${tmpPng}`;
   debug(cmd);
 
   await mkdir(dirname(outputPath), { recursive: true });

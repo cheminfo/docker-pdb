@@ -318,6 +318,16 @@ export class LigandsDB {
     return this.statement(`SELECT COUNT(*) AS n FROM pdb_title_fts`);
   }
 
+  get selectEmptyTitleIds() {
+    return this.statement(
+      `SELECT id FROM pdb_entries WHERE title = '' ORDER BY id`,
+    );
+  }
+
+  get updatePdbTitle() {
+    return this.statement(`UPDATE pdb_entries SET title = ? WHERE id = ?`);
+  }
+
   get selectSampleAssemblyIds() {
     return this.statement(
       `SELECT id FROM pdb_entries WHERE has_assembly = 1 LIMIT ?`,
@@ -326,6 +336,12 @@ export class LigandsDB {
 
   get selectAllAssemblyIds() {
     return this.statement(`SELECT id FROM pdb_entries WHERE has_assembly = 1`);
+  }
+
+  get selectNmrAssemblyIds() {
+    return this.statement(
+      `SELECT id FROM pdb_entries WHERE has_assembly = 1 AND experiment LIKE '%NMR%'`,
+    );
   }
 
   // -- pdb_chains --
