@@ -38,18 +38,26 @@ const SAMPLE_PYMOL_SIZES = [
 export function registerGetDiagnosticsRoute(fastify, db) {
   fastify.get('/v1/diagnostics', async (_request, reply) => {
     const config = getConfig();
-    const [pymolSamples, ccdGz] = await Promise.all([
-      probePymolSamples(config.pymolDir),
-      probeFile(ccdGzPath),
-    ]);
 
     const databaseTotals = db.pdbDatabaseTotals.get();
     const ligandCount = db.countLigands.get()?.n ?? 0;
     const pdbCount = databaseTotals?.pdb_count ?? 0;
     const assemblyCount = databaseTotals?.assembly_count ?? 0;
+    const emptyTitleCount = db.countEmptyTitleEntries.get()?.n ?? 0;
+    const ftsTitleCount = db.countFtsTitleEntries.get()?.n ?? 0;
+    const sampleAssemblyIds = db.selectSampleAssemblyIds
+      .all(10)
+      .map((r) => r.id);
+
     const lastCcd = db.selectLastCcdRefresh.get();
     const lastRsyncAsym = db.selectLastRsyncRun.get('asymUnit');
     const lastRsyncBio = db.selectLastRsyncRun.get('bioAssembly');
+
+    const [pymolSamples, assemblyThumbnailSamples, ccdGz] = await Promise.all([
+      probePymolSamples(config.pymolDir),
+      probeAssemblyThumbnails(config.pymolDir, sampleAssemblyIds),
+      probeFile(ccdGzPath),
+    ]);
 
     const memory = process.memoryUsage();
     return reply.send({
@@ -67,6 +75,8 @@ export function registerGetDiagnosticsRoute(fastify, db) {
         pdbCount,
         assemblyCount,
         ligandsLooksEmpty: ligandCount === 0,
+        emptyTitleCount,
+        ftsTitleCount,
       },
       sync: {
         kinds: SYNC_KINDS,
@@ -86,6 +96,7 @@ export function registerGetDiagnosticsRoute(fastify, db) {
         ccdGzPath,
         ccdGzFile: ccdGz,
         pymolSamples,
+        assemblyThumbnailSamples,
       },
     });
   });
@@ -116,6 +127,29 @@ async function probeFile(path) {
   } catch {
     return { exists: false, sizeBytes: null, mtime: null };
   }
+}
+
+/**
+ * Probe on-disk PyMol PNGs for a set of PDB ids that have `has_assembly = 1`
+ * in the database. Cheap: N ids × 3 sizes = N*3 synchronous `existsSync`
+ * calls. Surfaces "thumbnails missing for assembly entries" diagnostics
+ * without crawling the full pymol tree.
+ * @param {string} pymolDir - Root directory holding the PyMol PNG tree.
+ * @param {string[]} ids - PDB ids to probe (from `selectSampleAssemblyIds`).
+ * @returns {{ samples: Array<{ id: string, sizes: Record<string, boolean>, hasAny: boolean }>, missingCount: number }} Probe result.
+ */
+function probeAssemblyThumbnails(pymolDir, ids) {
+  const samples = ids.map((id) => {
+    const sizes = {};
+    for (const size of SAMPLE_PYMOL_SIZES) {
+      const path = pymolImagePath(pymolDir, id, size.width, size.height);
+      sizes[`${size.width}x${size.height}`] = existsSync(path);
+    }
+    const hasAny = Object.values(sizes).some(Boolean);
+    return { id, sizes, hasAny };
+  });
+  const missingCount = samples.filter((s) => !s.hasAny).length;
+  return { samples, missingCount };
 }
 
 /**

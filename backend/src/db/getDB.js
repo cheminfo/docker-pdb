@@ -308,6 +308,22 @@ export class LigandsDB {
     );
   }
 
+  get countEmptyTitleEntries() {
+    return this.statement(
+      `SELECT COUNT(*) AS n FROM pdb_entries WHERE title = ''`,
+    );
+  }
+
+  get countFtsTitleEntries() {
+    return this.statement(`SELECT COUNT(*) AS n FROM pdb_title_fts`);
+  }
+
+  get selectSampleAssemblyIds() {
+    return this.statement(
+      `SELECT id FROM pdb_entries WHERE has_assembly = 1 LIMIT ?`,
+    );
+  }
+
   // -- pdb_chains --
 
   get deletePdbChains() {
