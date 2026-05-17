@@ -2029,6 +2029,62 @@ code {
   font-size: 12px;
 }
 
+/* --- Scripting: scene chips ----------------------------------------- */
+
+.scripting-scene-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 3px;
+}
+
+.scripting-scene-chip:hover .scripting-scene-delete {
+  opacity: 1;
+}
+
+.scripting-scene-delete {
+  opacity: 0;
+  padding: 0 2px;
+  min-width: 20px;
+  min-height: 20px;
+  transition: opacity 0.1s;
+}
+
+.scripting-scene-input {
+  width: 140px;
+}
+
+/* --- Scripting: revision panel -------------------------------------- */
+
+.scripting-revisions-panel {
+  width: 380px;
+  padding: 10px;
+}
+
+.scripting-revisions-hint {
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.scripting-revisions-save {
+  margin-bottom: 8px;
+}
+
+.scripting-revisions-empty {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+  padding: 8px;
+}
+
+.scripting-revisions-list {
+  max-height: 260px;
+  overflow-y: auto;
+  border-top: 1px solid var(--bp5-divider-black);
+  margin-top: 4px;
+}
+
 /* --- Splitter ------------------------------------------------------- */
 
 .splitter {

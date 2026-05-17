@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 
 import {
   fetchByExperiment,
-  fetchByYear,
   fetchDatabaseInfo,
   fetchLastAsymRsync,
   fetchLastBioAssemblyRsync,
@@ -12,9 +11,9 @@ import Panel from '../../shared/charts/Panel.tsx';
 import { useAsync } from '../../shared/useAsync.ts';
 
 import ExperimentChart from './ExperimentChart.tsx';
+import HomeMethodsByYearChart from './HomeMethodsByYearChart.tsx';
 import LastEntryPanel from './LastEntryPanel.tsx';
 import StatsOverview from './StatsOverview.tsx';
-import YearChart from './YearChart.tsx';
 
 async function fetchOverview() {
   const [dbInfo, lastAsymRsync, lastBioAssemblyRsync] = await Promise.all([
@@ -81,7 +80,6 @@ export default function HomePage() {
   }, []);
 
   const overview = useAsync(fetchOverview, refreshKey);
-  const byYear = useAsync(fetchByYear, refreshKey);
   const byExperiment = useAsync(fetchByExperiment, refreshKey);
 
   return (
@@ -127,13 +125,7 @@ export default function HomePage() {
         )}
 
       <div className="charts">
-        <Panel
-          title="Structures by year"
-          state={byYear}
-          errorPrefix="Could not load year breakdown"
-        >
-          {(data) => <YearChart data={data} />}
-        </Panel>
+        <HomeMethodsByYearChart />
         <Panel
           title="Experimental method"
           state={byExperiment}

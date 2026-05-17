@@ -44,7 +44,7 @@ export default function DiagnosticsCard() {
   const [diagError, setDiagError] = useState<string | null>(null);
 
   const [renderLoading, setRenderLoading] = useState(false);
-  const [nmrRenderLoading, setNmrRenderLoading] = useState(false);
+  const [nmrRenderLoading, setNMRRenderLoading] = useState(false);
   const [forceRenderLoading, setForceRenderLoading] = useState(false);
   const [jobLabel, setJobLabel] = useState('');
   const [titlesLoading, setTitlesLoading] = useState(false);
@@ -99,7 +99,7 @@ export default function DiagnosticsCard() {
   const handleRenderThumbnails = useCallback(
     (options: { force?: boolean; nmrOnly?: boolean }) => {
       if (options.nmrOnly) {
-        setNmrRenderLoading(true);
+        setNMRRenderLoading(true);
         setJobLabel('Re-rendering NMR thumbnails…');
       } else if (options.force) {
         setForceRenderLoading(true);
@@ -111,13 +111,13 @@ export default function DiagnosticsCard() {
       triggerRenderThumbnails(options).then(
         () => {
           setRenderLoading(false);
-          setNmrRenderLoading(false);
+          setNMRRenderLoading(false);
           setForceRenderLoading(false);
           startPolling();
         },
         (error: unknown) => {
           setRenderLoading(false);
-          setNmrRenderLoading(false);
+          setNMRRenderLoading(false);
           setForceRenderLoading(false);
           setDiagError(error instanceof Error ? error.message : String(error));
         },

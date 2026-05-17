@@ -1,4 +1,5 @@
 import {
+  Alert,
   Button,
   ButtonGroup,
   Card,
@@ -6,10 +7,14 @@ import {
   FormGroup,
   InputGroup,
   Intent,
+  Menu,
+  MenuItem,
+  Popover,
   Tooltip,
 } from '@blueprintjs/core';
+import type { ChangeEvent } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { FullScreenProvider, useFullscreen } from 'react-science/ui';
 
 import FloatingWindow from '../../shared/FloatingWindow.tsx';
@@ -38,6 +43,7 @@ import type {
 import { runScript } from './runScript.ts';
 import { DEFAULT_SCENE_CODE, SCENES } from './scenes.ts';
 import { useCanvasRecording } from './useCanvasRecording.ts';
+import { useScriptingStorage } from './useScriptingStorage.ts';
 
 const DEFAULT_PDB_ID = '8ZXR';
 
@@ -49,15 +55,20 @@ interface ColorModule {
  * Page mounted at `/scripting` and `/scripting/:pdbId`. Lets students write a small JS script using
  * a curated helper API (`api.cpk`, `api.cartoon`, `api.echo`, …) that
  * drives the Mol* viewer. Replaces the legacy JSmol-based teaching tool.
+ *
+ * URL params:
+ *   `?scene=<id>`   – load a specific built-in scene on arrival (for sharing)
+ *   `?autorun=1`    – execute the script automatically after the protein loads
  * @returns The Scripting page React element.
  */
 export default function ScriptingPage() {
   const { pdbId: routePdbId } = useParams<{ pdbId?: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const sceneParam = searchParams.get('scene');
+  const autorunParam = searchParams.get('autorun') === '1';
+
   const urlPdbId = (routePdbId?.trim() || DEFAULT_PDB_ID).toUpperCase();
-  // Track the `:pdbId` route param so navigating from Browse with a different
-  // entry re-seeds the toolbar input and the loaded structure (the route
-  // stays mounted across path-only navigations).
   const [trackedUrlPdbId, setTrackedUrlPdbId] = useState(urlPdbId);
   const [pdbId, setPdbId] = useState(urlPdbId);
   const [loadedId, setLoadedId] = useState(urlPdbId);
@@ -66,7 +77,16 @@ export default function ScriptingPage() {
     setPdbId(urlPdbId);
     setLoadedId(urlPdbId);
   }
-  const [code, setCode] = useState(DEFAULT_SCENE_CODE);
+
+  // Pair the editor code with the protein ID it was loaded for so the autorun
+  // check can confirm code is ready before firing.
+  const [codeState, setCodeState] = useState({
+    forId: urlPdbId,
+    value: DEFAULT_SCENE_CODE,
+  });
+  const code = codeState.value;
+  const setCode = (value: string) =>
+    setCodeState((prev) => ({ ...prev, value }));
   const [echoEntry, setEchoEntry] = useState<EchoEntry | null>(null);
   const [scriptError, setScriptError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
@@ -83,21 +103,62 @@ export default function ScriptingPage() {
   const [showHelp, setShowHelp] = useState(false);
   const recording = useCanvasRecording();
 
+  // ── Scene management UI state ─────────────────────────────────────────────
+  const [deleteSceneId, setDeleteSceneId] = useState<string | null>(null);
+  const [addingScene, setAddingScene] = useState(false);
+  const [newSceneLabel, setNewSceneLabel] = useState('');
+
+  // ── Revision UI state ─────────────────────────────────────────────────────
+  const [showRevisions, setShowRevisions] = useState(false);
+  const [revisionLabel, setRevisionLabel] = useState('');
+
+  // ── Backup / restore ──────────────────────────────────────────────────────
+  const importFileRef = useRef<HTMLInputElement | null>(null);
+  const [showBackupMenu, setShowBackupMenu] = useState(false);
+
   const viewerHandleRef = useRef<PdbViewerHandle | null>(null);
-  // Tracks the PDB text Mol* currently has loaded. Persists across script
-  // Runs so `api.clear()` can detect that a previous run left a swapped
-  // structure and restore the original.
   const loadedPdbRef = useRef<string>('');
-  // Controls cancellation of the currently-running script. The Stop button
-  // calls `abort()`; the per-run `delay` then rejects with AbortError.
   const abortControllerRef = useRef<AbortController | null>(null);
-  // Populated by `FullscreenBridge`, which lives inside `FullScreenProvider`
-  // and forwards `useFullscreen()` out to the script API. Scripts call
-  // `ms.fullscreen(...)` which lands here.
+  const autorunFiredRef = useRef(false);
   const fullscreenControlRef = useRef<{
     isFullScreen: boolean;
     toggle: () => void;
   } | null>(null);
+
+  // ── Persistence ───────────────────────────────────────────────────────────
+  const storage = useScriptingStorage(loadedId, code);
+
+  // Seed the editor once storage is ready for the current protein.
+  // `void Promise.resolve().then(...)` defers the setState call to a microtask
+  // so it is not synchronous within the effect body, satisfying the linter.
+  useEffect(() => {
+    if (!storage.storageReady) return;
+    if (codeState.forId === loadedId) return;
+
+    // Reset the autorun flag whenever we switch proteins.
+    autorunFiredRef.current = false;
+
+    let newCode: string;
+    if (sceneParam) {
+      const match =
+        storage.scenes.find((s) => s.id === sceneParam) ??
+        SCENES.find((s) => s.id === sceneParam);
+      newCode = match?.code ?? storage.loadedCode ?? DEFAULT_SCENE_CODE;
+    } else {
+      newCode = storage.loadedCode ?? DEFAULT_SCENE_CODE;
+    }
+
+    void Promise.resolve().then(() => {
+      setCodeState({ forId: loadedId, value: newCode });
+    });
+  }, [
+    storage.storageReady,
+    storage.loadedCode,
+    loadedId,
+    sceneParam,
+    storage.scenes,
+    codeState.forId,
+  ]);
 
   const setFullscreen = useCallback((on?: boolean) => {
     const control = fullscreenControlRef.current;
@@ -110,10 +171,6 @@ export default function ScriptingPage() {
   const pdbText = useAsync(fetchTask);
 
   useEffect(() => {
-    // Mirror Mol*'s currently-loaded structure into a ref so the next script
-    // Run can detect (and undo) any swap a previous Run left behind. PdbViewer
-    // owns the actual reload; we only track the source of truth from outside,
-    // not handle a click event.
     /* eslint-disable react-you-might-not-need-an-effect/no-event-handler */
     if (pdbText.status === 'success') {
       loadedPdbRef.current = pdbText.data;
@@ -159,9 +216,6 @@ export default function ScriptingPage() {
         },
       });
     });
-    // The `shapes.ts` module brings in the heavy `mol-geo` / `mol-model/shape`
-    // chain — lazy-load it so the bundle stays small for pages that never
-    // render a scripting scene with custom shapes.
     void Promise.all([import('./shapes.ts'), import('./textShape.ts')]).then(
       ([shapesModule, textShapeModule]) => {
         if (cancelled) return;
@@ -207,9 +261,6 @@ export default function ScriptingPage() {
             HydrogenBond: commonModule.InteractionType.HydrogenBond,
             WeakHydrogenBond: commonModule.InteractionType.WeakHydrogenBond,
           },
-          // FeatureType is a `const enum` (inlined at compile time in Mol*),
-          // so it isn't available at runtime. Reproduce the constants we
-          // touch from `mol-model-props/computed/interactions/common.ts`.
           FeatureType: {
             HydrogenDonor: 4,
             HydrogenAcceptor: 5,
@@ -245,6 +296,8 @@ export default function ScriptingPage() {
     };
   }, []);
 
+  // ── Script execution ──────────────────────────────────────────────────────
+
   const handleRun = useCallback(
     async (afterReset?: () => void | Promise<void>) => {
       setScriptError(null);
@@ -278,17 +331,12 @@ export default function ScriptingPage() {
       const controller = new AbortController();
       abortControllerRef.current = controller;
       const cancellableDelay = makeCancellableDelay(controller.signal);
-      // Script-facing api throws AbortError on the first call after Stop, so
-      // the script can't continue running synchronous commands (and re-arming
-      // spin/rotate) between `await delay()`s.
       const scriptApi = makeAbortAwareApi(api, controller.signal);
       const MolStar = createMolStarClass(scriptApi);
       setStopping(false);
       setRunning(true);
       setEchoEntry(null);
       await api.reset();
-      // Recording starts here so the first captured frame is the freshly
-      // reset structure, not whatever a previous run left on screen.
       await afterReset?.();
       const { error } = await runScript({
         api: scriptApi,
@@ -314,12 +362,36 @@ export default function ScriptingPage() {
     ],
   );
 
+  // Keep a stable ref to handleRun so the autorun effect can call the latest
+  // version (with the correct `code` closure) without being listed as a dep.
+  const handleRunRef = useRef(handleRun);
+  useEffect(() => {
+    handleRunRef.current = handleRun;
+  }, [handleRun]);
+
+  // Auto-run when the URL carries `?autorun=1`.
+  const viewerReady =
+    pdbText.status === 'success' &&
+    colorModule !== null &&
+    lociHelpers !== null &&
+    structureElement !== null &&
+    interactions !== null &&
+    shapes !== null;
+
+  // Fire the script automatically when ?autorun=1 is in the URL.
+  useEffect(() => {
+    if (!autorunParam || !viewerReady) return;
+    if (codeState.forId !== loadedId) return; // code not yet seeded for this protein
+    if (autorunFiredRef.current) return;
+    autorunFiredRef.current = true;
+    void handleRunRef.current();
+  }, [autorunParam, viewerReady, codeState.forId, loadedId]);
+
+  // ── Stop / record / reset ─────────────────────────────────────────────────
+
   const handleStop = useCallback(() => {
     setStopping(true);
     abortControllerRef.current?.abort();
-    // The abort signal only unblocks the script at the next `await delay()`;
-    // anything Mol* is animating on its own (a spin/rotate the script left
-    // running) keeps going until we explicitly turn the trackball off here.
     viewerHandleRef.current?.stopAnimations();
   }, []);
 
@@ -374,12 +446,6 @@ export default function ScriptingPage() {
       setSwapping,
       setFullscreen,
     });
-    // `api.reset()` does the full restore: clear every script-added
-    // representation, drop the persistent selection, AND snap the camera
-    // back to the canonical (+Z, +Y up) frame. The earlier
-    // `clear() + resetCamera()` pair preserved any rotation left behind
-    // by spin/rotate/drag because Mol*'s default reset keeps the
-    // camera's current direction and up.
     await api.reset();
   }, [
     colorModule,
@@ -397,9 +463,6 @@ export default function ScriptingPage() {
     setLoadedId(trimmed);
     setEchoEntry(null);
     setScriptError(null);
-    // Sync the URL so the current entry can be shared as a deep link. The
-    // `trackedUrlPdbId` guard above prevents this from looping back into a
-    // redundant state update once the route param matches.
     void navigate(`/scripting/${encodeURIComponent(trimmed)}`);
   }
 
@@ -409,13 +472,59 @@ export default function ScriptingPage() {
     setScriptError(null);
   }
 
-  const viewerReady =
-    pdbText.status === 'success' &&
-    colorModule !== null &&
-    lociHelpers !== null &&
-    structureElement !== null &&
-    interactions !== null &&
-    shapes !== null;
+  // ── Scene management handlers ─────────────────────────────────────────────
+
+  async function handleAddScene() {
+    const label = newSceneLabel.trim();
+    if (!label) return;
+    await storage.addScene(label, code);
+    setNewSceneLabel('');
+    setAddingScene(false);
+  }
+
+  async function handleConfirmDeleteScene() {
+    if (!deleteSceneId) return;
+    await storage.removeScene(deleteSceneId);
+    setDeleteSceneId(null);
+  }
+
+  // ── Revision handlers ─────────────────────────────────────────────────────
+
+  async function handleSaveRevision() {
+    const label = revisionLabel.trim() || new Date().toLocaleString();
+    await storage.saveRevision(label, code);
+    setRevisionLabel('');
+    setShowRevisions(false);
+  }
+
+  // ── Backup / restore handlers ─────────────────────────────────────────────
+
+  async function handleExport() {
+    setShowBackupMenu(false);
+    await storage.exportBackup();
+  }
+
+  function handleImportClick() {
+    setShowBackupMenu(false);
+    importFileRef.current?.click();
+  }
+
+  async function handleImportFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    event.target.value = '';
+    try {
+      await storage.importBackup(file);
+      // Reload the page so every hook re-reads from the restored database.
+      window.location.reload();
+    } catch {
+      setScriptError('Import failed: invalid backup file.');
+    }
+  }
+
+  // ── JSX ───────────────────────────────────────────────────────────────────
+
+  const sceneToDelete = storage.scenes.find((s) => s.id === deleteSceneId);
 
   const viewerPane = (
     <FullScreenProvider>
@@ -529,6 +638,7 @@ export default function ScriptingPage() {
   return (
     <div className="scripting-page">
       <Card className="scripting-toolbar panel">
+        {/* Protein loader */}
         <FormGroup
           label="PDB code"
           inline
@@ -547,17 +657,186 @@ export default function ScriptingPage() {
         <Button icon="cloud-download" onClick={handleLoadPdb}>
           Load
         </Button>
+
         <Divider />
-        {SCENES.map((scene) => (
+
+        {/* Scene buttons — per-protein, stored in IndexedDB */}
+        {storage.scenes.map((scene) => (
+          <span key={scene.id} className="scripting-scene-chip">
+            <Button
+              variant="minimal"
+              size="small"
+              onClick={() => pickScene(scene.code)}
+            >
+              {scene.label}
+            </Button>
+            <Tooltip content={`Delete "${scene.label}"`} placement="bottom">
+              <Button
+                variant="minimal"
+                size="small"
+                icon="small-cross"
+                className="scripting-scene-delete"
+                onClick={() => setDeleteSceneId(scene.id)}
+              />
+            </Tooltip>
+          </span>
+        ))}
+
+        {/* Add-scene control */}
+        {addingScene ? (
+          <InputGroup
+            autoFocus
+            value={newSceneLabel}
+            onValueChange={setNewSceneLabel}
+            placeholder="Scene name…"
+            size="small"
+            className="scripting-scene-input"
+            rightElement={
+              <ButtonGroup>
+                <Button
+                  size="small"
+                  icon="tick"
+                  intent={Intent.SUCCESS}
+                  onClick={() => void handleAddScene()}
+                  disabled={!newSceneLabel.trim()}
+                />
+                <Button
+                  size="small"
+                  icon="cross"
+                  onClick={() => {
+                    setAddingScene(false);
+                    setNewSceneLabel('');
+                  }}
+                />
+              </ButtonGroup>
+            }
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void handleAddScene();
+              if (e.key === 'Escape') {
+                setAddingScene(false);
+                setNewSceneLabel('');
+              }
+            }}
+          />
+        ) : (
+          <Tooltip
+            content="Save current script as a scene button for this protein"
+            placement="bottom"
+          >
+            <Button
+              variant="minimal"
+              size="small"
+              icon="add"
+              onClick={() => setAddingScene(true)}
+            >
+              Add
+            </Button>
+          </Tooltip>
+        )}
+
+        <Divider />
+
+        {/* Revision history */}
+        <Popover
+          isOpen={showRevisions}
+          onClose={() => setShowRevisions(false)}
+          placement="bottom-start"
+          content={
+            <div className="scripting-revisions-panel">
+              <div className="scripting-revisions-save">
+                <p className="scripting-revisions-hint">
+                  Save a named snapshot of the current script:
+                </p>
+                <InputGroup
+                  value={revisionLabel}
+                  onValueChange={setRevisionLabel}
+                  placeholder="Label (optional)…"
+                  size="small"
+                  rightElement={
+                    <Button
+                      size="small"
+                      icon="floppy-disk"
+                      intent={Intent.PRIMARY}
+                      onClick={() => void handleSaveRevision()}
+                    >
+                      Save
+                    </Button>
+                  }
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') void handleSaveRevision();
+                  }}
+                />
+              </div>
+              {storage.revisions.length === 0 ? (
+                <p className="scripting-revisions-empty">
+                  No saved revisions yet.
+                </p>
+              ) : (
+                <Menu className="scripting-revisions-list">
+                  {storage.revisions.map((rev) => (
+                    <MenuItem
+                      key={rev.id}
+                      text={rev.label}
+                      label={new Date(rev.savedAt).toLocaleString()}
+                      onClick={() => {
+                        pickScene(rev.code);
+                        setShowRevisions(false);
+                      }}
+                    />
+                  ))}
+                </Menu>
+              )}
+            </div>
+          }
+        >
           <Button
-            key={scene.id}
             variant="minimal"
             size="small"
-            onClick={() => pickScene(scene.code)}
+            icon="history"
+            onClick={() => setShowRevisions((v) => !v)}
           >
-            {scene.label}
+            Revisions
           </Button>
-        ))}
+        </Popover>
+
+        {/* Backup / restore */}
+        <Popover
+          isOpen={showBackupMenu}
+          onClose={() => setShowBackupMenu(false)}
+          placement="bottom-start"
+          content={
+            <Menu>
+              <MenuItem
+                icon="export"
+                text="Export all data…"
+                onClick={() => void handleExport()}
+              />
+              <MenuItem
+                icon="import"
+                text="Import backup…"
+                onClick={handleImportClick}
+              />
+            </Menu>
+          }
+        >
+          <Tooltip content="Backup and restore all scripts" placement="bottom">
+            <Button
+              variant="minimal"
+              size="small"
+              icon="database"
+              onClick={() => setShowBackupMenu((v) => !v)}
+            />
+          </Tooltip>
+        </Popover>
+
+        {/* Hidden file input for backup import */}
+        <input
+          ref={importFileRef}
+          type="file"
+          accept=".json"
+          style={{ display: 'none' }}
+          onChange={(e) => void handleImportFile(e)}
+        />
       </Card>
 
       <div className="scripting-content">
@@ -574,18 +853,33 @@ export default function ScriptingPage() {
           <ScriptingHelp />
         </FloatingWindow>
       )}
+
+      {/* Scene deletion confirmation */}
+      <Alert
+        isOpen={deleteSceneId !== null}
+        confirmButtonText="Delete"
+        cancelButtonText="Cancel"
+        intent={Intent.DANGER}
+        icon="trash"
+        onConfirm={() => void handleConfirmDeleteScene()}
+        onCancel={() => setDeleteSceneId(null)}
+      >
+        <p>
+          Delete scene <strong>&ldquo;{sceneToDelete?.label}&rdquo;</strong>?
+        </p>
+        <p>This cannot be undone.</p>
+      </Alert>
     </div>
   );
 }
+
+// ── Private helpers ───────────────────────────────────────────────────────────
 
 /**
  * Wrap a `ScriptApi` in a Proxy that throws `AbortError` from every method
  * call once the given signal aborts. Without this, Stop only interrupts the
  * script at the next `await delay(...)`: any synchronous block in between
- * (e.g. `ms.spin(); ms.echo(...); ms.cpk();`) still runs, and if any of those
- * re-arm a trackball animation the molecule keeps moving after Stop. With
- * the proxy in place the *next* method call on the script-facing surface
- * throws, `runScript` recognises the abort, and the script unwinds.
+ * (e.g. `ms.spin(); ms.echo(...); ms.cpk();`) still runs.
  * @param api - The real script api bound to the Mol* plugin.
  * @param signal - Abort signal owned by the current run.
  * @returns A drop-in proxy with the same shape as `api`.
@@ -615,19 +909,9 @@ interface FullscreenControl {
 }
 
 interface FullscreenBridgeProps {
-  /** Page-owned ref that receives the live `useFullscreen()` state. */
   controlRef: { current: FullscreenControl | null };
 }
 
-/**
- * Lives inside `FullScreenProvider` so it can read the `useFullscreen()`
- * context and forward the live `{ isFullScreen, toggle }` pair into the
- * ref the page owns. That ref is what `ms.fullscreen(...)` ultimately
- * pokes — the provider's context is not visible outside its subtree, so
- * a bridge component is the cleanest way to surface it to the script API.
- * @param props - Component props.
- * @returns `null` (the component is purely side-effectful).
- */
 function FullscreenBridge(props: FullscreenBridgeProps) {
   const { controlRef } = props;
   const fullscreen = useFullscreen();
@@ -640,14 +924,6 @@ function FullscreenBridge(props: FullscreenBridgeProps) {
   return null;
 }
 
-/**
- * Small floating button rendered at the top-right corner of the Mol*
- * canvas. Clicking it enters or leaves full-screen via the
- * `react-science` fullscreen context. The icon swaps between `expand-all`
- * and `minimize` so the user can see at a glance which direction the
- * click will take them.
- * @returns Blueprint icon button.
- */
 function FullscreenToggleButton() {
   const fullscreen = useFullscreen();
   return (
