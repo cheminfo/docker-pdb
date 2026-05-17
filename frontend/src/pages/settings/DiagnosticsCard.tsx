@@ -31,6 +31,8 @@ type DiagStatus = 'idle' | 'loading' | 'done' | 'error';
  * 2. If any are missing, "Render missing thumbnails" appears.
  * 3. Clicking it fires `POST /v1/fix/render-thumbnails` and polls
  *    `GET /v1/fix/render-thumbnails/status` every 2 s until done.
+ * 4. On mount, both status endpoints are probed so an already-running job
+ *    (started before this page was opened) is shown immediately.
  * @returns DiagnosticsCard React element.
  */
 export default function DiagnosticsCard() {
@@ -42,7 +44,16 @@ export default function DiagnosticsCard() {
     null,
   );
   const [renderLoading, setRenderLoading] = useState(false);
+  const [nmrRenderLoading, setNmrRenderLoading] = useState(false);
+  const [forceRenderLoading, setForceRenderLoading] = useState(false);
+  const [jobLabel, setJobLabel] = useState('');
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [titlesState, setTitlesState] = useState<RebuildTitlesState | null>(
+    null,
+  );
+  const [titlesLoading, setTitlesLoading] = useState(false);
+  const titlesPollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const stopPolling = useCallback(() => {
     if (pollTimer.current) {
@@ -69,33 +80,6 @@ export default function DiagnosticsCard() {
     tick();
   }, [stopPolling]);
 
-  useEffect(() => () => stopPolling(), [stopPolling]);
-
-  const handleRunDiagnostics = useCallback(() => {
-    setDiagStatus('loading');
-    setDiagError(null);
-    fetchDiagnostics().then(
-      (result) => {
-        setDiag(result);
-        setDiagStatus('done');
-      },
-      (error: unknown) => {
-        setDiagError(error instanceof Error ? error.message : String(error));
-        setDiagStatus('error');
-      },
-    );
-  }, []);
-
-  const [nmrRenderLoading, setNmrRenderLoading] = useState(false);
-  const [forceRenderLoading, setForceRenderLoading] = useState(false);
-  const [jobLabel, setJobLabel] = useState('');
-
-  const [titlesState, setTitlesState] = useState<RebuildTitlesState | null>(
-    null,
-  );
-  const [titlesLoading, setTitlesLoading] = useState(false);
-  const titlesPollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   const stopTitlesPolling = useCallback(() => {
     if (titlesPollTimer.current) {
       clearTimeout(titlesPollTimer.current);
@@ -121,7 +105,47 @@ export default function DiagnosticsCard() {
     tick();
   }, [stopTitlesPolling]);
 
+  useEffect(() => () => stopPolling(), [stopPolling]);
   useEffect(() => () => stopTitlesPolling(), [stopTitlesPolling]);
+
+  // On mount, probe both job statuses so an already-running job is shown
+  // without the user having to click a trigger button first.
+  useEffect(() => {
+    fetchRenderThumbnailsStatus().then(
+      ({ state }) => {
+        if (state?.running) {
+          setRenderState(state);
+          setJobLabel('Rendering thumbnails…');
+          startPolling();
+        }
+      },
+      () => undefined,
+    );
+    fetchRebuildTitlesStatus().then(
+      ({ state }) => {
+        if (state?.running) {
+          setTitlesState(state);
+          startTitlesPolling();
+        }
+      },
+      () => undefined,
+    );
+  }, [startPolling, startTitlesPolling]);
+
+  const handleRunDiagnostics = useCallback(() => {
+    setDiagStatus('loading');
+    setDiagError(null);
+    fetchDiagnostics().then(
+      (result) => {
+        setDiag(result);
+        setDiagStatus('done');
+      },
+      (error: unknown) => {
+        setDiagError(error instanceof Error ? error.message : String(error));
+        setDiagStatus('error');
+      },
+    );
+  }, []);
 
   const handleRebuildTitles = useCallback(() => {
     setTitlesLoading(true);
@@ -184,6 +208,11 @@ export default function DiagnosticsCard() {
       : 0;
 
   const hasMissing = assemblyTotal > 0 && assemblyMissing > 0;
+
+  // Show the render section when diag is done (normal path) OR when a job is
+  // actively running — so a job started before this page was opened is visible.
+  const showRenderSection =
+    (diagStatus === 'done' && assemblyTotal > 0) || renderState?.running;
 
   return (
     <Card className="panel">
@@ -318,7 +347,7 @@ export default function DiagnosticsCard() {
         </div>
       ) : null}
 
-      {diagStatus === 'done' && assemblyTotal > 0 ? (
+      {showRenderSection ? (
         <div style={{ marginTop: 16 }}>
           {renderState ? (
             <div>
