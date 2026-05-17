@@ -9,6 +9,36 @@ import gm from 'gm';
 
 const debug = createDebug('pdb-sync:pymol');
 
+// Simple counting semaphore — resolves immediately when a slot is free,
+// otherwise queues the caller until a slot is released.
+class Semaphore {
+  constructor(max) {
+    this._max = max;
+    this._count = 0;
+    this._queue = [];
+  }
+
+  acquire() {
+    return new Promise((resolve) => {
+      if (this._count < this._max) {
+        this._count++;
+        resolve();
+      } else {
+        this._queue.push(resolve);
+      }
+    });
+  }
+
+  release() {
+    const next = this._queue.shift();
+    if (next) {
+      next();
+    } else {
+      this._count--;
+    }
+  }
+}
+
 // Global hard limit on simultaneous `exec('pymol …')` calls across ALL
 // callers (rsync path + on-demand repair endpoint combined). Each PyMol child
 // is ~500 MB RSS and spawns several Python/OpenMP threads; more than ~8
@@ -159,36 +189,6 @@ function tryUnlink(path) {
     unlinkSync(path);
   } catch {
     // ignore
-  }
-}
-
-// Simple counting semaphore — resolves immediately when a slot is free,
-// otherwise queues the caller until a slot is released.
-class Semaphore {
-  constructor(max) {
-    this._max = max;
-    this._count = 0;
-    this._queue = [];
-  }
-
-  acquire() {
-    return new Promise((resolve) => {
-      if (this._count < this._max) {
-        this._count++;
-        resolve();
-      } else {
-        this._queue.push(resolve);
-      }
-    });
-  }
-
-  release() {
-    const next = this._queue.shift();
-    if (next) {
-      next();
-    } else {
-      this._count--;
-    }
   }
 }
 
