@@ -9,13 +9,8 @@ import { pymolImagePath } from '../../util/pymol.js';
 
 import { ccdHistoryRowToDoc } from './getCcdHistory.js';
 
-/**
- * Hand-picked sample of PDB ids spanning the alphanumeric id space, used to
- * spot-check that PyMol renders exist on disk for a representative set.
- */
 const SAMPLE_PDB_IDS = ['100D', '1CRN', '4HHB', '8ZXR', '8XYZ'];
 
-/** PyMol render sizes to probe per sample id. Mirrors `config.json#pymol`. */
 const SAMPLE_PYMOL_SIZES = [
   { width: 100, height: 100 },
   { width: 200, height: 200 },
@@ -24,8 +19,8 @@ const SAMPLE_PYMOL_SIZES = [
 
 /**
  * Register `GET /v1/diagnostics` — single JSON snapshot covering process
- * runtime, database row counts, and sync cron state. Designed for triaging
- * deployments that have no shell access.
+ * runtime, database row counts, sync cron state, and full assembly thumbnail
+ * coverage. Designed for triaging deployments that have no shell access.
  * @param {import('fastify').FastifyInstance} fastify - Fastify instance.
  * @param {import('../../db/getDB.js').LigandsDB} db - Open ligands database.
  */
@@ -36,13 +31,24 @@ export function registerGetDiagnosticsRoute(fastify, db) {
     const databaseTotals = db.pdbDatabaseTotals.get();
     const ligandCount = db.countLigands.get()?.n ?? 0;
     const pdbCount = databaseTotals?.pdb_count ?? 0;
-    const assemblyCount = databaseTotals?.assembly_count ?? 0;
     const emptyTitleCount = db.countEmptyTitleEntries.get()?.n ?? 0;
     const ftsTitleCount = db.countFtsTitleEntries.get()?.n ?? 0;
 
     const lastCcd = db.selectLastCcdRefresh.get();
     const lastRsyncAsym = db.selectLastRsyncRun.get('asymUnit');
     const lastRsyncBio = db.selectLastRsyncRun.get('bioAssembly');
+
+    // Scan all assembly entries for missing 200×200 thumbnails. existsSync
+    // is fast enough on local/Docker filesystems that this completes in well
+    // under a second even for 100k+ entries.
+    const assemblyRows = db.selectAllAssemblyIds.all();
+    const assemblyTotal = assemblyRows.length;
+    let assemblyMissing = 0;
+    for (const { id } of assemblyRows) {
+      if (!existsSync(pymolImagePath(config.pymolDir, id, 200, 200))) {
+        assemblyMissing++;
+      }
+    }
 
     const [pymolSamples, ccdGz] = await Promise.all([
       probePymolSamples(config.pymolDir),
@@ -63,7 +69,8 @@ export function registerGetDiagnosticsRoute(fastify, db) {
       database: {
         ligandCount,
         pdbCount,
-        assemblyCount,
+        assemblyTotal,
+        assemblyMissing,
         ligandsLooksEmpty: ligandCount === 0,
         emptyTitleCount,
         ftsTitleCount,
@@ -118,11 +125,6 @@ async function probeFile(path) {
   }
 }
 
-/**
- * Spot-check on-disk PyMol PNGs for a few representative PDB ids.
- * @param {string} pymolDir - Root directory holding the PyMol PNG tree.
- * @returns {Promise<{ pymolDirExists: boolean, bucketCount: number | null, samples: Array<{ id: string, bucketDir: string, bucketExists: boolean, sizes: Record<string, boolean> }> }>} Probe result.
- */
 async function probePymolSamples(pymolDir) {
   const pymolDirExists = existsSync(pymolDir);
   const samples = SAMPLE_PDB_IDS.map((id) => {

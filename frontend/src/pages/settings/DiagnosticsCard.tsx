@@ -4,33 +4,28 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   fetchDiagnostics,
   fetchRenderThumbnailsStatus,
-  fetchScanThumbnailsStatus,
   triggerRenderThumbnails,
-  triggerScanThumbnails,
 } from '../../shared/api/client.ts';
 import type {
   DiagnosticsResponse,
   RenderThumbnailsState,
-  ScanThumbnailsState,
 } from '../../shared/api/types.ts';
 
-/** Poll the scan / render job status every 2 s while it is running. */
-const POLL_INTERVAL_MS = 2_000;
+/** Poll the render job status every 2 s while it is running. */
+const RENDER_POLL_INTERVAL_MS = 2_000;
 
 type DiagStatus = 'idle' | 'loading' | 'done' | 'error';
 
 /**
- * Settings card that shows a database-health snapshot and lets the operator
- * scan thumbnail coverage and render missing PyMol thumbnails.
+ * Settings card that shows a database-health snapshot (including full
+ * assembly thumbnail coverage) and lets the operator render missing PNGs.
  *
  * Workflow:
- * 1. Click "Run diagnostics" → fetches `GET /v1/diagnostics`.
- * 2. Results show empty-title count and FTS coverage.
- * 3. Click "Scan thumbnails" → starts `POST /v1/fix/scan-thumbnails` and polls
- *    `GET /v1/fix/scan-thumbnails/status` every 2 s until done.
- * 4. Scan result shows how many of the N assembly entries have a PNG.
- * 5. If any are missing, "Render missing thumbnails" appears and works the
- *    same way via `POST /v1/fix/render-thumbnails`.
+ * 1. Click "Run diagnostics" → fetches `GET /v1/diagnostics`, which includes
+ *    a full scan of all assembly entries for missing 200×200 thumbnails.
+ * 2. If any are missing, "Render missing thumbnails" appears.
+ * 3. Clicking it fires `POST /v1/fix/render-thumbnails` and polls
+ *    `GET /v1/fix/render-thumbnails/status` every 2 s until done.
  * @returns DiagnosticsCard React element.
  */
 export default function DiagnosticsCard() {
@@ -38,73 +33,38 @@ export default function DiagnosticsCard() {
   const [diag, setDiag] = useState<DiagnosticsResponse | null>(null);
   const [diagError, setDiagError] = useState<string | null>(null);
 
-  const [scanState, setScanState] = useState<ScanThumbnailsState | null>(null);
-  const [scanLoading, setScanLoading] = useState(false);
-  const scanTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   const [renderState, setRenderState] = useState<RenderThumbnailsState | null>(
     null,
   );
   const [renderLoading, setRenderLoading] = useState(false);
-  const renderTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const stopScanPolling = useCallback(() => {
-    if (scanTimer.current) {
-      clearTimeout(scanTimer.current);
-      scanTimer.current = null;
+  const stopPolling = useCallback(() => {
+    if (pollTimer.current) {
+      clearTimeout(pollTimer.current);
+      pollTimer.current = null;
     }
   }, []);
 
-  const startScanPolling = useCallback(() => {
-    stopScanPolling();
-    const tick = () => {
-      fetchScanThumbnailsStatus().then(
-        ({ state }) => {
-          setScanState(state);
-          if (state?.running) {
-            scanTimer.current = setTimeout(tick, POLL_INTERVAL_MS);
-          }
-        },
-        () => {
-          scanTimer.current = setTimeout(tick, POLL_INTERVAL_MS);
-        },
-      );
-    };
-    tick();
-  }, [stopScanPolling]);
-
-  const stopRenderPolling = useCallback(() => {
-    if (renderTimer.current) {
-      clearTimeout(renderTimer.current);
-      renderTimer.current = null;
-    }
-  }, []);
-
-  const startRenderPolling = useCallback(() => {
-    stopRenderPolling();
+  const startPolling = useCallback(() => {
+    stopPolling();
     const tick = () => {
       fetchRenderThumbnailsStatus().then(
         ({ state }) => {
           setRenderState(state);
           if (state?.running) {
-            renderTimer.current = setTimeout(tick, POLL_INTERVAL_MS);
+            pollTimer.current = setTimeout(tick, RENDER_POLL_INTERVAL_MS);
           }
         },
         () => {
-          renderTimer.current = setTimeout(tick, POLL_INTERVAL_MS);
+          pollTimer.current = setTimeout(tick, RENDER_POLL_INTERVAL_MS);
         },
       );
     };
     tick();
-  }, [stopRenderPolling]);
+  }, [stopPolling]);
 
-  useEffect(
-    () => () => {
-      stopScanPolling();
-      stopRenderPolling();
-    },
-    [stopScanPolling, stopRenderPolling],
-  );
+  useEffect(() => () => stopPolling(), [stopPolling]);
 
   const handleRunDiagnostics = useCallback(() => {
     setDiagStatus('loading');
@@ -121,54 +81,36 @@ export default function DiagnosticsCard() {
     );
   }, []);
 
-  const handleScanThumbnails = useCallback(() => {
-    setScanLoading(true);
-    triggerScanThumbnails().then(
-      ({ state }) => {
-        setScanState(state);
-        setScanLoading(false);
-        startScanPolling();
-      },
-      (error: unknown) => {
-        setScanLoading(false);
-        setDiagError(error instanceof Error ? error.message : String(error));
-      },
-    );
-  }, [startScanPolling]);
-
   const handleRenderThumbnails = useCallback(() => {
     setRenderLoading(true);
     triggerRenderThumbnails().then(
       ({ state }) => {
         setRenderState(state);
         setRenderLoading(false);
-        startRenderPolling();
+        startPolling();
       },
       (error: unknown) => {
         setRenderLoading(false);
         setDiagError(error instanceof Error ? error.message : String(error));
       },
     );
-  }, [startRenderPolling]);
+  }, [startPolling]);
 
   const { database } = diag ?? {};
   const {
     emptyTitleCount = 0,
     pdbCount = 0,
     ftsTitleCount = 0,
-    assemblyCount = 0,
+    assemblyTotal = 0,
+    assemblyMissing = 0,
   } = database ?? {};
-
-  const scanProgress =
-    scanState && scanState.total > 0 ? scanState.scanned / scanState.total : 0;
 
   const renderProgress =
     renderState && renderState.total > 0
       ? renderState.processed / renderState.total
       : 0;
 
-  const scanDone = scanState && !scanState.running;
-  const hasMissing = scanDone && scanState.missing > 0;
+  const hasMissing = assemblyTotal > 0 && assemblyMissing > 0;
 
   return (
     <Card className="panel">
@@ -223,39 +165,20 @@ export default function DiagnosticsCard() {
 
           <dt>Assembly thumbnails</dt>
           <dd>
-            {assemblyCount === 0 ? (
+            {assemblyTotal === 0 ? (
               <span className="settings-muted">no assembly entries found</span>
-            ) : scanState ? (
-              scanState.running ? (
-                <span className="settings-muted">
-                  Scanning… {scanState.scanned.toLocaleString()} /{' '}
-                  {scanState.total.toLocaleString()}
-                </span>
-              ) : (
-                <span>
-                  {(scanState.total - scanState.missing).toLocaleString()} /{' '}
-                  {scanState.total.toLocaleString()} have a PNG
-                  {scanState.missing === 0 ? (
-                    <span className="settings-ok"> ✓</span>
-                  ) : (
-                    <span className="settings-muted">
-                      {' '}
-                      — {scanState.missing.toLocaleString()} missing
-                    </span>
-                  )}
-                </span>
-              )
             ) : (
-              <span className="settings-muted">
-                {assemblyCount.toLocaleString()} entries —{' '}
-                <Button
-                  small
-                  minimal
-                  icon="search"
-                  text="Scan all"
-                  loading={scanLoading}
-                  onClick={handleScanThumbnails}
-                />
+              <span>
+                {(assemblyTotal - assemblyMissing).toLocaleString()} /{' '}
+                {assemblyTotal.toLocaleString()} have a PNG
+                {assemblyMissing === 0 ? (
+                  <span className="settings-ok"> ✓</span>
+                ) : (
+                  <span className="settings-muted">
+                    {' '}
+                    — {assemblyMissing.toLocaleString()} missing
+                  </span>
+                )}
               </span>
             )}
           </dd>
@@ -269,13 +192,7 @@ export default function DiagnosticsCard() {
         </div>
       ) : null}
 
-      {scanState?.running ? (
-        <div style={{ marginTop: 12 }}>
-          <ProgressBar value={scanProgress} intent="primary" />
-        </div>
-      ) : null}
-
-      {diagStatus === 'done' && assemblyCount > 0 && scanDone ? (
+      {diagStatus === 'done' && assemblyTotal > 0 ? (
         <div style={{ marginTop: 16 }}>
           {renderState ? (
             <div>

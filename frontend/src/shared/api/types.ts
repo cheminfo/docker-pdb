@@ -379,7 +379,10 @@ export interface SyncTriggerResponse {
 export interface DiagnosticsDatabase {
   ligandCount: number;
   pdbCount: number;
-  assemblyCount: number;
+  /** Total entries with `has_assembly = 1`. */
+  assemblyTotal: number;
+  /** Assembly entries with no 200×200 PNG on disk. */
+  assemblyMissing: number;
   ligandsLooksEmpty: boolean;
   /** Entries in `pdb_entries` with `title = ''`. */
   emptyTitleCount: number;
@@ -426,30 +429,6 @@ export interface RenderThumbnailsTriggerResponse {
 /** Response of `GET /v1/fix/render-thumbnails/status`. */
 export interface RenderThumbnailsStatusResponse {
   state: RenderThumbnailsState | null;
-}
-
-/** In-flight or completed thumbnail scan job state. */
-export interface ScanThumbnailsState {
-  running: boolean;
-  /** Entries checked so far. */
-  scanned: number;
-  /** Total assembly entries in the database. */
-  total: number;
-  /** Entries with no 200×200 PNG on disk. */
-  missing: number;
-  startedAt: string;
-  finishedAt: string | null;
-}
-
-/** Response of `POST /v1/fix/scan-thumbnails`. */
-export interface ScanThumbnailsTriggerResponse {
-  status: 'started' | 'already-running';
-  state: ScanThumbnailsState;
-}
-
-/** Response of `GET /v1/fix/scan-thumbnails/status`. */
-export interface ScanThumbnailsStatusResponse {
-  state: ScanThumbnailsState | null;
 }
 
 /** One ligand row returned by the substructure-search API. */
