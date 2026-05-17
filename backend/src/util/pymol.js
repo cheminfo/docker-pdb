@@ -51,30 +51,39 @@ export default async function pymol(id, pdb, outputPath, options) {
 
   await mkdir(dirname(outputPath), { recursive: true });
 
+  // OMP_NUM_THREADS=1 prevents each PyMol process from spawning OpenMP worker
+  // threads. Without it, running PYMOL_CONCURRENCY instances simultaneously
+  // exhausts the OS thread limit ("libgomp: Thread creation failed").
+  const execEnv = { ...process.env, OMP_NUM_THREADS: '1' };
+
   return new Promise((resolve, reject) => {
-    exec(cmd, { maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
-      tryUnlink(tmpPdb);
-      if (error) {
-        debug('error executing pymol command', error);
-        error.stdout = stdout;
-        error.stderr = stderr;
-        error.cmd = cmd;
-        reject(error);
-        return;
-      }
-      gm(tmpPng)
-        .resize(width, height)
-        .write(outputPath, (err) => {
-          tryUnlink(tmpPng);
-          if (err) {
-            debug(`ERROR for ${id}: ${err.toString()}`);
-            err.stage = 'graphicsmagick';
-            reject(err);
-            return;
-          }
-          resolve({ outputPath, status: 'rendered' });
-        });
-    });
+    exec(
+      cmd,
+      { maxBuffer: 10 * 1024 * 1024, env: execEnv },
+      (error, stdout, stderr) => {
+        tryUnlink(tmpPdb);
+        if (error) {
+          debug('error executing pymol command', error);
+          error.stdout = stdout;
+          error.stderr = stderr;
+          error.cmd = cmd;
+          reject(error);
+          return;
+        }
+        gm(tmpPng)
+          .resize(width, height)
+          .write(outputPath, (err) => {
+            tryUnlink(tmpPng);
+            if (err) {
+              debug(`ERROR for ${id}: ${err.toString()}`);
+              err.stage = 'graphicsmagick';
+              reject(err);
+              return;
+            }
+            resolve({ outputPath, status: 'rendered' });
+          });
+      },
+    );
   });
 }
 
