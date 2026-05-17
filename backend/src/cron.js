@@ -48,8 +48,8 @@ async function cron() {
 
   /* eslint-disable no-await-in-loop -- intentional sequential cron loop */
   while (true) {
-    await runOnce();
     await sleepUntilTrigger(SLEEP_MS);
+    await runOnce();
   }
   /* eslint-enable no-await-in-loop */
 }
