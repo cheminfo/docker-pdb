@@ -17,6 +17,7 @@ import type {
 import { formatBytes, formatDateTime } from '../../shared/format.ts';
 
 import CcdHistoryTable from './CcdHistoryTable.tsx';
+import DiagnosticsCard from './DiagnosticsCard.tsx';
 import HistoryTable from './HistoryTable.tsx';
 import LoginForm from './LoginForm.tsx';
 import SyncCard from './SyncCard.tsx';
@@ -220,6 +221,9 @@ function SettingsDashboard({ onLogout }: { onLogout: () => Promise<void> }) {
           renderBody={(state) => <CcdCardBody state={state} />}
         />
       </div>
+
+      <h2>Database health</h2>
+      <DiagnosticsCard />
 
       <h2>Recent run history</h2>
       {historyError ? (

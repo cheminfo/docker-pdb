@@ -2,6 +2,7 @@ import type {
   CcdHistoryResponse,
   DatabaseInfo,
   DatabaseInfoResponse,
+  DiagnosticsResponse,
   GroupedStatsResponse,
   LigandDetailResponse,
   LigandPdbsResponse,
@@ -12,6 +13,8 @@ import type {
   PairFrequencyResponse,
   PdbDoc,
   PdbViewResponse,
+  RenderThumbnailsStatusResponse,
+  RenderThumbnailsTriggerResponse,
   RsyncHistoryDoc,
   RsyncHistoryResponse,
   StatsResponse,
@@ -400,6 +403,39 @@ export async function triggerSync(
   });
   assertOk(response);
   return response.json() as Promise<SyncTriggerResponse>;
+}
+
+/**
+ * Fetch a database health snapshot from `GET /v1/diagnostics`.
+ * @returns Promise resolving to the diagnostics payload.
+ */
+export function fetchDiagnostics(): Promise<DiagnosticsResponse> {
+  return fetchJson<DiagnosticsResponse>('/v1/diagnostics');
+}
+
+/**
+ * Start (or report the status of) the background thumbnail render job.
+ * The server renders all missing PyMol sizes for `has_assembly = 1` entries
+ * without overwriting existing PNGs.
+ * @returns Promise resolving to the trigger response.
+ */
+export async function triggerRenderThumbnails(): Promise<RenderThumbnailsTriggerResponse> {
+  const response = await fetch('/v1/fix/render-thumbnails', {
+    method: 'POST',
+  });
+  assertOk(response);
+  return response.json() as Promise<RenderThumbnailsTriggerResponse>;
+}
+
+/**
+ * Poll the current state of the thumbnail render job.
+ * @returns Promise resolving to `{ state }` — `state` is `null` until the
+ *   first job has been triggered.
+ */
+export function fetchRenderThumbnailsStatus(): Promise<RenderThumbnailsStatusResponse> {
+  return fetchJson<RenderThumbnailsStatusResponse>(
+    '/v1/fix/render-thumbnails/status',
+  );
 }
 
 /* ------------------------------------------------------------------------ *

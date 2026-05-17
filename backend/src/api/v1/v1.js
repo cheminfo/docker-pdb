@@ -15,6 +15,7 @@ import { registerGetPdbsRoute } from './getPdbs.js';
 import { registerGetRsyncHistoryRoute } from './getRsyncHistory.js';
 import { registerGetStatsByViewRoute } from './getStatsByView.js';
 import { registerGetSyncStatusRoute } from './getSyncStatus.js';
+import { registerRenderThumbnailsRoutes } from './triggerRenderThumbnails.js';
 import { registerTriggerSyncRoute } from './triggerSync.js';
 
 /**
@@ -46,4 +47,5 @@ export function v1(fastify, db) {
   registerGetSyncStatusRoute(fastify, db);
   registerTriggerSyncRoute(fastify);
   registerGetDiagnosticsRoute(fastify, db);
+  registerRenderThumbnailsRoutes(fastify, db);
 }

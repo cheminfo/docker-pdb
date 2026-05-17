@@ -324,6 +324,10 @@ export class LigandsDB {
     );
   }
 
+  get selectAllAssemblyIds() {
+    return this.statement(`SELECT id FROM pdb_entries WHERE has_assembly = 1`);
+  }
+
   // -- pdb_chains --
 
   get deletePdbChains() {

@@ -6,6 +6,7 @@
   --muted: #64748b;
   --accent: #2563eb;
   --accent-soft: #dbeafe;
+  --intent-success: #238551;
   --radius: 12px;
   --shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.06);
 }
@@ -316,6 +317,10 @@ h2 {
 
 .settings-muted {
   color: var(--muted);
+}
+
+.settings-ok {
+  color: var(--intent-success);
 }
 
 .settings-sync-actions {

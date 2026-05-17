@@ -374,6 +374,78 @@ export interface SyncTriggerResponse {
   running?: SyncRunningInfo;
 }
 
+/** One assembly entry in the `data.assemblyThumbnailSamples.samples` array. */
+export interface AssemblyThumbnailSample {
+  /** 4-character PDB id. */
+  id: string;
+  /** Map of `"WxH"` → `true/false` for each configured PyMol size. */
+  sizes: Record<string, boolean>;
+  /** True when at least one size exists on disk. */
+  hasAny: boolean;
+}
+
+/** `data.assemblyThumbnailSamples` from `GET /v1/diagnostics`. */
+export interface AssemblyThumbnailSamples {
+  /** Up to 10 DB-sourced assembly entries, each probed for PNG existence. */
+  samples: AssemblyThumbnailSample[];
+  /** How many of those samples have no PNG at all. */
+  missingCount: number;
+}
+
+/** `database` block from `GET /v1/diagnostics`. */
+export interface DiagnosticsDatabase {
+  ligandCount: number;
+  pdbCount: number;
+  assemblyCount: number;
+  ligandsLooksEmpty: boolean;
+  /** Entries in `pdb_entries` with `title = ''`. */
+  emptyTitleCount: number;
+  /** Rows present in `pdb_title_fts`. */
+  ftsTitleCount: number;
+}
+
+/** Response of `GET /v1/diagnostics`. */
+export interface DiagnosticsResponse {
+  database: DiagnosticsDatabase;
+  data: {
+    dataDir: string;
+    pymolDir: string;
+    pymolSamples: {
+      pymolDirExists: boolean;
+      bucketCount: number | null;
+    };
+    assemblyThumbnailSamples: AssemblyThumbnailSamples;
+  };
+}
+
+/** In-flight or completed thumbnail render job state. */
+export interface RenderThumbnailsState {
+  running: boolean;
+  /** Entries processed so far (rendered + skipped + failed). */
+  processed: number;
+  /** Total entries with `has_assembly = 1`. */
+  total: number;
+  /** PNG sizes successfully written this job. */
+  rendered: number;
+  /** PNG sizes that already existed and were left as-is. */
+  skipped: number;
+  /** Assembly files missing on disk or PyMol errors. */
+  failed: number;
+  startedAt: string;
+  finishedAt: string | null;
+}
+
+/** Response of `POST /v1/fix/render-thumbnails`. */
+export interface RenderThumbnailsTriggerResponse {
+  status: 'started' | 'already-running';
+  state: RenderThumbnailsState;
+}
+
+/** Response of `GET /v1/fix/render-thumbnails/status`. */
+export interface RenderThumbnailsStatusResponse {
+  state: RenderThumbnailsState | null;
+}
+
 /** One ligand row returned by the substructure-search API. */
 export interface LigandSummary {
   /** 3-letter wwPDB chemical-component code (e.g. `ATP`). */
