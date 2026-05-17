@@ -87,6 +87,7 @@ export default function DiagnosticsCard() {
   }, []);
 
   const [nmrRenderLoading, setNmrRenderLoading] = useState(false);
+  const [forceRenderLoading, setForceRenderLoading] = useState(false);
   const [jobLabel, setJobLabel] = useState('');
 
   const [titlesState, setTitlesState] = useState<RebuildTitlesState | null>(
@@ -142,6 +143,9 @@ export default function DiagnosticsCard() {
       if (options.nmrOnly) {
         setNmrRenderLoading(true);
         setJobLabel('Re-rendering NMR thumbnails…');
+      } else if (options.force) {
+        setForceRenderLoading(true);
+        setJobLabel('Re-rendering all thumbnails…');
       } else {
         setRenderLoading(true);
         setJobLabel('Rendering missing thumbnails…');
@@ -151,11 +155,13 @@ export default function DiagnosticsCard() {
           setRenderState(state);
           setRenderLoading(false);
           setNmrRenderLoading(false);
+          setForceRenderLoading(false);
           startPolling();
         },
         (error: unknown) => {
           setRenderLoading(false);
           setNmrRenderLoading(false);
+          setForceRenderLoading(false);
           setDiagError(error instanceof Error ? error.message : String(error));
         },
       );
@@ -348,7 +354,7 @@ export default function DiagnosticsCard() {
                 icon="media"
                 text="Render missing thumbnails"
                 loading={renderLoading}
-                disabled={nmrRenderLoading}
+                disabled={nmrRenderLoading || forceRenderLoading}
                 onClick={() => handleRenderThumbnails({})}
               />
               <Button
@@ -356,8 +362,16 @@ export default function DiagnosticsCard() {
                 icon="refresh"
                 text="Re-render NMR structures"
                 loading={nmrRenderLoading}
-                disabled={renderLoading}
+                disabled={renderLoading || forceRenderLoading}
                 onClick={() => handleRenderThumbnails({ nmrOnly: true })}
+              />
+              <Button
+                intent="danger"
+                icon="reset"
+                text="Re-render all thumbnails"
+                loading={forceRenderLoading}
+                disabled={renderLoading || nmrRenderLoading}
+                onClick={() => handleRenderThumbnails({ force: true })}
               />
             </div>
           )}
