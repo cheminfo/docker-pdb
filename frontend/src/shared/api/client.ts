@@ -13,6 +13,8 @@ import type {
   PairFrequencyResponse,
   PdbDoc,
   PdbViewResponse,
+  RebuildTitlesStatusResponse,
+  RebuildTitlesTriggerResponse,
   RenderThumbnailsStatusResponse,
   RenderThumbnailsTriggerResponse,
   RsyncHistoryDoc,
@@ -415,12 +417,19 @@ export function fetchDiagnostics(): Promise<DiagnosticsResponse> {
 
 /**
  * Start (or report the status of) the background thumbnail render job.
- * The server renders all missing PyMol sizes for `has_assembly = 1` entries
- * without overwriting existing PNGs.
+ * @param options.force - Re-render existing PNGs. Defaults to false.
+ * @param options.nmrOnly - Restrict to NMR entries (implies force). Defaults to false.
  * @returns Promise resolving to the trigger response.
  */
-export async function triggerRenderThumbnails(): Promise<RenderThumbnailsTriggerResponse> {
-  const response = await fetch('/v1/fix/render-thumbnails', {
+export async function triggerRenderThumbnails(options?: {
+  force?: boolean;
+  nmrOnly?: boolean;
+}): Promise<RenderThumbnailsTriggerResponse> {
+  const params = new URLSearchParams();
+  if (options?.nmrOnly) params.set('nmrOnly', 'true');
+  else if (options?.force) params.set('force', 'true');
+  const query = params.size > 0 ? `?${params.toString()}` : '';
+  const response = await fetch(`/v1/fix/render-thumbnails${query}`, {
     method: 'POST',
   });
   assertOk(response);
@@ -435,6 +444,29 @@ export async function triggerRenderThumbnails(): Promise<RenderThumbnailsTrigger
 export function fetchRenderThumbnailsStatus(): Promise<RenderThumbnailsStatusResponse> {
   return fetchJson<RenderThumbnailsStatusResponse>(
     '/v1/fix/render-thumbnails/status',
+  );
+}
+
+/**
+ * Start the background rebuild-titles job.
+ * Re-parses all entries with an empty title and writes the recovered title back
+ * to the database.
+ * @returns Promise resolving to the trigger response.
+ */
+export async function triggerRebuildTitles(): Promise<RebuildTitlesTriggerResponse> {
+  const response = await fetch('/v1/fix/rebuild-titles', { method: 'POST' });
+  assertOk(response);
+  return response.json() as Promise<RebuildTitlesTriggerResponse>;
+}
+
+/**
+ * Poll the current state of the rebuild-titles job.
+ * @returns Promise resolving to `{ state }` — `state` is `null` until the
+ *   first job has been triggered.
+ */
+export function fetchRebuildTitlesStatus(): Promise<RebuildTitlesStatusResponse> {
+  return fetchJson<RebuildTitlesStatusResponse>(
+    '/v1/fix/rebuild-titles/status',
   );
 }
 

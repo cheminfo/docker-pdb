@@ -3,16 +3,21 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
   fetchDiagnostics,
+  fetchRebuildTitlesStatus,
   fetchRenderThumbnailsStatus,
+  triggerRebuildTitles,
   triggerRenderThumbnails,
 } from '../../shared/api/client.ts';
 import type {
   DiagnosticsResponse,
+  RebuildTitlesState,
   RenderThumbnailsState,
 } from '../../shared/api/types.ts';
 
 /** Poll the render job status every 2 s while it is running. */
 const RENDER_POLL_INTERVAL_MS = 2_000;
+/** Poll the rebuild-titles job status every 2 s while it is running. */
+const TITLES_POLL_INTERVAL_MS = 2_000;
 
 type DiagStatus = 'idle' | 'loading' | 'done' | 'error';
 
@@ -81,20 +86,82 @@ export default function DiagnosticsCard() {
     );
   }, []);
 
-  const handleRenderThumbnails = useCallback(() => {
-    setRenderLoading(true);
-    triggerRenderThumbnails().then(
+  const [nmrRenderLoading, setNmrRenderLoading] = useState(false);
+  const [jobLabel, setJobLabel] = useState('');
+
+  const [titlesState, setTitlesState] = useState<RebuildTitlesState | null>(
+    null,
+  );
+  const [titlesLoading, setTitlesLoading] = useState(false);
+  const titlesPollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const stopTitlesPolling = useCallback(() => {
+    if (titlesPollTimer.current) {
+      clearTimeout(titlesPollTimer.current);
+      titlesPollTimer.current = null;
+    }
+  }, []);
+
+  const startTitlesPolling = useCallback(() => {
+    stopTitlesPolling();
+    const tick = () => {
+      fetchRebuildTitlesStatus().then(
+        ({ state }) => {
+          setTitlesState(state);
+          if (state?.running) {
+            titlesPollTimer.current = setTimeout(tick, TITLES_POLL_INTERVAL_MS);
+          }
+        },
+        () => {
+          titlesPollTimer.current = setTimeout(tick, TITLES_POLL_INTERVAL_MS);
+        },
+      );
+    };
+    tick();
+  }, [stopTitlesPolling]);
+
+  useEffect(() => () => stopTitlesPolling(), [stopTitlesPolling]);
+
+  const handleRebuildTitles = useCallback(() => {
+    setTitlesLoading(true);
+    triggerRebuildTitles().then(
       ({ state }) => {
-        setRenderState(state);
-        setRenderLoading(false);
-        startPolling();
+        setTitlesState(state);
+        setTitlesLoading(false);
+        startTitlesPolling();
       },
       (error: unknown) => {
-        setRenderLoading(false);
+        setTitlesLoading(false);
         setDiagError(error instanceof Error ? error.message : String(error));
       },
     );
-  }, [startPolling]);
+  }, [startTitlesPolling]);
+
+  const handleRenderThumbnails = useCallback(
+    (options: { force?: boolean; nmrOnly?: boolean }) => {
+      if (options.nmrOnly) {
+        setNmrRenderLoading(true);
+        setJobLabel('Re-rendering NMR thumbnails…');
+      } else {
+        setRenderLoading(true);
+        setJobLabel('Rendering missing thumbnails…');
+      }
+      triggerRenderThumbnails(options).then(
+        ({ state }) => {
+          setRenderState(state);
+          setRenderLoading(false);
+          setNmrRenderLoading(false);
+          startPolling();
+        },
+        (error: unknown) => {
+          setRenderLoading(false);
+          setNmrRenderLoading(false);
+          setDiagError(error instanceof Error ? error.message : String(error));
+        },
+      );
+    },
+    [startPolling],
+  );
 
   const { database } = diag ?? {};
   const {
@@ -154,6 +221,59 @@ export default function DiagnosticsCard() {
               </span>
             )}
           </dd>
+          {emptyTitleCount > 0 ? (
+            <>
+              <dt />
+              <dd style={{ paddingTop: 4 }}>
+                {titlesState ? (
+                  titlesState.running ? (
+                    <>
+                      <p
+                        style={{ margin: '0 0 6px' }}
+                        className="settings-muted"
+                      >
+                        Rebuilding titles…{' '}
+                        {titlesState.processed.toLocaleString()} /{' '}
+                        {titlesState.total.toLocaleString()}
+                      </p>
+                      <ProgressBar
+                        value={
+                          titlesState.total > 0
+                            ? titlesState.processed / titlesState.total
+                            : 0
+                        }
+                        intent="primary"
+                      />
+                      <p
+                        style={{ margin: '6px 0 0' }}
+                        className="settings-muted"
+                      >
+                        Fixed: {titlesState.fixed.toLocaleString()} · Skipped:{' '}
+                        {titlesState.skipped.toLocaleString()}
+                      </p>
+                    </>
+                  ) : (
+                    <p style={{ margin: 0 }}>
+                      Done — fixed {titlesState.fixed.toLocaleString()} title
+                      {titlesState.fixed !== 1 ? 's' : ''}
+                      {titlesState.skipped > 0
+                        ? `, ${titlesState.skipped.toLocaleString()} could not be recovered`
+                        : ''}
+                      .
+                    </p>
+                  )
+                ) : (
+                  <Button
+                    intent="warning"
+                    icon="tag"
+                    text="Fix empty titles"
+                    loading={titlesLoading}
+                    onClick={handleRebuildTitles}
+                  />
+                )}
+              </dd>
+            </>
+          ) : null}
 
           <dt>FTS-indexed</dt>
           <dd>
@@ -199,8 +319,7 @@ export default function DiagnosticsCard() {
               {renderState.running ? (
                 <>
                   <p style={{ margin: '0 0 6px' }} className="settings-muted">
-                    Rendering missing thumbnails…{' '}
-                    {renderState.processed.toLocaleString()} /{' '}
+                    {jobLabel} {renderState.processed.toLocaleString()} /{' '}
                     {renderState.total.toLocaleString()}
                   </p>
                   <ProgressBar value={renderProgress} intent="primary" />
@@ -223,13 +342,24 @@ export default function DiagnosticsCard() {
               )}
             </div>
           ) : (
-            <Button
-              intent={hasMissing ? 'warning' : 'none'}
-              icon="media"
-              text="Render missing thumbnails"
-              loading={renderLoading}
-              onClick={handleRenderThumbnails}
-            />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Button
+                intent={hasMissing ? 'warning' : 'none'}
+                icon="media"
+                text="Render missing thumbnails"
+                loading={renderLoading}
+                disabled={nmrRenderLoading}
+                onClick={() => handleRenderThumbnails({})}
+              />
+              <Button
+                intent="warning"
+                icon="refresh"
+                text="Re-render NMR structures"
+                loading={nmrRenderLoading}
+                disabled={renderLoading}
+                onClick={() => handleRenderThumbnails({ nmrOnly: true })}
+              />
+            </div>
           )}
         </div>
       ) : null}

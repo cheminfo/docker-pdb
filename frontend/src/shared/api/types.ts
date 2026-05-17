@@ -431,6 +431,32 @@ export interface RenderThumbnailsStatusResponse {
   state: RenderThumbnailsState | null;
 }
 
+/** In-flight or completed rebuild-titles job state. */
+export interface RebuildTitlesState {
+  running: boolean;
+  /** Entries processed so far (fixed + skipped). */
+  processed: number;
+  /** Total entries with an empty title at job start. */
+  total: number;
+  /** Entries whose title was successfully populated. */
+  fixed: number;
+  /** Entries with no raw file on disk or still-empty title after parse. */
+  skipped: number;
+  startedAt: string;
+  finishedAt: string | null;
+}
+
+/** Response of `POST /v1/fix/rebuild-titles`. */
+export interface RebuildTitlesTriggerResponse {
+  status: 'started' | 'already-running';
+  state: RebuildTitlesState;
+}
+
+/** Response of `GET /v1/fix/rebuild-titles/status`. */
+export interface RebuildTitlesStatusResponse {
+  state: RebuildTitlesState | null;
+}
+
 /** One ligand row returned by the substructure-search API. */
 export interface LigandSummary {
   /** 3-letter wwPDB chemical-component code (e.g. `ATP`). */
