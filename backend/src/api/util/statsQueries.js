@@ -37,8 +37,6 @@ const STANDARD_AA = [
 const NUCLEIC_BASES = ['DA', 'DC', 'DG', 'DT', 'DU', 'A', 'C', 'G', 'U', 'T'];
 
 const RESIDUES_HISTOGRAM_BINS = [50, 100, 200, 500, 1000, 2000, 5000, 10000];
-const LIGAND_MW_BINS = [100, 250, 500, 1000, 2000, 5000];
-const HELIX_SHEET_LENGTH_LIMIT = 200;
 
 /**
  * Wrap a sequence of `[key, value]` pairs into the grouped-reduce envelope
@@ -211,10 +209,9 @@ export function aminoAcidFreq(db) {
   const placeholders = STANDARD_AA.map(() => '?').join(',');
   const rows = db
     .statement(
-      `SELECT residue AS key, SUM(count) AS value
-       FROM pdb_residue_counts
-       WHERE residue IN (${placeholders})
-       GROUP BY residue`,
+      `SELECT residue AS key, total_count AS value
+       FROM stats_residue_freq
+       WHERE residue IN (${placeholders})`,
     )
     .all(...STANDARD_AA);
   // Always return all 20 AAs in the canonical STANDARD_AA order (zero
@@ -230,40 +227,23 @@ export function nucleicBaseFreq(db) {
   const placeholders = NUCLEIC_BASES.map(() => '?').join(',');
   const rows = db
     .statement(
-      `SELECT residue AS key, SUM(count) AS value
-       FROM pdb_residue_counts
-       WHERE residue IN (${placeholders})
-       GROUP BY residue`,
+      `SELECT residue AS key, total_count AS value
+       FROM stats_residue_freq
+       WHERE residue IN (${placeholders})`,
     )
     .all(...NUCLEIC_BASES);
   return rowsAsGroupedRows(rows);
 }
 
 export function moleculeType(db) {
-  const aaPlaceholders = STANDARD_AA.map(() => '?').join(',');
-  const basePlaceholders = NUCLEIC_BASES.map(() => '?').join(',');
   const rows = db
     .statement(
-      `WITH per_pdb AS (
-         SELECT pdb_id,
-                MAX(CASE WHEN residue IN (${aaPlaceholders}) THEN 1 ELSE 0 END) AS has_protein,
-                MAX(CASE WHEN residue IN (${basePlaceholders}) THEN 1 ELSE 0 END) AS has_nucleic
-         FROM pdb_residue_counts
-         GROUP BY pdb_id
-       )
-       SELECT category AS key, COUNT(*) AS value FROM (
-         SELECT
-           CASE
-             WHEN has_protein = 1 AND has_nucleic = 1 THEN 'hybrid'
-             WHEN has_protein = 1                     THEN 'protein'
-             WHEN has_nucleic = 1                     THEN 'nucleic'
-             ELSE 'other'
-           END AS category
-         FROM per_pdb
-       )
-       GROUP BY category`,
+      `SELECT molecule_type AS key, COUNT(*) AS value
+       FROM pdb_entries
+       WHERE molecule_type IS NOT NULL
+       GROUP BY molecule_type`,
     )
-    .all(...STANDARD_AA, ...NUCLEIC_BASES);
+    .all();
   return rowsAsGroupedRows(rows);
 }
 
@@ -276,15 +256,11 @@ export function helixKindHist(db) {
 }
 
 export function helixLengthHist(db) {
-  return rowsAsGroupedRows(
-    db.statsHelixLengthHist.all(HELIX_SHEET_LENGTH_LIMIT),
-  );
+  return rowsAsGroupedRows(db.statsHelixLengthHist.all());
 }
 
 export function sheetLengthHist(db) {
-  return rowsAsGroupedRows(
-    db.statsSheetLengthHist.all(HELIX_SHEET_LENGTH_LIMIT),
-  );
+  return rowsAsGroupedRows(db.statsSheetLengthHist.all());
 }
 
 export function helicesVsSheets(db) {
@@ -328,8 +304,7 @@ export function ligandFrequency(db) {
 }
 
 export function ligandMwHistogram(db) {
-  const all = db.selectLigandMwForHistogram.all();
-  return histogram(all, LIGAND_MW_BINS, (row) => row.mw);
+  return rowsAsGroupedRows(db.statsLigandMwHist.all());
 }
 
 export function ligandsByYear(db) {

@@ -3,7 +3,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import createDebug from 'debug';
 
 import { getLigandsDB } from './db/getDB.js';
-import { rebuildOmegaStatsRollup } from './db/rebuildOmegaStatsRollup.js';
+import { rebuildStatsRollup } from './db/rebuildStatsRollup.js';
 import * as rebuild from './rebuild.js';
 import {
   clearRunning,
@@ -108,7 +108,7 @@ async function runRebuild() {
       });
     }
     /* eslint-enable no-await-in-loop */
-    await refreshOmegaRollup(await getLigandsDB());
+    await refreshStatsRollup(await getLigandsDB());
   } catch (error) {
     debug('rebuild-from-disk failed; continuing into rsync loop:', error);
   } finally {
@@ -182,7 +182,7 @@ async function runOnce() {
       onProgress,
       onActivity,
     });
-    await refreshOmegaRollup(await getLigandsDB());
+    await refreshStatsRollup(await getLigandsDB());
   } catch (error) {
     debug('update failed, will retry next cycle:', error);
   } finally {
@@ -196,12 +196,13 @@ async function runOnce() {
  * SQLite busy timeout) is logged but does not crash the cron loop —
  * the next cycle will rebuild from the same source-of-truth tables.
  * @param {import('./db/getDB.js').LigandsDB} db - Open ligands DB.
+ * @returns {Promise<void>}
  */
-async function refreshOmegaRollup(db) {
+async function refreshStatsRollup(db) {
   try {
-    await rebuildOmegaStatsRollup(db);
+    await rebuildStatsRollup(db);
   } catch (error) {
-    debug('omega-stats rollup rebuild failed:', error);
+    debug('stats rollup rebuild failed:', error);
   }
 }
 

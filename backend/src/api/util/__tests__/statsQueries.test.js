@@ -1,7 +1,7 @@
 import { beforeEach, expect, test } from 'vitest';
 
 import { getInMemoryLigandsDB } from '../../../db/getDB.js';
-import { rebuildOmegaStatsRollup } from '../../../db/rebuildOmegaStatsRollup.js';
+import { rebuildStatsRollup } from '../../../db/rebuildStatsRollup.js';
 import { upsertPdbEntrySync } from '../../../db/upsertPdbEntry.js';
 import {
   STATS_HANDLERS,
@@ -197,7 +197,7 @@ test('pairFrequency returns [cis, total] per ordered residue pair', async () => 
     pairCounts: { 'ALA:PRO': 5 },
   };
   upsertPdbEntrySync(db, '1AAA', entry({ omega }), { rawSize: 1 });
-  await rebuildOmegaStatsRollup(db);
+  await rebuildStatsRollup(db);
 
   const rows = pairFrequency(db).rows;
   const alaPro = rows.find(
@@ -242,7 +242,7 @@ test('pairFrequencyByYear emits one row per `[year, r1, r2]` triple', async () =
     }),
     { rawSize: 1 },
   );
-  await rebuildOmegaStatsRollup(db);
+  await rebuildStatsRollup(db);
 
   expect(pairFrequencyByYear(db)).toStrictEqual({
     rows: [

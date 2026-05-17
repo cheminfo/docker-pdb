@@ -1,5 +1,54 @@
 import { getLigandsDB } from './getDB.js';
 
+const STANDARD_AA_SET = new Set([
+  'ALA',
+  'ARG',
+  'ASN',
+  'ASP',
+  'CYS',
+  'GLU',
+  'GLN',
+  'GLY',
+  'HIS',
+  'ILE',
+  'LEU',
+  'LYS',
+  'MET',
+  'PHE',
+  'PRO',
+  'SER',
+  'THR',
+  'TRP',
+  'TYR',
+  'VAL',
+]);
+const NUCLEIC_BASES_SET = new Set([
+  'DA',
+  'DC',
+  'DG',
+  'DT',
+  'DU',
+  'A',
+  'C',
+  'G',
+  'U',
+  'T',
+]);
+
+function computeMoleculeType(residueStats) {
+  let hasProtein = false;
+  let hasNucleic = false;
+  for (const residue of Object.keys(residueStats)) {
+    if (!hasProtein && STANDARD_AA_SET.has(residue)) hasProtein = true;
+    if (!hasNucleic && NUCLEIC_BASES_SET.has(residue)) hasNucleic = true;
+    if (hasProtein && hasNucleic) break;
+  }
+  if (hasProtein && hasNucleic) return 'hybrid';
+  if (hasProtein) return 'protein';
+  if (hasNucleic) return 'nucleic';
+  return 'other';
+}
+
 /**
  * Persist a parsed PDB entry into all the relational tables that back the
  * read API and stats charts. The write is fully atomic: every child table
@@ -101,6 +150,7 @@ export function upsertPdbEntrySync(db, pdbId, parsed, options = {}) {
       omega.nbPeptideBonds || 0,
       JSON.stringify(residueStats),
       JSON.stringify(percentageAA),
+      computeMoleculeType(residueStats),
     );
 
     db.deletePdbChains.run(pdbId);

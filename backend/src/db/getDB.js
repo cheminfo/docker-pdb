@@ -229,9 +229,9 @@ export class LigandsDB {
          nb_chains, nb_helices, nb_sheets, nb_ligands, iep,
          raw_size, has_assembly, assembly_size, parsed_at,
          omega_nb_cis, omega_nb_trans, omega_nb_twisted, omega_nb_peptide_bonds,
-         residue_stats_json, percentage_aa_json
+         residue_stats_json, percentage_aa_json, molecule_type
        )
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          title = excluded.title,
          experiment = excluded.experiment,
@@ -252,7 +252,8 @@ export class LigandsDB {
          omega_nb_twisted = excluded.omega_nb_twisted,
          omega_nb_peptide_bonds = excluded.omega_nb_peptide_bonds,
          residue_stats_json = excluded.residue_stats_json,
-         percentage_aa_json = excluded.percentage_aa_json`,
+         percentage_aa_json = excluded.percentage_aa_json,
+         molecule_type = excluded.molecule_type`,
     );
   }
 
@@ -800,13 +801,12 @@ export class LigandsDB {
     );
   }
 
-  // The four omega rollup-backed statements below read from
-  // `stats_omega_by_year` / `stats_omega_pairs_by_year`, both regenerated
-  // at the end of every rsync cycle by `rebuildOmegaStatsRollup`. The
-  // raw source-of-truth columns (`pdb_entries.omega_nb_*`,
-  // `pdb_omega_pairs.*`) remain populated per upsert and are still
-  // available for ad-hoc queries / per-PDB endpoints — only the global
-  // stats fan-out is served from the rollup.
+  // The statements below read from pre-computed rollup tables regenerated
+  // at the end of every rsync cycle by `rebuildStatsRollup`. The raw
+  // source-of-truth columns (`pdb_entries.omega_nb_*`, `pdb_omega_pairs.*`,
+  // `pdb_helices.*`, `pdb_sheets.*`, `pdb_residue_counts.*`) remain
+  // populated per upsert and are available for ad-hoc queries — only the
+  // global stats fan-out is served from the rollup.
   //
   // Entries with NULL / non-positive `year` are bucketed under year=0
   // in the rollup, so the summary picks them up while per-year /
@@ -857,35 +857,25 @@ export class LigandsDB {
 
   get statsHelixKindHist() {
     return this.statement(
-      `SELECT kind AS key, COUNT(*) AS value
-       FROM pdb_helices
-       WHERE kind IS NOT NULL
-       GROUP BY kind
+      `SELECT kind AS key, count AS value
+       FROM stats_helix_kind_hist
        ORDER BY kind`,
     );
   }
 
   get statsHelixLengthHist() {
     return this.statement(
-      `SELECT (res_to - res_from + 1) AS key, COUNT(*) AS value
-       FROM pdb_helices
-       WHERE res_to >= res_from
-         AND (res_to - res_from + 1) > 0
-         AND (res_to - res_from + 1) < ?
-       GROUP BY key
-       ORDER BY key`,
+      `SELECT length AS key, count AS value
+       FROM stats_helix_length_hist
+       ORDER BY length`,
     );
   }
 
   get statsSheetLengthHist() {
     return this.statement(
-      `SELECT (res_to - res_from + 1) AS key, COUNT(*) AS value
-       FROM pdb_sheets
-       WHERE res_to >= res_from
-         AND (res_to - res_from + 1) > 0
-         AND (res_to - res_from + 1) < ?
-       GROUP BY key
-       ORDER BY key`,
+      `SELECT length AS key, count AS value
+       FROM stats_sheet_length_hist
+       ORDER BY length`,
     );
   }
 
@@ -915,9 +905,23 @@ export class LigandsDB {
     );
   }
 
-  get selectLigandMwForHistogram() {
+  get statsLigandMwHist() {
     return this.statement(
-      `SELECT mw FROM pdb_formulas WHERE label <> 'HOH' AND mw IS NOT NULL AND mw > 0`,
+      `SELECT
+         CASE
+           WHEN mw <  100  THEN 0
+           WHEN mw <  250  THEN 100
+           WHEN mw <  500  THEN 250
+           WHEN mw < 1000  THEN 500
+           WHEN mw < 2000  THEN 1000
+           WHEN mw < 5000  THEN 2000
+           ELSE 5000
+         END AS key,
+         COUNT(*) AS value
+       FROM pdb_formulas
+       WHERE label <> 'HOH' AND mw IS NOT NULL AND mw > 0
+       GROUP BY key
+       ORDER BY key`,
     );
   }
 

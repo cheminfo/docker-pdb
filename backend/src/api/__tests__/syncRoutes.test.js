@@ -180,8 +180,11 @@ test('GET /v1/diagnostics surfaces ligand/pdb/pymol state in one snapshot', asyn
   expect(body.database).toStrictEqual({
     ligandCount: 0,
     pdbCount: 0,
-    assemblyCount: 0,
+    assemblyTotal: 0,
+    assemblyMissing: 0,
     ligandsLooksEmpty: true,
+    emptyTitleCount: 0,
+    ftsTitleCount: 0,
   });
 
   expect(body.sync.kinds).toStrictEqual(['rsync', 'ccd']);
