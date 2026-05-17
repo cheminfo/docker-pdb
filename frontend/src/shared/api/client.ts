@@ -17,6 +17,8 @@ import type {
   RenderThumbnailsTriggerResponse,
   RsyncHistoryDoc,
   RsyncHistoryResponse,
+  ScanThumbnailsStatusResponse,
+  ScanThumbnailsTriggerResponse,
   StatsResponse,
   StatsValue,
   SyncStatusResponse,
@@ -435,6 +437,29 @@ export async function triggerRenderThumbnails(): Promise<RenderThumbnailsTrigger
 export function fetchRenderThumbnailsStatus(): Promise<RenderThumbnailsStatusResponse> {
   return fetchJson<RenderThumbnailsStatusResponse>(
     '/v1/fix/render-thumbnails/status',
+  );
+}
+
+/**
+ * Start (or report the status of) the background thumbnail scan job.
+ * The server checks every assembly entry for an on-disk 200×200 PNG and
+ * counts how many are missing.
+ * @returns Promise resolving to the trigger response.
+ */
+export async function triggerScanThumbnails(): Promise<ScanThumbnailsTriggerResponse> {
+  const response = await fetch('/v1/fix/scan-thumbnails', { method: 'POST' });
+  assertOk(response);
+  return response.json() as Promise<ScanThumbnailsTriggerResponse>;
+}
+
+/**
+ * Poll the current state of the thumbnail scan job.
+ * @returns Promise resolving to `{ state }` — `state` is `null` until the
+ *   first scan has been triggered.
+ */
+export function fetchScanThumbnailsStatus(): Promise<ScanThumbnailsStatusResponse> {
+  return fetchJson<ScanThumbnailsStatusResponse>(
+    '/v1/fix/scan-thumbnails/status',
   );
 }
 

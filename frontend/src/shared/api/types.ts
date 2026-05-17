@@ -375,23 +375,6 @@ export interface SyncTriggerResponse {
 }
 
 /** One assembly entry in the `data.assemblyThumbnailSamples.samples` array. */
-export interface AssemblyThumbnailSample {
-  /** 4-character PDB id. */
-  id: string;
-  /** Map of `"WxH"` → `true/false` for each configured PyMol size. */
-  sizes: Record<string, boolean>;
-  /** True when at least one size exists on disk. */
-  hasAny: boolean;
-}
-
-/** `data.assemblyThumbnailSamples` from `GET /v1/diagnostics`. */
-export interface AssemblyThumbnailSamples {
-  /** Up to 10 DB-sourced assembly entries, each probed for PNG existence. */
-  samples: AssemblyThumbnailSample[];
-  /** How many of those samples have no PNG at all. */
-  missingCount: number;
-}
-
 /** `database` block from `GET /v1/diagnostics`. */
 export interface DiagnosticsDatabase {
   ligandCount: number;
@@ -414,7 +397,6 @@ export interface DiagnosticsResponse {
       pymolDirExists: boolean;
       bucketCount: number | null;
     };
-    assemblyThumbnailSamples: AssemblyThumbnailSamples;
   };
 }
 
@@ -444,6 +426,30 @@ export interface RenderThumbnailsTriggerResponse {
 /** Response of `GET /v1/fix/render-thumbnails/status`. */
 export interface RenderThumbnailsStatusResponse {
   state: RenderThumbnailsState | null;
+}
+
+/** In-flight or completed thumbnail scan job state. */
+export interface ScanThumbnailsState {
+  running: boolean;
+  /** Entries checked so far. */
+  scanned: number;
+  /** Total assembly entries in the database. */
+  total: number;
+  /** Entries with no 200×200 PNG on disk. */
+  missing: number;
+  startedAt: string;
+  finishedAt: string | null;
+}
+
+/** Response of `POST /v1/fix/scan-thumbnails`. */
+export interface ScanThumbnailsTriggerResponse {
+  status: 'started' | 'already-running';
+  state: ScanThumbnailsState;
+}
+
+/** Response of `GET /v1/fix/scan-thumbnails/status`. */
+export interface ScanThumbnailsStatusResponse {
+  state: ScanThumbnailsState | null;
 }
 
 /** One ligand row returned by the substructure-search API. */

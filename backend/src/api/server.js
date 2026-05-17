@@ -15,6 +15,8 @@ const PROTECTED_PATHS = new Set([
   '/v1/ccd-history',
   '/v1/fix/render-thumbnails',
   '/v1/fix/render-thumbnails/status',
+  '/v1/fix/scan-thumbnails',
+  '/v1/fix/scan-thumbnails/status',
 ]);
 
 const DEFAULT_COOKIE_SECRET = 'default-dev-secret-change-in-production';
