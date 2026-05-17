@@ -1,12 +1,10 @@
 import { cpus } from 'node:os';
 
 /**
- * Default worker count for the file-processing pool.  Matches the PyMol exec
- * semaphore formula in `pymol.js` so that the number of queued workers never
- * greatly exceeds the number of available exec slots: min(8, max(1, cpus/2)).
- *
- * Override at deploy time via the `PYMOL_CONCURRENCY` env var (hard-capped at
- * 8 inside `pymol.js` regardless of this value).
+ * Default worker count for the PyMol render pool.
+ * Formula: min(8, max(1, floor(cpus / 2))) — stays proportional to the host
+ * while capping at 8 to avoid exhausting container thread limits.
+ * Override at deploy time via the `PYMOL_CONCURRENCY` env var.
  */
 const DEFAULT_PYMOL_CONCURRENCY = Math.min(
   8,
