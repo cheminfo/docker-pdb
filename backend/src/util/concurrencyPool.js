@@ -1,16 +1,24 @@
+import { cpus } from 'node:os';
+
 /**
  * Default worker count for the PyMol render pool. Each PDB worker drives a
  * single PyMol child process at a time (one process per size, sequentially
  * within the same PDB), so peak concurrent PyMol processes ≈ pool size.
- * Override at deploy time via the `PYMOL_CONCURRENCY` env var; tune the
- * host's RAM (`PYMOL_MEMORY_LIMIT` in compose) accordingly.
+ *
+ * Defaults to the number of logical CPU cores rather than a fixed value so
+ * the process count stays proportional to what the host can actually
+ * schedule. Each PyMol child spawns ~5–10 OS threads (Python runtime),
+ * so a fixed default of 32 routinely exhausted the container thread limit
+ * ("libgomp: Thread creation failed") on typical 4–8 core deployments.
+ *
+ * Override at deploy time via the `PYMOL_CONCURRENCY` env var.
  */
-const DEFAULT_PYMOL_CONCURRENCY = 32;
+const DEFAULT_PYMOL_CONCURRENCY = Math.max(1, cpus().length);
 
 /**
  * Resolve the PyMol render pool size from the environment. Falls back to
- * {@link DEFAULT_PYMOL_CONCURRENCY} when `PYMOL_CONCURRENCY` is unset, empty,
- * or not a positive integer.
+ * {@link DEFAULT_PYMOL_CONCURRENCY} (= logical CPU count) when
+ * `PYMOL_CONCURRENCY` is unset, empty, or not a positive integer.
  * @returns {number} A positive integer concurrency.
  */
 export function getPymolConcurrency() {
