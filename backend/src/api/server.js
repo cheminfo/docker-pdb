@@ -11,7 +11,6 @@ import { v1 } from './v1/v1.js';
 const PROTECTED_PATHS = new Set([
   '/v1/sync/status',
   '/v1/sync/trigger',
-  '/v1/rsync-history',
   '/v1/ccd-history',
   '/v1/fix/render-thumbnails',
   '/v1/fix/render-thumbnails/status',
