@@ -91,9 +91,11 @@ function shouldAwait(
     const candidate = ancestors[index];
     if (!candidate) continue;
     if (
-      candidate.type === 'FunctionExpression' ||
-      candidate.type === 'FunctionDeclaration' ||
-      candidate.type === 'ArrowFunctionExpression'
+      [
+        'FunctionExpression',
+        'FunctionDeclaration',
+        'ArrowFunctionExpression',
+      ].includes(candidate.type)
     ) {
       if (!('async' in candidate && candidate.async)) return false;
       break;

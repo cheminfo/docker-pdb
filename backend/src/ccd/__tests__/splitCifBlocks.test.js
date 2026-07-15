@@ -33,7 +33,7 @@ test('splits the CCD fixture into one block per data_ section', async () => {
   const blocks = await collect(text.split('\n'));
 
   expect(blocks).toHaveLength(4);
-  expect(blocks.map((block) => block.split('\n')[0])).toStrictEqual([
+  expect(blocks.map((block) => block.split('\n', 1)[0])).toStrictEqual([
     'data_HOH',
     'data_NA',
     'data_BNZ',

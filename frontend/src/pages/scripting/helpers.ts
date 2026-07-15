@@ -573,7 +573,7 @@ export function createScriptApi(context: ScriptApiContext): ScriptApi {
     },
 
     setKindVisibility: (kind, visible) => {
-      if (kind === 'distances' || kind === 'hbonds' || kind === 'contacts') {
+      if (isMeasurementKind(kind)) {
         measurements.setKindVisibility(kind, visible);
       } else {
         channels.setKindVisibility(kind, visible);
@@ -767,4 +767,18 @@ function waitForCameraAnimation(seconds: number | undefined): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, seconds * 1000 + 50);
   });
+}
+
+const MEASUREMENT_KINDS = ['distances', 'hbonds', 'contacts'] as const;
+
+/**
+ * Narrow an overlay kind to the subset owned by the measurements manager;
+ * every other kind is a Mol* representation channel.
+ * @param kind - Overlay kind coming from the script API.
+ * @returns `true` when the kind is a measurement overlay.
+ */
+function isMeasurementKind(
+  kind: string,
+): kind is (typeof MEASUREMENT_KINDS)[number] {
+  return (MEASUREMENT_KINDS as readonly string[]).includes(kind);
 }

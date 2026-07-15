@@ -229,10 +229,7 @@ export interface SyncTriggerInfo {
 
 /** Sub-phase of a long-running sync, surfaced for live progress display. */
 export type SyncPhase =
-  | 'rebuild-asym'
-  | 'rebuild-assembly'
-  | 'rsync-asym'
-  | 'rsync-assembly';
+  'rebuild-asym' | 'rebuild-assembly' | 'rsync-asym' | 'rsync-assembly';
 
 /**
  * Fine-grained state of the rsync child process within an `rsync-*` phase.
@@ -244,10 +241,7 @@ export type SyncPhase =
  *   awaitWriteFinish grace period before we close it.
  */
 export type RsyncSubPhase =
-  | 'connecting'
-  | 'scanning'
-  | 'transferring'
-  | 'post-rsync';
+  'connecting' | 'scanning' | 'transferring' | 'post-rsync';
 
 /**
  * Byte-level progress parsed from rsync's `--info=progress2` output. Set

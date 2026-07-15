@@ -17,12 +17,12 @@
  *   maxResults?: number,
  *   minSimilarity?: number,
  * }} params - Search parameters. `minSimilarity` defaults to 0 (no threshold).
- * @returns {{
+ * @returns {Promise<{
  *   ligands: Array<{ code: string, name: string, mf: string, mw: number, idCode: string, coordinates: string, nbPdbs: number, similarity?: number }>,
  *   stats: { screened: number, verified: number, screeningMs: number, verificationMs: number, overLimit: boolean },
- * }} Matching ligands and timing stats.
+ * }>} Matching ligands and timing stats.
  */
-export function ligandSearch({
+export async function ligandSearch({
   db,
   queryIdCode,
   mode = 'substructure',
@@ -30,7 +30,7 @@ export function ligandSearch({
   minSimilarity = 0,
 }) {
   const start = performance.now();
-  const response = db.molecules.search(queryIdCode, {
+  const response = await db.molecules.search(queryIdCode, {
     mode,
     format: 'idCode',
     limit: maxResults,

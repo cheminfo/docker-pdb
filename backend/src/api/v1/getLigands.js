@@ -69,7 +69,7 @@ export function registerGetLigandsRoute(fastify, db) {
     }
 
     try {
-      const result = ligandSearch({
+      const result = await ligandSearch({
         db,
         queryIdCode,
         mode,

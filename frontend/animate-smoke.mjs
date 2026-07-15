@@ -13,11 +13,7 @@ const SCENES = [
 
 const browser = await chromium.launch({
   headless: true,
-  args: [
-    '--use-gl=swiftshader',
-    '--enable-webgl',
-    '--ignore-gpu-blocklist',
-  ],
+  args: ['--use-gl=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist'],
 });
 const context = await browser.newContext();
 const page = await context.newPage();

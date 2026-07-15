@@ -171,11 +171,9 @@ export default function ScriptingPage() {
   const pdbText = useAsync(fetchTask);
 
   useEffect(() => {
-    /* eslint-disable react-you-might-not-need-an-effect/no-event-handler */
     if (pdbText.status === 'success') {
       loadedPdbRef.current = pdbText.data;
     }
-    /* eslint-enable react-you-might-not-need-an-effect/no-event-handler */
   }, [pdbText]);
 
   useEffect(() => {
@@ -189,8 +187,7 @@ export default function ScriptingPage() {
       setLociHelpers({
         getBoundingSphere: (loci) =>
           module_.Loci.getBoundingSphere(loci as never) as
-            | { radius: number; center: [number, number, number] }
-            | undefined,
+            { radius: number; center: [number, number, number] } | undefined,
       });
     });
     void import('molstar/lib/mol-model/structure.js').then((module_) => {

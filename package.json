@@ -35,18 +35,21 @@
     "dev:backend": "npm run dev -w backend",
     "dev:frontend": "npm run dev -w frontend",
     "dev:seed": "npm run dev:seed -w backend",
-    "eslint": "npm run eslint -w backend && npm run eslint -w frontend",
-    "eslint-fix": "npm run eslint-fix -w backend && npm run eslint-fix -w frontend",
-    "prettier": "npm run prettier -w backend && npm run prettier -w frontend",
-    "prettier-write": "npm run prettier-write -w backend && npm run prettier-write -w frontend",
+    "eslint": "eslint .",
+    "eslint-fix": "eslint . --fix",
+    "prettier": "prettier --check .",
+    "prettier-write": "prettier --write .",
     "rebuild": "npm run rebuild -w backend",
     "seed": "npm run seed -w backend",
     "seed-ccd": "npm run seed-ccd -w backend",
     "test": "npm run test-only && npm run check-types && npm run eslint && npm run prettier",
-    "test-only": "npm run test-only -w backend",
+    "test-only": "npm run test-only -w backend && npm run test-only -w frontend",
     "update": "npm run update -w backend"
   },
   "devDependencies": {
-    "concurrently": "^9.2.1"
+    "concurrently": "^10.0.3",
+    "eslint": "^9.39.5",
+    "eslint-config-zakodium": "^20.1.0",
+    "prettier": "^3.9.5"
   }
 }

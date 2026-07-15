@@ -427,7 +427,7 @@ async function doRsync(
 async function getDirectorySize(directory) {
   try {
     const { stdout } = await execFileAsync('du', ['-sk', directory]);
-    const blocks = Number(stdout.trim().split(/\s+/)[0]);
+    const blocks = Number(stdout.trim().split(/\s+/, 1)[0]);
     return Number.isFinite(blocks) ? blocks * 1024 : null;
   } catch (error) {
     debug('Failed to compute directory size for', directory, error);

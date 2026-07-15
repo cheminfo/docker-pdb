@@ -2,7 +2,7 @@
 // pkC  : pKa of the C-terminal amino acid (COOH)
 // pkSCb: pKa of the side chain positively charged
 // pkSC : pKa of the neutral side chain
-// source: http://upload.wikimedia.org/wikipedia/commons/a/a9/Amino_Acids.svg
+// source: https://upload.wikimedia.org/wikipedia/commons/a/a9/Amino_Acids.svg
 
 const pKaAA = {
   ALA: { pkN: 9.71, pkC: 2.33 },
@@ -27,7 +27,7 @@ const pKaAA = {
   VAL: { pkN: 9.52, pkC: 2.27 },
 };
 
-// inspired by: http://isoelectric.ovh.org/files/practise-isoelectric-point.html#mozTocId763352
+// inspired by: https://isoelectric.ovh.org/files/practise-isoelectric-point.html#mozTocId763352
 
 export function getChart(aas) {
   const combined = simplify(aas);

@@ -39,9 +39,9 @@ beforeAll(async () => {
 
 afterAll(() => db.close());
 
-test('substructure: EDO query matches EDO and GOL, results sorted by MW ascending', () => {
+test('substructure: EDO query matches EDO and GOL, results sorted by MW ascending', async () => {
   const edo = LIGANDS.find((l) => l.code === 'EDO');
-  const result = ligandSearch({
+  const result = await ligandSearch({
     db,
     queryIdCode: edo.idCode,
     mode: 'substructure',
@@ -64,9 +64,9 @@ test('substructure: EDO query matches EDO and GOL, results sorted by MW ascendin
   }
 });
 
-test('substructure: stats include screened count and no overLimit for a small DB', () => {
+test('substructure: stats include screened count and no overLimit for a small DB', async () => {
   const gol = LIGANDS.find((l) => l.code === 'GOL');
-  const result = ligandSearch({
+  const result = await ligandSearch({
     db,
     queryIdCode: gol.idCode,
     mode: 'substructure',
@@ -78,9 +78,9 @@ test('substructure: stats include screened count and no overLimit for a small DB
   expect(result.stats.overLimit).toBe(false);
 });
 
-test('similarity: BMA query finds the three C6H12O6 hexose stereoisomers with scores', () => {
+test('similarity: BMA query finds the three C6H12O6 hexose stereoisomers with scores', async () => {
   const bma = LIGANDS.find((l) => l.code === 'BMA');
-  const result = ligandSearch({
+  const result = await ligandSearch({
     db,
     queryIdCode: bma.idCode,
     mode: 'similarity',
@@ -106,9 +106,9 @@ test('similarity: BMA query finds the three C6H12O6 hexose stereoisomers with sc
   expect(scores).toStrictEqual([...scores].toSorted((a, b) => b - a));
 });
 
-test('similarity: BMA matches itself with score 1.0 as the top result', () => {
+test('similarity: BMA matches itself with score 1.0 as the top result', async () => {
   const bma = LIGANDS.find((l) => l.code === 'BMA');
-  const result = ligandSearch({
+  const result = await ligandSearch({
     db,
     queryIdCode: bma.idCode,
     mode: 'similarity',
@@ -119,9 +119,9 @@ test('similarity: BMA matches itself with score 1.0 as the top result', () => {
   expect(result.ligands[0].similarity).toBeCloseTo(1, 5);
 });
 
-test('similarity: without a threshold every ligand is returned, ranked', () => {
+test('similarity: without a threshold every ligand is returned, ranked', async () => {
   const bma = LIGANDS.find((l) => l.code === 'BMA');
-  const result = ligandSearch({
+  const result = await ligandSearch({
     db,
     queryIdCode: bma.idCode,
     mode: 'similarity',
@@ -154,9 +154,9 @@ test('similarity: without a threshold every ligand is returned, ranked', () => {
   expect(result.ligands).toHaveLength(LIGANDS.length);
 });
 
-test('exact: ATP query returns exactly one match', () => {
+test('exact: ATP query returns exactly one match', async () => {
   const atp = LIGANDS.find((l) => l.code === 'ATP');
-  const result = ligandSearch({
+  const result = await ligandSearch({
     db,
     queryIdCode: atp.idCode,
     mode: 'exact',
@@ -167,9 +167,9 @@ test('exact: ATP query returns exactly one match', () => {
   expect(result.ligands[0].similarity).toBeUndefined();
 });
 
-test('exact: ADP and ATP do not match each other', () => {
+test('exact: ADP and ATP do not match each other', async () => {
   const adp = LIGANDS.find((l) => l.code === 'ADP');
-  const result = ligandSearch({
+  const result = await ligandSearch({
     db,
     queryIdCode: adp.idCode,
     mode: 'exact',

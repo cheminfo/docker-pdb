@@ -4,7 +4,7 @@ import { parse } from '../parse.ts';
 
 test('empty input parses to no clauses', () => {
   expect(parse('')).toStrictEqual([]);
-  expect(parse('   ')).toStrictEqual([]);
+  expect(parse(' '.repeat(3))).toStrictEqual([]);
 });
 
 test('simple field:value clause', () => {
