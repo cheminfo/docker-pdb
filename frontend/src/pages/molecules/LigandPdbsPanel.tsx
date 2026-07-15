@@ -65,8 +65,20 @@ export default function LigandPdbsPanel({
       <ul className="ligand-pdbs-list">
         {pdbs.map((pdb) => (
           <li key={pdb.pdbId}>
-            <Link to={`/browse?pdb=${pdb.pdbId}`}>{pdb.pdbId}</Link>
-            {pdb.count > 1 ? ` × ${pdb.count.toString()}` : ''}
+            <Link
+              className="ligand-pdb-chip"
+              to={`/browse?pdb=${pdb.pdbId}`}
+              title={
+                pdb.count > 1
+                  ? `${pdb.pdbId} — ${pdb.count.toString()} copies of ${ligandCode}`
+                  : `${pdb.pdbId} — 1 copy of ${ligandCode}`
+              }
+            >
+              {pdb.pdbId}
+              {pdb.count > 1 && (
+                <span className="ligand-pdb-count">×{pdb.count}</span>
+              )}
+            </Link>
           </li>
         ))}
       </ul>
