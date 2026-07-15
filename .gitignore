@@ -4,7 +4,11 @@
 docs/
 compose.yaml.local.bak
 coverage/
-data/
+# Both of these are generated: the top-level rsynced PDB mirror, and the
+# backend's runtime SQLite files. Anchored on purpose — an unanchored `data/`
+# also matches src/**/data/, which holds real source.
+/data/
+backend/data/
 backend/public/
 frontend/playwright-report/
 frontend/test-results/

@@ -1647,8 +1647,65 @@ code {
   flex: 1;
   min-height: 0;
   overflow: auto;
+  margin: 0 -16px;
+  padding: 0 16px;
+}
+
+.molecules-filters {
+  margin-top: 8px;
+  border-top: 1px solid var(--border, #e2e8f0);
+  padding-top: 8px;
+}
+
+.molecules-filters-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.molecules-filters-header h3 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.molecules-filters .bp6-form-group {
+  margin-bottom: 4px;
+}
+
+.molecules-filters .bp6-form-group.bp6-inline label.bp6-label {
+  width: 36px;
+  font-size: 12px;
+}
+
+.molecules-filters .bp6-form-group .bp6-form-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.molecules-filters-range {
+  display: flex;
+  gap: 6px;
+}
+
+.molecules-filters-range .bp6-input-group {
+  min-width: 0;
+}
+
+.molecules-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--border, #e2e8f0);
   margin: 0 -16px -12px;
-  padding: 0 16px 12px;
+  padding: 8px 16px;
+}
+
+.molecules-pagination-summary {
+  font-size: 12px;
+  color: var(--text-muted, #555);
 }
 
 .molecules-pdbs-panel-body {
@@ -1950,37 +2007,15 @@ code {
   margin: 0;
 }
 
+/* --- Scripting: the user guide --------------------------------------- */
+
 .scripting-help {
   font-size: 13px;
-  line-height: 1.5;
-}
-
-.scripting-help section {
-  margin-bottom: 18px;
-}
-
-.scripting-help h3 {
-  font-size: 13px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--accent);
-  margin: 0 0 8px;
-}
-
-.scripting-help h3 code {
-  text-transform: none;
-  letter-spacing: 0;
-  background: var(--accent-soft);
-  padding: 1px 6px;
-  border-radius: 4px;
-  font-size: 12px;
-}
-
-.scripting-help p,
-.scripting-help ul {
-  margin: 0 0 8px;
-  color: var(--text);
+  line-height: 1.55;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
 }
 
 .scripting-help code {
@@ -1991,7 +2026,234 @@ code {
   border-radius: 4px;
 }
 
-.scripting-help-code {
+.scripting-help kbd {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 0 4px;
+}
+
+/* Search box pinned above the tabs. */
+
+.help-search {
+  padding: 0 0 10px;
+  flex: none;
+}
+
+/* Tabs: the strip stays put, only the panel scrolls. */
+
+.scripting-help .help-tabs {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+.scripting-help .help-tabs > .bp6-tab-list {
+  flex: none;
+  border-bottom: 1px solid var(--border);
+}
+
+.scripting-help .help-tabs > .bp6-tab-panel {
+  margin-top: 0;
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.help-tab {
+  padding-top: 14px;
+}
+
+/* --- Hover table of contents ----------------------------------------- */
+
+/* Sticky with zero height: stays pinned to the top-left of the scrolling
+   panel while taking no space away from the prose. */
+.help-toc {
+  position: sticky;
+  top: 0;
+  height: 0;
+  z-index: 20;
+}
+
+.help-toc-inner {
+  position: absolute;
+  left: -10px;
+  top: 2px;
+}
+
+.help-toc-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 4px;
+  border-radius: 0 6px 6px 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: none;
+  color: var(--muted);
+  opacity: 0.75;
+  transition: opacity 0.12s ease-in-out;
+}
+
+.help-toc-tick {
+  width: 10px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--border);
+}
+
+.help-toc-list {
+  position: absolute;
+  left: 0;
+  top: 0;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  min-width: 210px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-4px);
+  transition:
+    opacity 0.12s ease-in-out,
+    transform 0.12s ease-in-out;
+}
+
+.help-toc-inner:hover .help-toc-list,
+.help-toc-inner:focus-within .help-toc-list {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0);
+}
+
+.help-toc-inner:hover .help-toc-rail,
+.help-toc-inner:focus-within .help-toc-rail {
+  opacity: 0;
+}
+
+.help-toc-list li {
+  margin: 0;
+}
+
+.help-toc-list button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 5px 8px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.help-toc-list button:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.help-tab section {
+  margin-bottom: 20px;
+}
+
+.help-tab h3 {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent);
+  margin: 0 0 8px;
+}
+
+.help-tab p,
+.help-tab ul,
+.help-tab ol {
+  margin: 0 0 8px;
+  color: var(--text);
+}
+
+.help-tab ul,
+.help-tab ol {
+  padding-left: 20px;
+}
+
+.help-tab li {
+  margin-bottom: 6px;
+}
+
+/* The opening callout on a tab: the one idea to take away. */
+
+.help-big-idea {
+  margin-bottom: 18px;
+}
+
+.help-big-idea p {
+  margin: 0 0 6px;
+}
+
+.help-big-idea p:last-child {
+  margin-bottom: 0;
+}
+
+.help-big-idea-line {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.help-next {
+  margin-bottom: 16px;
+}
+
+.help-group-intro {
+  color: var(--muted);
+  margin-bottom: 12px !important;
+}
+
+/* Annotated code — the anatomy of a statement. Never wraps: the ruler
+   underneath only lines up with the code above it at a fixed width. */
+
+.help-anatomy {
+  background: #0f172a;
+  color: #f1f5f9;
+  padding: 12px;
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 8px 0;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.help-why strong,
+.help-rules strong {
+  color: var(--text);
+}
+
+/* Code samples with a copy button. */
+
+.help-code {
+  position: relative;
+  margin: 6px 0 0;
+}
+
+.help-code pre {
   background: #0f172a;
   color: #f1f5f9;
   padding: 10px 12px;
@@ -2000,25 +2262,147 @@ code {
   font-size: 12px;
   line-height: 1.5;
   white-space: pre-wrap;
-  margin: 6px 0 0;
+  margin: 0;
   overflow-x: auto;
 }
 
-.scripting-help-table {
+/* Token palette for the code samples. Tuned for contrast on the #0f172a
+   background — comments stay recessive but readable, never below 4.5:1. */
+
+.help-code .tok-plain {
+  color: #e2e8f0;
+}
+
+.help-code .tok-comment {
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.help-code .tok-string {
+  color: #86efac;
+}
+
+.help-code .tok-number {
+  color: #fdba74;
+}
+
+.help-code .tok-keyword {
+  color: #c4b5fd;
+}
+
+.help-code .tok-function {
+  color: #7dd3fc;
+}
+
+.help-code-copy {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  opacity: 0;
+  transition: opacity 0.12s ease-in-out;
+  color: #cbd5e1 !important;
+}
+
+.help-code:hover .help-code-copy,
+.help-code-copy:focus-visible {
+  opacity: 1;
+}
+
+/* Collapsible concept cards. */
+
+.help-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 6px;
+}
+
+.help-concepts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.help-concept {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.help-concept[data-open='true'] {
+  border-color: var(--accent);
+}
+
+.help-concept-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+
+.help-concept-header:hover {
+  background: var(--bg);
+}
+
+.help-concept-chevron {
+  flex: none;
+  color: var(--muted);
+}
+
+.help-concept-title {
+  font-weight: 600;
+  flex: none;
+}
+
+.help-concept-teaser {
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.help-concept[data-open='true'] .help-concept-teaser {
+  display: none;
+}
+
+.help-concept-body {
+  padding: 0 10px 10px 30px;
+}
+
+.help-gotcha {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 8px 0 0 !important;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* Tables. */
+
+.help-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 12px;
 }
 
-.scripting-help-table th,
-.scripting-help-table td {
+.help-table th,
+.help-table td {
   text-align: left;
   padding: 4px 8px;
   border-bottom: 1px solid var(--border);
   vertical-align: top;
 }
 
-.scripting-help-table th {
+.help-table th {
   font-weight: 600;
   color: var(--muted);
   font-size: 11px;
@@ -2026,32 +2410,68 @@ code {
   letter-spacing: 0.05em;
 }
 
-.scripting-help-methods {
+/* Keep an expression or a signature on one line — breaking `[CYS].CA` across
+   two lines misrepresents it as two separate things. */
+.help-table td:first-child code {
+  white-space: nowrap;
+}
+
+/* Reference method list. */
+
+.help-methods {
   margin: 0;
 }
 
-.scripting-help-method {
+.help-method {
   margin-bottom: 14px;
 }
 
-.scripting-help-method dt {
+.help-method dt {
   margin: 0 0 4px;
 }
 
-.scripting-help-method dt code {
+.help-method dt code {
   background: var(--accent-soft);
   color: var(--accent);
   font-weight: 600;
 }
 
-.scripting-help-method dd {
+.help-method dd {
   margin: 0;
 }
 
-.scripting-help-method dd p {
+.help-method dd p {
   margin: 0 0 4px;
   color: var(--muted);
   font-size: 12px;
+}
+
+/* Search results. */
+
+.help-results {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.help-result-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.help-result-title {
+  background: var(--accent-soft) !important;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.help-result-description {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0 !important;
 }
 
 /* --- Scripting: scene chips ----------------------------------------- */
@@ -2076,6 +2496,24 @@ code {
 
 .scripting-scene-input {
   width: 140px;
+}
+
+/* --- Scripting: protein menu ---------------------------------------- */
+
+.scripting-protein-menu {
+  min-width: 240px;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.scripting-protein-add {
+  padding: 6px 6px 2px;
+}
+
+.scripting-protein-hint {
+  margin: 6px 2px 2px;
+  font-size: 11px;
+  color: var(--muted);
 }
 
 /* --- Scripting: revision panel -------------------------------------- */

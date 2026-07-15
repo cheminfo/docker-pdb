@@ -5,22 +5,30 @@ import { useDebouncedValue } from '../../shared/useDebouncedValue.ts';
 import type { BackupData, PersistedScene, Revision } from './db.ts';
 import {
   addRevision,
+  deleteProtein,
   exportAll,
   getAutoSave,
   getProteinScenes,
   getRevisions,
-  importAll,
+  listProteinIds,
+  mergeImport,
+  normalizePdbId,
   setAutoSave,
   setProteinScenes,
 } from './db.ts';
-import { SCENES } from './scenes.ts';
+import { scenesForProtein } from './scenes.ts';
 
 /** ms between the last keystroke and an auto-save write */
 const AUTO_SAVE_DEBOUNCE_MS = 2000;
 
-/** Convert built-in SCENES into the persisted format for a fresh protein. */
-function defaultScenes(): PersistedScene[] {
-  return SCENES.map((s) => ({
+/**
+ * Built-in scenes a protein starts with, in persisted form. Only the demo
+ * protein gets the 8ZXR-specific teaching set; anything else starts from the
+ * generic global view.
+ * @param pdbId - Four-character PDB identifier.
+ */
+function defaultScenes(pdbId: string): PersistedScene[] {
+  return scenesForProtein(pdbId).map((s) => ({
     id: s.id,
     label: s.label,
     code: s.code,
@@ -31,6 +39,14 @@ function defaultScenes(): PersistedScene[] {
 export interface ScriptingStorage {
   /** Scene buttons shown for the current protein. */
   scenes: PersistedScene[];
+  /** Every protein with stored scripts, sorted — drives the protein menu. */
+  proteinIds: string[];
+  /**
+   * Bumped whenever this protein's stored data is replaced from outside the
+   * editor (an import). Callers that mirror `loadedCode` into their own state
+   * should treat a change here as "reseed from storage".
+   */
+  reloadToken: number;
   /** Saved revisions for the current protein, newest first. */
   revisions: Revision[];
   /**
@@ -46,9 +62,19 @@ export interface ScriptingStorage {
   removeScene: (id: string) => Promise<void>;
   /** Persist the current code as a timestamped revision. */
   saveRevision: (label: string, code: string) => Promise<number>;
-  /** Download a JSON file containing every stored record. */
+  /**
+   * Register a protein and seed it with its built-in scenes. Does nothing if
+   * it is already known, so an existing protein's scripts are never clobbered.
+   */
+  addProtein: (pdbId: string) => Promise<void>;
+  /** Delete every script, revision and auto-save belonging to a protein. */
+  removeProtein: (pdbId: string) => Promise<void>;
+  /** Download a JSON file containing every stored record, for every protein. */
   exportBackup: () => Promise<void>;
-  /** Overwrite the entire database from a previously exported JSON file. */
+  /**
+   * Merge a previously exported JSON file into the database: proteins it
+   * carries replace the local copy, proteins it omits are kept.
+   */
   importBackup: (file: File) => Promise<BackupData>;
 }
 
@@ -66,12 +92,20 @@ export function useScriptingStorage(
   code: string,
 ): ScriptingStorage {
   const [scenes, setScenesState] = useState<PersistedScene[]>([]);
+  const [proteinIds, setProteinIds] = useState<string[]>([]);
+  const [reloadToken, setReloadToken] = useState(0);
   const [revisions, setRevisions] = useState<Revision[]>([]);
   const [loadedCode, setLoadedCode] = useState<string | null>(null);
   const [storageReady, setStorageReady] = useState(false);
 
   // Avoid saving immediately on mount before we've finished loading.
   const autoSaveEnabled = useRef(false);
+
+  // The protein list spans every protein, so it must not be reloaded by the
+  // per-protein effect below — only when the set of proteins actually changes.
+  const refreshProteinIds = useCallback(async () => {
+    setProteinIds(await listProteinIds());
+  }, []);
 
   // Load from IndexedDB whenever the protein changes.
   useEffect(() => {
@@ -92,8 +126,9 @@ export function useScriptingStorage(
       ]);
       if (cancelled) return;
 
-      // First visit for this protein → seed with built-in defaults.
-      const initialScenes = storedScenes ?? defaultScenes();
+      // First visit for this protein → seed with built-in defaults, which also
+      // registers it in the protein menu.
+      const initialScenes = storedScenes ?? defaultScenes(pdbId);
       if (!storedScenes) {
         await setProteinScenes(pdbId, initialScenes);
       }
@@ -103,13 +138,16 @@ export function useScriptingStorage(
       setRevisions(revs);
       setStorageReady(true);
       autoSaveEnabled.current = true;
+      // Also populates the menu on mount. Arriving on a protein for the first
+      // time registers it, so the list can change on any protein switch.
+      await refreshProteinIds();
     }
 
     void load();
     return () => {
       cancelled = true;
     };
-  }, [pdbId]);
+  }, [pdbId, reloadToken, refreshProteinIds]);
 
   // Debounced auto-save whenever code changes.
   const debouncedCode = useDebouncedValue(code, AUTO_SAVE_DEBOUNCE_MS);
@@ -152,6 +190,29 @@ export function useScriptingStorage(
     [pdbId],
   );
 
+  const addProtein = useCallback(
+    async (newPdbId: string) => {
+      const id = normalizePdbId(newPdbId);
+      if (!id) return;
+      // Never overwrite scripts the user already has for this protein.
+      const existing = await getProteinScenes(id);
+      if (!existing) await setProteinScenes(id, defaultScenes(id));
+      await refreshProteinIds();
+    },
+    [refreshProteinIds],
+  );
+
+  const removeProtein = useCallback(
+    async (targetPdbId: string) => {
+      await deleteProtein(targetPdbId);
+      await refreshProteinIds();
+      // Reload the open protein: if it was the one deleted, this re-seeds it
+      // from its built-in scenes rather than leaving deleted data on screen.
+      setReloadToken((token) => token + 1);
+    },
+    [refreshProteinIds],
+  );
+
   const exportBackup = useCallback(async () => {
     const data = await exportAll();
     const blob = new Blob([JSON.stringify(data, null, 2)], {
@@ -165,21 +226,32 @@ export function useScriptingStorage(
     URL.revokeObjectURL(url);
   }, []);
 
-  const importBackup = useCallback(async (file: File) => {
-    const text = await file.text();
-    const data = JSON.parse(text) as BackupData;
-    await importAll(data);
-    return data;
-  }, []);
+  const importBackup = useCallback(
+    async (file: File) => {
+      const text = await file.text();
+      const data = JSON.parse(text) as BackupData;
+      await mergeImport(data);
+      await refreshProteinIds();
+      // Force a reload of the open protein: the import may have replaced its
+      // auto-save, and the editor would otherwise write its stale copy back.
+      setReloadToken((token) => token + 1);
+      return data;
+    },
+    [refreshProteinIds],
+  );
 
   return {
     scenes,
+    proteinIds,
+    reloadToken,
     revisions,
     loadedCode,
     storageReady,
     addScene,
     removeScene,
     saveRevision,
+    addProtein,
+    removeProtein,
     exportBackup,
     importBackup,
   };

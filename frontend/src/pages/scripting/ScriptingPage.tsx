@@ -29,8 +29,9 @@ import EchoOverlay from './EchoOverlay.tsx';
 import Editor from './Editor.tsx';
 import type { Delay } from './MolStar.ts';
 import { createMolStarClass } from './MolStar.ts';
-import ScriptingHelp from './ScriptingHelp.tsx';
+import ProteinMenu from './ProteinMenu.tsx';
 import { applyScriptingLoadDefaults } from './applyLoadDefaults.ts';
+import ScriptingHelp from './help/ScriptingHelp.tsx';
 import type { ScriptApi } from './helpers.ts';
 import { createScriptApi } from './helpers.ts';
 import type {
@@ -41,11 +42,13 @@ import type {
   StructureElementApi,
 } from './molstarTypes.ts';
 import { runScript } from './runScript.ts';
-import { DEFAULT_SCENE_CODE, SCENES } from './scenes.ts';
+import {
+  DEFAULT_PDB_ID,
+  defaultSceneCode,
+  scenesForProtein,
+} from './scenes.ts';
 import { useCanvasRecording } from './useCanvasRecording.ts';
 import { useScriptingStorage } from './useScriptingStorage.ts';
-
-const DEFAULT_PDB_ID = '8ZXR';
 
 interface ColorModule {
   Color: (hex: number) => unknown;
@@ -82,7 +85,7 @@ export default function ScriptingPage() {
   // check can confirm code is ready before firing.
   const [codeState, setCodeState] = useState({
     forId: urlPdbId,
-    value: DEFAULT_SCENE_CODE,
+    value: defaultSceneCode(urlPdbId),
   });
   const code = codeState.value;
   const setCode = (value: string) =>
@@ -108,6 +111,9 @@ export default function ScriptingPage() {
   const [addingScene, setAddingScene] = useState(false);
   const [newSceneLabel, setNewSceneLabel] = useState('');
 
+  // ── Protein menu UI state ─────────────────────────────────────────────────
+  const [deleteProteinId, setDeleteProteinId] = useState<string | null>(null);
+
   // ── Revision UI state ─────────────────────────────────────────────────────
   const [showRevisions, setShowRevisions] = useState(false);
   const [revisionLabel, setRevisionLabel] = useState('');
@@ -115,6 +121,7 @@ export default function ScriptingPage() {
   // ── Backup / restore ──────────────────────────────────────────────────────
   const importFileRef = useRef<HTMLInputElement | null>(null);
   const [showBackupMenu, setShowBackupMenu] = useState(false);
+  const [importSummary, setImportSummary] = useState<string | null>(null);
 
   const viewerHandleRef = useRef<PdbViewerHandle | null>(null);
   const loadedPdbRef = useRef<string>('');
@@ -128,33 +135,39 @@ export default function ScriptingPage() {
   // ── Persistence ───────────────────────────────────────────────────────────
   const storage = useScriptingStorage(loadedId, code);
 
-  // Seed the editor once storage is ready for the current protein.
+  // Seed the editor once storage is ready for the current protein. The key
+  // carries `reloadToken` so an import that replaced this protein reseeds the
+  // editor instead of letting the stale code auto-save back over it.
+  const seedKey = `${loadedId}#${storage.reloadToken}`;
+
   // `void Promise.resolve().then(...)` defers the setState call to a microtask
   // so it is not synchronous within the effect body, satisfying the linter.
   useEffect(() => {
     if (!storage.storageReady) return;
-    if (codeState.forId === loadedId) return;
+    if (codeState.forId === seedKey) return;
 
     // Reset the autorun flag whenever we switch proteins.
     autorunFiredRef.current = false;
 
+    const fallback = storage.loadedCode ?? defaultSceneCode(loadedId);
     let newCode: string;
     if (sceneParam) {
       const match =
         storage.scenes.find((s) => s.id === sceneParam) ??
-        SCENES.find((s) => s.id === sceneParam);
-      newCode = match?.code ?? storage.loadedCode ?? DEFAULT_SCENE_CODE;
+        scenesForProtein(loadedId).find((s) => s.id === sceneParam);
+      newCode = match?.code ?? fallback;
     } else {
-      newCode = storage.loadedCode ?? DEFAULT_SCENE_CODE;
+      newCode = fallback;
     }
 
     void Promise.resolve().then(() => {
-      setCodeState({ forId: loadedId, value: newCode });
+      setCodeState({ forId: seedKey, value: newCode });
     });
   }, [
     storage.storageReady,
     storage.loadedCode,
     loadedId,
+    seedKey,
     sceneParam,
     storage.scenes,
     codeState.forId,
@@ -378,11 +391,11 @@ export default function ScriptingPage() {
   // Fire the script automatically when ?autorun=1 is in the URL.
   useEffect(() => {
     if (!autorunParam || !viewerReady) return;
-    if (codeState.forId !== loadedId) return; // code not yet seeded for this protein
+    if (codeState.forId !== seedKey) return; // code not yet seeded for this protein
     if (autorunFiredRef.current) return;
     autorunFiredRef.current = true;
     void handleRunRef.current();
-  }, [autorunParam, viewerReady, codeState.forId, loadedId]);
+  }, [autorunParam, viewerReady, codeState.forId, seedKey]);
 
   // ── Stop / record / reset ─────────────────────────────────────────────────
 
@@ -454,13 +467,35 @@ export default function ScriptingPage() {
     setFullscreen,
   ]);
 
+  const loadProtein = useCallback(
+    (rawId: string) => {
+      const trimmed = rawId.trim().toUpperCase();
+      if (!trimmed) return;
+      setPdbId(trimmed);
+      setLoadedId(trimmed);
+      setEchoEntry(null);
+      setScriptError(null);
+      void navigate(`/scripting/${encodeURIComponent(trimmed)}`);
+    },
+    [navigate],
+  );
+
   function handleLoadPdb() {
-    const trimmed = pdbId.trim().toUpperCase();
-    if (!trimmed) return;
-    setLoadedId(trimmed);
-    setEchoEntry(null);
-    setScriptError(null);
-    void navigate(`/scripting/${encodeURIComponent(trimmed)}`);
+    loadProtein(pdbId);
+  }
+
+  // ── Protein menu handlers ─────────────────────────────────────────────────
+
+  async function handleConfirmDeleteProtein() {
+    const target = deleteProteinId;
+    setDeleteProteinId(null);
+    if (!target) return;
+    // Navigate away first when deleting the open protein: staying on it would
+    // immediately re-seed its scenes and the delete would look like a no-op.
+    if (target === loadedId && target !== DEFAULT_PDB_ID) {
+      loadProtein(DEFAULT_PDB_ID);
+    }
+    await storage.removeProtein(target);
   }
 
   function pickScene(sceneCode: string) {
@@ -511,11 +546,18 @@ export default function ScriptingPage() {
     if (!file) return;
     event.target.value = '';
     try {
-      await storage.importBackup(file);
-      // Reload the page so every hook re-reads from the restored database.
-      window.location.reload();
-    } catch {
-      setScriptError('Import failed: invalid backup file.');
+      const data = await storage.importBackup(file);
+      const count = new Set(data.proteinScenes.map((row) => row.pdbId)).size;
+      setScriptError(null);
+      setImportSummary(
+        `Imported ${count} protein${count === 1 ? '' : 's'}. Proteins not in the backup were kept.`,
+      );
+    } catch (error) {
+      setScriptError(
+        error instanceof Error
+          ? `Import failed: ${error.message}`
+          : 'Import failed: invalid backup file.',
+      );
     }
   }
 
@@ -654,6 +696,15 @@ export default function ScriptingPage() {
         <Button icon="cloud-download" onClick={handleLoadPdb}>
           Load
         </Button>
+
+        {/* Every protein that has stored scripts */}
+        <ProteinMenu
+          proteinIds={storage.proteinIds}
+          currentPdbId={loadedId}
+          onSelect={loadProtein}
+          onAdd={storage.addProtein}
+          onRemove={setDeleteProteinId}
+        />
 
         <Divider />
 
@@ -865,6 +916,38 @@ export default function ScriptingPage() {
           Delete scene <strong>&ldquo;{sceneToDelete?.label}&rdquo;</strong>?
         </p>
         <p>This cannot be undone.</p>
+      </Alert>
+
+      {/* Protein deletion confirmation */}
+      <Alert
+        isOpen={deleteProteinId !== null}
+        confirmButtonText="Delete"
+        cancelButtonText="Cancel"
+        intent={Intent.DANGER}
+        icon="trash"
+        onConfirm={() => void handleConfirmDeleteProtein()}
+        onCancel={() => setDeleteProteinId(null)}
+      >
+        <p>
+          Delete every script stored for{' '}
+          <strong>{deleteProteinId ?? ''}</strong>?
+        </p>
+        <p>
+          Its scenes, revisions and auto-saved script are removed. This cannot
+          be undone — export a backup first if you want to keep them.
+        </p>
+      </Alert>
+
+      {/* Import result */}
+      <Alert
+        isOpen={importSummary !== null}
+        confirmButtonText="OK"
+        intent={Intent.SUCCESS}
+        icon="import"
+        onConfirm={() => setImportSummary(null)}
+        onClose={() => setImportSummary(null)}
+      >
+        <p>{importSummary}</p>
       </Alert>
     </div>
   );

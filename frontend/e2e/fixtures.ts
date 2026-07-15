@@ -262,6 +262,9 @@ const ligandSearchResponse = {
       nbPdbs: 967,
     },
   ],
+  total: 2,
+  limit: 50,
+  offset: 0,
   stats: {
     screened: 2,
     verified: 2,

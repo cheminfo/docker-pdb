@@ -10,6 +10,9 @@
 const DB_NAME = 'pdb-scripting';
 const DB_VERSION = 1;
 
+/** The three stores, in the order a whole-database transaction locks them. */
+const ALL_STORES = ['auto-saves', 'revisions', 'protein-scenes'] as const;
+
 let dbPromise: Promise<IDBDatabase> | null = null;
 
 /** Open (or create) the scripting database, memoising the connection. */
@@ -33,13 +36,33 @@ function openDB(): Promise<IDBDatabase> {
         db.createObjectStore('protein-scenes', { keyPath: 'pdbId' });
       }
     };
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {
+      const db = request.result;
+      // Another tab upgrading the schema would otherwise block on this
+      // connection forever; drop ours so it can proceed.
+      db.onversionchange = () => {
+        db.close();
+        dbPromise = null;
+      };
+      resolve(db);
+    };
+    // Without this the promise never settles when an upgrade is blocked, and
+    // because it is memoised every later caller waits on the same dead promise.
+    request.addEventListener('blocked', () => {
+      dbPromise = null;
+      reject(new Error('IndexedDB is blocked — close other tabs of this app'));
+    });
     request.addEventListener('error', () => {
       dbPromise = null;
       reject(request.error ?? new Error('IndexedDB open failed'));
     });
   });
   return dbPromise;
+}
+
+/** Normalise a PDB id so lookups are case- and whitespace-insensitive. */
+export function normalizePdbId(pdbId: string): string {
+  return pdbId.trim().toUpperCase();
 }
 
 // ---------------------------------------------------------------------------
@@ -219,6 +242,76 @@ export async function setProteinScenes(
 }
 
 // ---------------------------------------------------------------------------
+// Protein registry
+// ---------------------------------------------------------------------------
+
+/**
+ * Every protein that has any stored data, sorted alphabetically. Unions the
+ * keys of all three stores: a protein normally gets a `protein-scenes` row as
+ * soon as it is opened, but an imported backup can carry an auto-save or a
+ * revision without one, and such a protein must still appear in the menu.
+ */
+export async function listProteinIds(): Promise<string[]> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(ALL_STORES, 'readonly');
+    const ids = new Set<string>();
+
+    // These two are keyed by pdbId, so their primary keys are the answer.
+    for (const storeName of ['auto-saves', 'protein-scenes'] as const) {
+      const request = tx.objectStore(storeName).getAllKeys();
+      request.onsuccess = () => {
+        for (const key of request.result) {
+          if (typeof key === 'string') ids.add(key);
+        }
+      };
+    }
+
+    // `revisions` is keyed by an autoIncrement id instead, so the protein has
+    // to come from the `by-pdb` index's own keys — `getAllKeys()` on an index
+    // would return the primary keys (the revision ids), not the pdbIds.
+    // `nextunique` stops at the first revision of each protein.
+    const cursorRequest = tx
+      .objectStore('revisions')
+      .index('by-pdb')
+      .openKeyCursor(null, 'nextunique');
+    cursorRequest.onsuccess = () => {
+      const cursor = cursorRequest.result;
+      if (!cursor) return;
+      // The index is on `pdbId`, so its keys are always strings; anything else
+      // would be a corrupt row and has no protein to name.
+      if (typeof cursor.key === 'string') ids.add(cursor.key);
+      cursor.continue();
+    };
+
+    tx.oncomplete = () => resolve([...ids].toSorted());
+    tx.addEventListener('error', () =>
+      reject(tx.error ?? new Error('listProteinIds failed')),
+    );
+  });
+}
+
+/**
+ * Delete every record belonging to one protein — its auto-save, all of its
+ * revisions, and its scene list — in a single transaction.
+ * @param pdbId - Four-character PDB identifier.
+ */
+export async function deleteProtein(pdbId: string): Promise<void> {
+  const db = await openDB();
+  const id = normalizePdbId(pdbId);
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(ALL_STORES, 'readwrite');
+    tx.objectStore('auto-saves').delete(id);
+    tx.objectStore('protein-scenes').delete(id);
+    deleteRevisionsFor(tx.objectStore('revisions'), id);
+    tx.oncomplete = () => resolve();
+    tx.addEventListener('error', () =>
+      reject(tx.error ?? new Error('deleteProtein failed')),
+    );
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Backup / restore
 // ---------------------------------------------------------------------------
 
@@ -250,6 +343,7 @@ async function getAllFromStore<T>(storeName: string): Promise<T[]> {
 
 /**
  * Export every record from every store as a single JSON-serialisable object.
+ * Covers every protein, not just the one currently open.
  */
 export async function exportAll(): Promise<BackupData> {
   const [autoSaves, revisions, proteinScenes] = await Promise.all([
@@ -258,7 +352,7 @@ export async function exportAll(): Promise<BackupData> {
     getAllFromStore<ProteinScenes>('protein-scenes'),
   ]);
   return {
-    version: 1,
+    version: DB_VERSION,
     exportedAt: Date.now(),
     autoSaves,
     revisions,
@@ -267,43 +361,105 @@ export async function exportAll(): Promise<BackupData> {
 }
 
 /**
- * Replace the contents of every store with the records from a previously
- * exported backup.
+ * Collect the proteins a backup carries data for, normalised.
  * @param data - Backup produced by `exportAll()`.
+ * @returns Sorted, de-duplicated PDB identifiers.
  */
-export async function importAll(data: BackupData): Promise<void> {
+export function backupProteinIds(data: BackupData): string[] {
+  const ids = new Set<string>();
+  for (const row of data.autoSaves) ids.add(normalizePdbId(row.pdbId));
+  for (const row of data.revisions) ids.add(normalizePdbId(row.pdbId));
+  for (const row of data.proteinScenes) ids.add(normalizePdbId(row.pdbId));
+  return [...ids].toSorted();
+}
+
+/**
+ * Merge a backup into the database, protein by protein.
+ *
+ * Every protein the backup carries data for is replaced wholesale: its local
+ * auto-save, revisions and scenes are dropped first, then the backup's rows
+ * are written. Proteins the backup does not mention are left untouched, so a
+ * backup taken on another machine adds its work without erasing local work.
+ * Replacing a protein wholesale (rather than merging row by row) is what makes
+ * importing the same backup twice a no-op instead of duplicating revisions.
+ * @param data - Backup produced by `exportAll()`.
+ * @returns The proteins that were replaced.
+ */
+export async function mergeImport(data: BackupData): Promise<string[]> {
+  assertBackupShape(data);
+  const replacedIds = backupProteinIds(data);
   const db = await openDB();
 
-  function replaceStore<T extends object>(
-    storeName: string,
-    rows: T[],
-    omitKey?: keyof T,
-  ): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(storeName, 'readwrite');
-      const store = tx.objectStore(storeName);
-      store.clear();
-      for (const row of rows) {
-        if (omitKey) {
-          store.add(
-            Object.fromEntries(
-              Object.entries(row).filter(([k]) => k !== (omitKey as string)),
-            ),
-          );
-        } else {
-          store.put(row);
-        }
-      }
-      tx.oncomplete = () => resolve();
-      tx.addEventListener('error', () =>
-        reject(tx.error ?? new Error(`replaceStore(${storeName}) failed`)),
-      );
-    });
-  }
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(ALL_STORES, 'readwrite');
+    const autoSaves = tx.objectStore('auto-saves');
+    const revisions = tx.objectStore('revisions');
+    const proteinScenes = tx.objectStore('protein-scenes');
 
-  await Promise.all([
-    replaceStore('auto-saves', data.autoSaves),
-    replaceStore('revisions', data.revisions, 'id'),
-    replaceStore('protein-scenes', data.proteinScenes),
-  ]);
+    // Deletes are queued before the writes below. IndexedDB runs requests in
+    // the order they are placed on the transaction, so the keyed stores can't
+    // have a just-written row deleted again by this loop.
+    for (const id of replacedIds) {
+      autoSaves.delete(id);
+      proteinScenes.delete(id);
+      deleteRevisionsFor(revisions, id);
+    }
+
+    for (const row of data.autoSaves) {
+      autoSaves.put({ ...row, pdbId: normalizePdbId(row.pdbId) });
+    }
+    for (const row of data.proteinScenes) {
+      proteinScenes.put({ ...row, pdbId: normalizePdbId(row.pdbId) });
+    }
+    for (const row of data.revisions) {
+      // Never reuse the backup's `id`: it is an autoIncrement value that is
+      // only meaningful on the machine that wrote it, so writing it here would
+      // overwrite an unrelated local revision that happens to share the number.
+      // Dropping it lets IndexedDB assign a fresh local key.
+      const { id: _ignored, ...rest } = row;
+      revisions.add({ ...rest, pdbId: normalizePdbId(row.pdbId) });
+    }
+
+    tx.oncomplete = () => resolve(replacedIds);
+    tx.addEventListener('error', () =>
+      reject(tx.error ?? new Error('mergeImport failed')),
+    );
+  });
+}
+
+/**
+ * Queue deletion of every revision belonging to one protein.
+ *
+ * Uses a key snapshot from the `by-pdb` index rather than a live cursor: a
+ * cursor would also walk over rows added later in the same transaction and
+ * delete them again.
+ * @param store - The open `revisions` object store.
+ * @param pdbId - Already-normalised PDB identifier.
+ */
+function deleteRevisionsFor(store: IDBObjectStore, pdbId: string): void {
+  const request = store.index('by-pdb').getAllKeys(IDBKeyRange.only(pdbId));
+  request.onsuccess = () => {
+    for (const key of request.result) store.delete(key);
+  };
+}
+
+/**
+ * Reject anything that is not a backup before it reaches the database. With
+ * per-protein merging a malformed file would otherwise corrupt a subset of
+ * proteins, which is far harder to notice than an outright failure.
+ * @param data - Parsed JSON to validate.
+ */
+function assertBackupShape(data: BackupData): void {
+  if (
+    !Array.isArray(data?.autoSaves) ||
+    !Array.isArray(data.revisions) ||
+    !Array.isArray(data.proteinScenes)
+  ) {
+    throw new Error('Not a scripting backup file.');
+  }
+  if (typeof data.version !== 'number' || data.version > DB_VERSION) {
+    throw new Error(
+      `Backup version ${String(data.version)} is newer than this app supports.`,
+    );
+  }
 }

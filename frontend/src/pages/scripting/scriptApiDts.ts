@@ -236,11 +236,13 @@ interface Selection extends VisibilityToggle<Selection> {
   /** Sub-select within this selection (intersection with \`expression\`). */
   select(expression: string): Selection;
   /**
-   * Add a residue/element/chain label overlay. The template can reference
-   * \`\${atom.*}\`, \`\${residue.*}\` or \`\${chain.*}\` paths. \`options\`
-   * mirror \`ms.echo(...)\`'s font preferences (\`size\`, \`bold\`,
-   * \`italic\`, \`color\`); \`size\` is a Mol* size-factor multiplier on the
-   * default 3D text size.
+   * Add a residue/element/chain label overlay. Custom label *text* is not
+   * supported yet — Mol* draws its own text — so \`template\` only picks the
+   * level, from the words it contains: "atom" gives atom names, "chain"
+   * gives chain ids, anything else gives residue name + number. So
+   * \`label('residue')\` is enough. \`options\` mirror \`ms.echo(...)\`'s
+   * font preferences (\`size\`, \`bold\`, \`italic\`, \`color\`); \`size\` is
+   * a Mol* size-factor multiplier on the default 3D text size.
    */
   label(template: string, options?: LabelOptions): void;
   /**

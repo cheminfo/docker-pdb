@@ -488,9 +488,34 @@ export interface LigandSearchStats {
   overLimit: boolean;
 }
 
+/**
+ * Attribute filters accepted by `GET /v1/ligands`, applied on top of the
+ * optional structure query. `code`, `name` and `mf` match as case-insensitive
+ * substrings.
+ */
+export interface LigandFilters {
+  /** Substring of the 3-letter chemical-component code. */
+  code?: string;
+  /** Substring of the chemical name. */
+  name?: string;
+  /** Substring of the molecular formula. */
+  mf?: string;
+  /** Lower bound on the molecular weight, in g/mol. */
+  mwMin?: number;
+  /** Upper bound on the molecular weight, in g/mol. */
+  mwMax?: number;
+}
+
 /** Response of `GET /v1/ligands?substructure=...`. */
 export interface LigandSearchResponse {
+  /** The requested page of matching ligands. */
   ligands: LigandSummary[];
+  /** Total number of matches, before `limit` / `offset` are applied. */
+  total: number;
+  /** Page size that produced `ligands`. */
+  limit: number;
+  /** Number of matches skipped before `ligands`. */
+  offset: number;
   stats: LigandSearchStats;
 }
 

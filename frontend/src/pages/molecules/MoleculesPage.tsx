@@ -1,20 +1,29 @@
 import { Button, ButtonGroup, Card } from '@blueprintjs/core';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { OnChangeMoleculeCallback } from 'react-ocl';
 import { CanvasMoleculeEditor } from 'react-ocl';
 
 import { fetchLigandPdbs, fetchLigandSearch } from '../../shared/api/client.ts';
 import type {
+  LigandFilters,
   LigandPdbReference,
   LigandSearchMode,
   LigandSearchResponse,
   LigandSummary,
 } from '../../shared/api/types.ts';
+import { formatNumber } from '../../shared/format.ts';
 
+import LigandFilterFields from './LigandFilterFields.tsx';
+import LigandPagination from './LigandPagination.tsx';
 import LigandPdbsPanel from './LigandPdbsPanel.tsx';
 import LigandResultsTable from './LigandResultsTable.tsx';
+import type { LigandFilterDraft } from './ligandFilters.ts';
+import { EMPTY_FILTER_DRAFT, toLigandFilters } from './ligandFilters.ts';
 
-const DEFAULT_LIMIT = 200;
+const PAGE_SIZE = 50;
+
+/** Delay before a filter keystroke reaches the API, in milliseconds. */
+const FILTER_DEBOUNCE_MS = 300;
 
 /**
  * Molecules page mounted at `/molecules`. Lets the user draw or paste a
@@ -32,15 +41,42 @@ export default function MoleculesPage() {
   const [search, setSearch] = useState<LigandSearchResponse | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
+  const [filterDraft, setFilterDraft] =
+    useState<LigandFilterDraft>(EMPTY_FILTER_DRAFT);
+  const [debouncedDraft, setDebouncedDraft] =
+    useState<LigandFilterDraft>(EMPTY_FILTER_DRAFT);
+  const [offset, setOffset] = useState(0);
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
   const [pdbs, setPdbs] = useState<LigandPdbReference[] | null>(null);
   const [pdbsTotal, setPdbsTotal] = useState(0);
   const [pdbsError, setPdbsError] = useState<string | null>(null);
 
-  // Run the search whenever the query idCode or mode changes.
+  // Debounce the filter fields so typing doesn't fire a request per keystroke.
+  useEffect(() => {
+    if (filterDraft === debouncedDraft) return;
+    const timeout = setTimeout(() => {
+      setDebouncedDraft(filterDraft);
+      setOffset(0);
+      setSearching(true);
+    }, FILTER_DEBOUNCE_MS);
+    return () => clearTimeout(timeout);
+  }, [filterDraft, debouncedDraft]);
+
+  const filters: LigandFilters = useMemo(
+    () => toLigandFilters(debouncedDraft),
+    [debouncedDraft],
+  );
+
+  // Run the search whenever the query, mode, filters or page change.
   useEffect(() => {
     let cancelled = false;
-    fetchLigandSearch(queryIdCode, DEFAULT_LIMIT, searchMode)
+    fetchLigandSearch({
+      idCode: queryIdCode,
+      mode: searchMode,
+      filters,
+      limit: PAGE_SIZE,
+      offset,
+    })
       .then((result) => {
         if (cancelled) return;
         setSearch(result);
@@ -57,7 +93,7 @@ export default function MoleculesPage() {
     return () => {
       cancelled = true;
     };
-  }, [queryIdCode, searchMode]);
+  }, [queryIdCode, searchMode, filters, offset]);
 
   // When the user types/draws a new query, mark the page as loading via an
   // event handler instead of an effect setter so React 19 stops complaining
@@ -90,11 +126,13 @@ export default function MoleculesPage() {
     // OCL emits an empty-molecule idCode (`d@`) when the canvas is cleared.
     const next = idCode && idCode !== 'd@' && idCode !== 'd@@' ? idCode : null;
     setQueryIdCode(next);
+    setOffset(0);
     setSearching(true);
   }, []);
 
   const handleClear = useCallback(() => {
     setQueryIdCode(null);
+    setOffset(0);
     setSearching(true);
   }, []);
 
@@ -102,6 +140,7 @@ export default function MoleculesPage() {
     (mode: LigandSearchMode) => {
       if (mode === searchMode) return;
       setSearchMode(mode);
+      setOffset(0);
       if (queryIdCode) setSearching(true);
     },
     [searchMode, queryIdCode],
@@ -179,6 +218,7 @@ export default function MoleculesPage() {
             </span>
           </div>
           {searchError && <p className="error">{searchError}</p>}
+          <LigandFilterFields draft={filterDraft} onChange={setFilterDraft} />
         </Card>
 
         <Card className="panel molecules-results-panel">
@@ -196,6 +236,13 @@ export default function MoleculesPage() {
             selectedCode={selectedCode}
             onSelect={handleSelectLigand}
             searchMode={queryIdCode !== null ? searchMode : undefined}
+          />
+          <LigandPagination
+            total={search?.total ?? 0}
+            limit={PAGE_SIZE}
+            offset={offset}
+            pageSize={search?.ligands.length ?? 0}
+            onOffsetChange={setOffset}
           />
         </Card>
 
@@ -216,7 +263,9 @@ export default function MoleculesPage() {
 }
 
 /**
- * Render the search-stats line shown next to the editor.
+ * Render the search-stats line shown next to the editor. The match count is
+ * the total across every page — the pager under the table reports the
+ * visible range.
  * @param result - Most recent successful search response.
  * @param hasQuery - Whether a structure query is active.
  * @param mode - Active search mode.
@@ -227,10 +276,10 @@ function formatStats(
   hasQuery: boolean,
   mode: LigandSearchMode,
 ): string {
-  const { ligands, stats } = result;
-  if (!hasQuery) return `${ligands.length.toString()} ligands`;
+  const { total, stats } = result;
+  if (!hasQuery) return '';
   const overflow = stats.overLimit ? '+' : '';
-  const count = `${ligands.length.toString()}${overflow} match${ligands.length !== 1 ? 'es' : ''}`;
+  const count = `${formatNumber(total)}${overflow} match${total !== 1 ? 'es' : ''}`;
   const ms = stats.screeningMs + stats.verificationMs;
   if (mode === 'similarity') {
     return `${count} · ranked by similarity in ${ms.toString()} ms`;

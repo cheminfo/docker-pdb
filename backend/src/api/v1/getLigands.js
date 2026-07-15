@@ -1,13 +1,36 @@
 import { clampLimit } from '../util/clampLimit.js';
+import {
+  buildLigandFilterWhere,
+  parseLigandFilters,
+} from '../util/ligandFilters.js';
 import { ligandSearch } from '../util/ligandSearch.js';
 
-const DEFAULT_LIMIT = 200;
+const DEFAULT_LIMIT = 50;
+
+/**
+ * Number of structural hits hydrated before the attribute filter and the page
+ * slice are applied. Bounds the work a single structure query can trigger.
+ */
+const SEARCH_CAP = 1000;
+
+const LIGAND_COLUMNS = `l.code, l.name, l.mf, l.mw, l.id_code AS idCode, l.coordinates`;
 
 const VALID_MODES = new Set(['substructure', 'similarity', 'exact']);
 
+const EMPTY_STATS = {
+  screened: 0,
+  verified: 0,
+  screeningMs: 0,
+  verificationMs: 0,
+  overLimit: false,
+};
+
 /**
  * Register `GET /v1/ligands` — paginated ligand listing with optional
- * structure search (substructure, similarity, or exact) and explicit-codes filter.
+ * structure search (substructure, similarity, or exact), attribute filters
+ * (`code`, `name`, `mf`, `mwMin`, `mwMax`) and an explicit-codes filter.
+ * The response carries `total` (matches before pagination) alongside the
+ * `limit` / `offset` that produced the page.
  * @param {import('fastify').FastifyInstance} fastify - Fastify instance.
  * @param {import('../../db/getDB.js').LigandsDB} db - Open ligands database.
  */
@@ -15,6 +38,7 @@ export function registerGetLigandsRoute(fastify, db) {
   fastify.get('/v1/ligands', async (request, reply) => {
     const query = request.query ?? {};
     const limit = clampLimit(query.limit, DEFAULT_LIMIT, 1, 1000);
+    const offset = parseOffset(query.offset);
     const queryIdCode =
       typeof query.substructure === 'string' && query.substructure.length > 0
         ? query.substructure
@@ -32,6 +56,8 @@ export function registerGetLigandsRoute(fastify, db) {
         ? rawMinSimilarity
         : 0;
 
+    const filter = buildLigandFilterWhere(parseLigandFilters(query));
+
     const codes =
       typeof query.codes === 'string' && query.codes.length > 0
         ? query.codes
@@ -40,32 +66,42 @@ export function registerGetLigandsRoute(fastify, db) {
             .filter(Boolean)
         : null;
 
-    if (queryIdCode === null) {
-      let ligands;
-      if (codes && codes.length > 0) {
-        // Dynamic IN-list size: SQL is built per-request.
-        const placeholders = codes.map(() => '?').join(',');
-        ligands = db
-          .statement(
-            `SELECT l.code, l.name, l.mf, l.mw, l.id_code AS idCode, l.coordinates,
-                    COALESCE((SELECT COUNT(*) FROM pdb_ligands p WHERE p.ligand_code = l.code), 0) AS nbPdbs
-             FROM ligands l
-             WHERE l.code IN (${placeholders})`,
-          )
-          .all(...codes);
-      } else {
-        ligands = db.selectLigandsByDefaultRanking.all(limit);
-      }
+    if (codes && codes.length > 0) {
+      // Dynamic IN-list size: SQL is built per-request.
+      const placeholders = codes.map(() => '?').join(',');
+      const ligands = db
+        .statement(
+          `SELECT ${LIGAND_COLUMNS},
+                  COALESCE((SELECT COUNT(*) FROM pdb_ligands p WHERE p.ligand_code = l.code), 0) AS nbPdbs
+           FROM ligands l
+           WHERE l.code IN (${placeholders})`,
+        )
+        .all(...codes);
       return reply.send({
         ligands,
-        stats: {
-          screened: 0,
-          verified: 0,
-          screeningMs: 0,
-          verificationMs: 0,
-          overLimit: false,
-        },
+        total: ligands.length,
+        limit,
+        offset: 0,
+        stats: EMPTY_STATS,
       });
+    }
+
+    if (queryIdCode === null) {
+      const { n: total } = db
+        .statement(
+          `SELECT COUNT(*) AS n FROM ligands l WHERE 1 = 1${filter.clause}`,
+        )
+        .get(...filter.params);
+      const ligands = db
+        .statement(
+          `SELECT ${LIGAND_COLUMNS}, l.nb_pdbs AS nbPdbs
+           FROM ligands l
+           WHERE 1 = 1${filter.clause}
+           ORDER BY l.nb_pdbs DESC, l.code
+           LIMIT ? OFFSET ?`,
+        )
+        .all(...filter.params, limit, offset);
+      return reply.send({ ligands, total, limit, offset, stats: EMPTY_STATS });
     }
 
     try {
@@ -73,13 +109,25 @@ export function registerGetLigandsRoute(fastify, db) {
         db,
         queryIdCode,
         mode,
-        maxResults: limit,
+        maxResults: SEARCH_CAP,
         minSimilarity,
+        filter,
       });
-      return reply.send(result);
+      return reply.send({
+        ligands: result.ligands.slice(offset, offset + limit),
+        total: result.ligands.length,
+        limit,
+        offset,
+        stats: result.stats,
+      });
     } catch (error) {
       request.log.warn({ error: error.message }, 'Structure search failed');
       return reply.code(400).send({ error: 'invalid_query' });
     }
   });
+}
+
+function parseOffset(value) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 }

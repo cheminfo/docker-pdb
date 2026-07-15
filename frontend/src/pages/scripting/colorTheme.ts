@@ -147,6 +147,11 @@ const CSS_NAMED_COLORS: Record<string, number> = {
   teal: 0x008080,
   brown: 0xa52a2a,
   gold: 0xffd700,
+  goldenrod: 0xdaa520,
   salmon: 0xfa8072,
   skyblue: 0x87ceeb,
+  steelblue: 0x4682b4,
+  crimson: 0xdc143c,
+  mediumseagreen: 0x3cb371,
+  mediumpurple: 0x9370db,
 };

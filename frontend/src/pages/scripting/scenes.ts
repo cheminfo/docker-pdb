@@ -14,6 +14,92 @@ export interface Scene {
   code: string;
 }
 
+/**
+ * Protein the built-in teaching scenes were written against. Every other
+ * entry starts from `SAFE_GLOBAL_VIEW` instead — see `scenesForProtein`.
+ */
+export const DEFAULT_PDB_ID = '8ZXR';
+
+const SAFE_GLOBAL_VIEW = `// Global view — written to work on ANY PDB entry.
+// Every step asks the structure what it actually contains before drawing,
+// so an entry with no ligand, no water or no secondary structure still
+// renders correctly instead of failing halfway through.
+const ms = new MolStar();
+const pdb = ms.loadPDB(text);
+ms.hideDefaults();
+
+// A blank chain id is stored as ' ' and can't be selected — drop those.
+const chains = pdb.chains.filter((c) => c.trim() !== '');
+const chainColors = ['steelblue', 'salmon', 'mediumseagreen', 'mediumpurple'];
+const chainColor = (i) => chainColors[i % chainColors.length];
+
+// Step 1 — one color per chain. 'polymer' covers proteins AND nucleic
+// acids, so DNA/RNA entries get a ribbon too.
+ms.echo('Step 1 / 4 — ' + (chains.length || 1) + ' chain(s) ' + chains.join(' + '), {
+  size: 22, italic: true,
+});
+if (chains.length === 0) {
+  // No usable chain id in this entry — draw the whole polymer at once.
+  pdb.select('polymer').ribbon.cartoon().color({ value: chainColor(0) });
+} else {
+  for (let i = 0; i < chains.length; i++) {
+    pdb.select(':' + chains[i] + ' and polymer')
+       .ribbon.cartoon().color({ value: chainColor(i) });
+  }
+}
+// \`pdb.all\` always has atoms, so framing on it is always safe. Zooming on a
+// selection that might be empty would fly the camera to the world origin.
+pdb.all.zoom(0.9);
+ms.rotate({ degrees: 360, speed: 60 });
+
+// Step 2 — recolor by secondary structure, but only when the entry declares
+// any: on a DNA/RNA entry this theme paints every chain the same color, which
+// would throw away the per-chain colors from step 1 and show nothing new.
+// Re-uses the SAME selections as step 1, so each ribbon is replaced in place
+// rather than stacked on top (two cartoons over the same atoms would z-fight).
+const hasSecondaryStructure = pdb.helices.length > 0 || pdb.sheets.length > 0;
+ms.echo('Step 2 / 4 — ' + (hasSecondaryStructure
+  ? pdb.helices.length + ' helices, ' + pdb.sheets.length + ' strands'
+  : 'no secondary structure declared — keeping chain colors'), {
+  size: 22, italic: true,
+});
+if (hasSecondaryStructure) {
+  if (chains.length === 0) {
+    pdb.select('polymer').ribbon.color({ model: 'structure' });
+  } else {
+    for (let i = 0; i < chains.length; i++) {
+      pdb.select(':' + chains[i] + ' and polymer')
+         .ribbon.color({ model: 'structure' });
+    }
+  }
+}
+ms.rotate({ degrees: 360, speed: 60 });
+
+// Step 3 — every ligand (any HETATM group that isn't water) as
+// ball-and-stick. The bracketed form '[XXX]' is required: a bare code that
+// starts with a digit (e.g. 3PG) would not parse.
+ms.echo('Step 3 / 4 — ' + pdb.ligands.length + ' ligand type(s)' +
+        (pdb.ligands.length > 0 ? ': ' + pdb.ligands.join(', ') : ''), {
+  size: 22, italic: true,
+});
+for (const name of pdb.ligands) {
+  const ligand = pdb.select('[' + name + ']');
+  ligand.bonds.diameter(0.2).color({ model: 'element' });
+  ligand.atoms.radius({ value: 0.25 }).color({ model: 'element' });
+}
+ms.rotate({ degrees: 360, speed: 60 });
+
+// Step 4 — waters, if the entry has any.
+const waterCount = pdb.residues.filter((r) => r.resName === 'HOH').length;
+ms.echo('Step 4 / 4 — ' + waterCount + ' water molecules', {
+  size: 22, italic: true,
+});
+pdb.select('water').atoms.radius({ value: 0.35 }).color({ value: 'red' });
+
+pdb.all.zoom(0.9);
+ms.spin('y');
+`;
+
 const GLOBAL_VIEW = `// Global view built step by step. Each step adds one layer on top of the
 // previous one and prints a title with the relevant count. Cysteines are
 // never selected — they ride along inside the chain backbones / ribbons.
@@ -494,6 +580,11 @@ pdb.switchModel('initial');
 ms.echo("Switched back: 'initial' restored", { size: 22, italic: true });
 `;
 
+/**
+ * The full teaching set. Every scene except `global` is written against
+ * {@link DEFAULT_PDB_ID} (it names the HEC cofactor, residues 6-21 and 40-57,
+ * GLY 59 …), so this list only makes sense for that entry.
+ */
 export const SCENES: Scene[] = [
   { id: 'global', label: 'Global view', code: GLOBAL_VIEW },
   { id: 'helix', label: 'Display helix', code: DISPLAY_HELIX },
@@ -503,4 +594,27 @@ export const SCENES: Scene[] = [
   { id: 'models', label: 'Models', code: MODELS },
 ];
 
-export const DEFAULT_SCENE_CODE = GLOBAL_VIEW;
+/** Starting point for any entry other than {@link DEFAULT_PDB_ID}. */
+export const SAFE_SCENES: Scene[] = [
+  { id: 'global', label: 'Global view', code: SAFE_GLOBAL_VIEW },
+];
+
+/**
+ * Built-in scenes a protein starts with. {@link DEFAULT_PDB_ID} keeps the
+ * full teaching set; every other entry gets the single generic global view,
+ * which is written to run on any structure.
+ * @param pdbId - Four-character PDB identifier.
+ * @returns The scenes to seed that protein with.
+ */
+export function scenesForProtein(pdbId: string): Scene[] {
+  return pdbId.trim().toUpperCase() === DEFAULT_PDB_ID ? SCENES : SAFE_SCENES;
+}
+
+/**
+ * Code shown in the editor before anything has been loaded for a protein.
+ * @param pdbId - Four-character PDB identifier.
+ * @returns The first built-in scene's code for that protein.
+ */
+export function defaultSceneCode(pdbId: string): string {
+  return scenesForProtein(pdbId)[0]?.code ?? SAFE_GLOBAL_VIEW;
+}

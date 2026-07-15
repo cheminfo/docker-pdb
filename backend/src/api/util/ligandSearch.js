@@ -16,7 +16,11 @@
  *   mode?: 'substructure' | 'similarity' | 'exact',
  *   maxResults?: number,
  *   minSimilarity?: number,
+ *   filter?: { clause: string, params: Array<string | number> },
  * }} params - Search parameters. `minSimilarity` defaults to 0 (no threshold).
+ *   `filter` is the attribute filter built by `buildLigandFilterWhere`; it is
+ *   applied while hydrating the structural hits, so filtered-out ligands never
+ *   reach the caller.
  * @returns {Promise<{
  *   ligands: Array<{ code: string, name: string, mf: string, mw: number, idCode: string, coordinates: string, nbPdbs: number, similarity?: number }>,
  *   stats: { screened: number, verified: number, screeningMs: number, verificationMs: number, overLimit: boolean },
@@ -28,6 +32,7 @@ export async function ligandSearch({
   mode = 'substructure',
   maxResults = 200,
   minSimilarity = 0,
+  filter = { clause: '', params: [] },
 }) {
   const start = performance.now();
   const response = await db.molecules.search(queryIdCode, {
@@ -44,6 +49,10 @@ export async function ligandSearch({
 
   // entryId is BigInt from openchemlib-sqlite; convert to Number for SQL.
   const ids = response.results.map((result) => Number(result.entryId));
+  // True when the structural search itself was truncated to `maxResults` —
+  // computed before the attribute filter so it reports the search, not the
+  // filtered subset.
+  const overLimit = response.total > response.results.length;
   if (ids.length === 0) {
     return {
       ligands: [],
@@ -52,7 +61,7 @@ export async function ligandSearch({
         verified: 0,
         screeningMs: elapsedMs,
         verificationMs: 0,
-        overLimit: false,
+        overLimit,
       },
     };
   }
@@ -71,9 +80,9 @@ export async function ligandSearch({
     .statement(
       `SELECT l.id, l.code, l.name, l.mf, l.mw, l.id_code AS idCode, l.coordinates,
               COALESCE((SELECT COUNT(*) FROM pdb_ligands p WHERE p.ligand_code = l.code), 0) AS nbPdbs
-       FROM ligands l WHERE l.id IN (${placeholders})`,
+       FROM ligands l WHERE l.id IN (${placeholders})${filter.clause}`,
     )
-    .all(...ids)
+    .all(...ids, ...filter.params)
     .map(({ id, ...rest }) => {
       const sim = similarityById.get(id);
       return sim != null ? { ...rest, similarity: sim } : rest;
@@ -97,7 +106,7 @@ export async function ligandSearch({
       verified: ligands.length,
       screeningMs: elapsedMs,
       verificationMs: 0,
-      overLimit: response.total > ligands.length,
+      overLimit,
     },
   };
 }

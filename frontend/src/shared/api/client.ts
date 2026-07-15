@@ -5,6 +5,7 @@ import type {
   DiagnosticsResponse,
   GroupedStatsResponse,
   LigandDetailResponse,
+  LigandFilters,
   LigandPdbsResponse,
   LigandSearchMode,
   LigandSearchResponse,
@@ -647,31 +648,73 @@ export function fetchPairFrequencyByYear(): Promise<PairFrequencyByYearResponse>
   );
 }
 
+/** Parameters of {@link fetchLigandSearch}. */
+export interface LigandSearchParams {
+  /**
+   * OpenChemLib idCode of the query molecule, or `null` for the default
+   * ranking (most-used ligands by descending PDB count).
+   * @default null
+   */
+  idCode?: string | null;
+  /** @default 'substructure' */
+  mode?: LigandSearchMode;
+  /**
+   * Tanimoto threshold for similarity mode, so the full ligand list comes
+   * back ranked by similarity when left at `0`.
+   * @default 0
+   */
+  minSimilarity?: number;
+  /**
+   * Attribute filters applied on top of the structure query.
+   * @default {}
+   */
+  filters?: LigandFilters;
+  /**
+   * Page size.
+   * @default 50
+   */
+  limit?: number;
+  /**
+   * Number of matches to skip.
+   * @default 0
+   */
+  offset?: number;
+}
+
 /**
- * Run a structure search against the canonical CCD ligand database.
- * @param idCode - OpenChemLib idCode of the query molecule, or `null` to
- *   request the default ranking (most-used ligands by descending PDB count).
- * @param limit - Maximum number of results.
- * @param mode - Search mode: `'substructure'` (default), `'similarity'`, or `'exact'`.
- * @param minSimilarity - Tanimoto threshold for similarity mode. Defaults to `0`,
- *   so the full ligand list comes back ranked by similarity.
- * @returns Matching ligands and search statistics.
+ * Run a structure and/or attribute search against the canonical CCD ligand
+ * database.
+ * @param params - Search parameters.
+ * @returns One page of matching ligands, the total match count and search statistics.
  */
 export function fetchLigandSearch(
-  idCode: string | null,
-  limit = 200,
-  mode: LigandSearchMode = 'substructure',
-  minSimilarity = 0,
+  params: LigandSearchParams = {},
 ): Promise<LigandSearchResponse> {
-  const params = new URLSearchParams({ limit: String(limit) });
+  const {
+    idCode = null,
+    mode = 'substructure',
+    minSimilarity = 0,
+    filters = {},
+    limit = 50,
+    offset = 0,
+  } = params;
+  const query = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+  });
   if (idCode) {
-    params.set('substructure', idCode);
-    params.set('mode', mode);
+    query.set('substructure', idCode);
+    query.set('mode', mode);
     if (mode === 'similarity') {
-      params.set('minSimilarity', String(minSimilarity));
+      query.set('minSimilarity', String(minSimilarity));
     }
   }
-  return fetchJson<LigandSearchResponse>(`/v1/ligands?${params.toString()}`);
+  if (filters.code) query.set('code', filters.code);
+  if (filters.name) query.set('name', filters.name);
+  if (filters.mf) query.set('mf', filters.mf);
+  if (filters.mwMin != null) query.set('mwMin', String(filters.mwMin));
+  if (filters.mwMax != null) query.set('mwMax', String(filters.mwMax));
+  return fetchJson<LigandSearchResponse>(`/v1/ligands?${query.toString()}`);
 }
 
 /**
@@ -685,6 +728,9 @@ export function fetchLigandsByCodes(
   if (codes.length === 0) {
     return Promise.resolve({
       ligands: [],
+      total: 0,
+      limit: 0,
+      offset: 0,
       stats: {
         screened: 0,
         verified: 0,
