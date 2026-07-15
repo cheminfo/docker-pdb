@@ -1,11 +1,13 @@
 import { clampLimit } from '../util/clampLimit.js';
-import { substructureSearch } from '../util/substructureSearch.js';
+import { ligandSearch } from '../util/ligandSearch.js';
 
 const DEFAULT_LIMIT = 200;
 
+const VALID_MODES = new Set(['substructure', 'similarity', 'exact']);
+
 /**
  * Register `GET /v1/ligands` — paginated ligand listing with optional
- * substructure search and explicit-codes filter.
+ * structure search (substructure, similarity, or exact) and explicit-codes filter.
  * @param {import('fastify').FastifyInstance} fastify - Fastify instance.
  * @param {import('../../db/getDB.js').LigandsDB} db - Open ligands database.
  */
@@ -17,6 +19,18 @@ export function registerGetLigandsRoute(fastify, db) {
       typeof query.substructure === 'string' && query.substructure.length > 0
         ? query.substructure
         : null;
+
+    const rawMode =
+      typeof query.mode === 'string' ? query.mode : 'substructure';
+    const mode = VALID_MODES.has(rawMode) ? rawMode : 'substructure';
+
+    const rawMinSimilarity = Number.parseFloat(query.minSimilarity);
+    const minSimilarity =
+      Number.isFinite(rawMinSimilarity) &&
+      rawMinSimilarity >= 0 &&
+      rawMinSimilarity <= 1
+        ? rawMinSimilarity
+        : 0;
 
     const codes =
       typeof query.codes === 'string' && query.codes.length > 0
@@ -55,11 +69,17 @@ export function registerGetLigandsRoute(fastify, db) {
     }
 
     try {
-      const result = substructureSearch({ db, queryIdCode, maxResults: limit });
+      const result = ligandSearch({
+        db,
+        queryIdCode,
+        mode,
+        maxResults: limit,
+        minSimilarity,
+      });
       return reply.send(result);
     } catch (error) {
-      request.log.warn({ error: error.message }, 'Substructure search failed');
-      return reply.code(400).send({ error: 'invalid_substructure' });
+      request.log.warn({ error: error.message }, 'Structure search failed');
+      return reply.code(400).send({ error: 'invalid_query' });
     }
   });
 }

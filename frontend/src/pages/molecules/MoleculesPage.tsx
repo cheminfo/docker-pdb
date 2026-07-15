@@ -1,4 +1,4 @@
-import { Button, Card } from '@blueprintjs/core';
+import { Button, ButtonGroup, Card } from '@blueprintjs/core';
 import { useCallback, useEffect, useState } from 'react';
 import type { OnChangeMoleculeCallback } from 'react-ocl';
 import { CanvasMoleculeEditor } from 'react-ocl';
@@ -6,6 +6,7 @@ import { CanvasMoleculeEditor } from 'react-ocl';
 import { fetchLigandPdbs, fetchLigandSearch } from '../../shared/api/client.ts';
 import type {
   LigandPdbReference,
+  LigandSearchMode,
   LigandSearchResponse,
   LigandSummary,
 } from '../../shared/api/types.ts';
@@ -26,6 +27,8 @@ const DEFAULT_LIMIT = 200;
  */
 export default function MoleculesPage() {
   const [queryIdCode, setQueryIdCode] = useState<string | null>(null);
+  const [searchMode, setSearchMode] =
+    useState<LigandSearchMode>('substructure');
   const [search, setSearch] = useState<LigandSearchResponse | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
@@ -34,12 +37,10 @@ export default function MoleculesPage() {
   const [pdbsTotal, setPdbsTotal] = useState(0);
   const [pdbsError, setPdbsError] = useState<string | null>(null);
 
-  // Run the search whenever the query idCode changes. State updates are
-  // confined to the async callbacks (per react-hooks/set-state-in-effect)
-  // — the effect body only kicks off the fetch and arms the cancel flag.
+  // Run the search whenever the query idCode or mode changes.
   useEffect(() => {
     let cancelled = false;
-    fetchLigandSearch(queryIdCode, DEFAULT_LIMIT)
+    fetchLigandSearch(queryIdCode, DEFAULT_LIMIT, searchMode)
       .then((result) => {
         if (cancelled) return;
         setSearch(result);
@@ -56,7 +57,7 @@ export default function MoleculesPage() {
     return () => {
       cancelled = true;
     };
-  }, [queryIdCode]);
+  }, [queryIdCode, searchMode]);
 
   // When the user types/draws a new query, mark the page as loading via an
   // event handler instead of an effect setter so React 19 stops complaining
@@ -97,6 +98,15 @@ export default function MoleculesPage() {
     setSearching(true);
   }, []);
 
+  const handleModeChange = useCallback(
+    (mode: LigandSearchMode) => {
+      if (mode === searchMode) return;
+      setSearchMode(mode);
+      if (queryIdCode) setSearching(true);
+    },
+    [searchMode, queryIdCode],
+  );
+
   const handleSelectLigand = useCallback((ligand: LigandSummary | null) => {
     setSelectedCode(ligand?.code ?? null);
     // Clear stale state up-front so the panel doesn't flash old PDBs.
@@ -131,6 +141,31 @@ export default function MoleculesPage() {
               aria-label="Clear query"
             />
           </div>
+          <div className="molecules-mode-selector">
+            <ButtonGroup>
+              <Button
+                active={searchMode === 'substructure'}
+                onClick={() => handleModeChange('substructure')}
+                size="small"
+              >
+                Substructure
+              </Button>
+              <Button
+                active={searchMode === 'similarity'}
+                onClick={() => handleModeChange('similarity')}
+                size="small"
+              >
+                Similarity
+              </Button>
+              <Button
+                active={searchMode === 'exact'}
+                onClick={() => handleModeChange('exact')}
+                size="small"
+              >
+                Exact
+              </Button>
+            </ButtonGroup>
+          </div>
           <div className="molecules-editor-canvas">
             <CanvasMoleculeEditor onChange={handleEditorChange} />
           </div>
@@ -139,7 +174,7 @@ export default function MoleculesPage() {
               {searching
                 ? 'Searching…'
                 : search
-                  ? formatStats(search, queryIdCode !== null)
+                  ? formatStats(search, queryIdCode !== null, searchMode)
                   : ''}
             </span>
           </div>
@@ -150,12 +185,17 @@ export default function MoleculesPage() {
           <h2>
             {queryIdCode === null
               ? 'Most-referenced ligands'
-              : 'Substructure matches'}
+              : searchMode === 'similarity'
+                ? 'Similar ligands'
+                : searchMode === 'exact'
+                  ? 'Exact matches'
+                  : 'Substructure matches'}
           </h2>
           <LigandResultsTable
             ligands={search?.ligands ?? []}
             selectedCode={selectedCode}
             onSelect={handleSelectLigand}
+            searchMode={queryIdCode !== null ? searchMode : undefined}
           />
         </Card>
 
@@ -178,13 +218,25 @@ export default function MoleculesPage() {
 /**
  * Render the search-stats line shown next to the editor.
  * @param result - Most recent successful search response.
- * @param hasQuery - Whether a substructure query is active.
+ * @param hasQuery - Whether a structure query is active.
+ * @param mode - Active search mode.
  * @returns Human-readable status string.
  */
-function formatStats(result: LigandSearchResponse, hasQuery: boolean): string {
+function formatStats(
+  result: LigandSearchResponse,
+  hasQuery: boolean,
+  mode: LigandSearchMode,
+): string {
   const { ligands, stats } = result;
   if (!hasQuery) return `${ligands.length.toString()} ligands`;
-  const total = stats.screeningMs + stats.verificationMs;
   const overflow = stats.overLimit ? '+' : '';
-  return `${ligands.length.toString()}${overflow} matches · ${stats.screened.toString()} screened in ${total.toString()} ms`;
+  const count = `${ligands.length.toString()}${overflow} match${ligands.length !== 1 ? 'es' : ''}`;
+  const ms = stats.screeningMs + stats.verificationMs;
+  if (mode === 'similarity') {
+    return `${count} · ranked by similarity in ${ms.toString()} ms`;
+  }
+  if (mode === 'substructure') {
+    return `${count} · ${stats.screened.toString()} screened in ${ms.toString()} ms`;
+  }
+  return `${count} in ${ms.toString()} ms`;
 }

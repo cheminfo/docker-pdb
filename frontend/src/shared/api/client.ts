@@ -6,6 +6,7 @@ import type {
   GroupedStatsResponse,
   LigandDetailResponse,
   LigandPdbsResponse,
+  LigandSearchMode,
   LigandSearchResponse,
   OmegaByYearResponse,
   OmegaSummaryResponse,
@@ -647,18 +648,29 @@ export function fetchPairFrequencyByYear(): Promise<PairFrequencyByYearResponse>
 }
 
 /**
- * Run a substructure search against the canonical CCD ligand database.
- * @param idCode - OpenChemLib idCode of the query fragment, or `null` to
+ * Run a structure search against the canonical CCD ligand database.
+ * @param idCode - OpenChemLib idCode of the query molecule, or `null` to
  *   request the default ranking (most-used ligands by descending PDB count).
  * @param limit - Maximum number of results.
+ * @param mode - Search mode: `'substructure'` (default), `'similarity'`, or `'exact'`.
+ * @param minSimilarity - Tanimoto threshold for similarity mode. Defaults to `0`,
+ *   so the full ligand list comes back ranked by similarity.
  * @returns Matching ligands and search statistics.
  */
 export function fetchLigandSearch(
   idCode: string | null,
   limit = 200,
+  mode: LigandSearchMode = 'substructure',
+  minSimilarity = 0,
 ): Promise<LigandSearchResponse> {
   const params = new URLSearchParams({ limit: String(limit) });
-  if (idCode) params.set('substructure', idCode);
+  if (idCode) {
+    params.set('substructure', idCode);
+    params.set('mode', mode);
+    if (mode === 'similarity') {
+      params.set('minSimilarity', String(minSimilarity));
+    }
+  }
   return fetchJson<LigandSearchResponse>(`/v1/ligands?${params.toString()}`);
 }
 

@@ -459,7 +459,10 @@ export interface RebuildTitlesStatusResponse {
   state: RebuildTitlesState | null;
 }
 
-/** One ligand row returned by the substructure-search API. */
+/** Search mode for the ligand structure search API. */
+export type LigandSearchMode = 'substructure' | 'similarity' | 'exact';
+
+/** One ligand row returned by the structure-search API. */
 export interface LigandSummary {
   /** 3-letter wwPDB chemical-component code (e.g. `ATP`). */
   code: string;
@@ -473,6 +476,8 @@ export interface LigandSummary {
   idCode: string;
   /** Number of distinct PDBs that reference this ligand code. */
   nbPdbs: number;
+  /** Tanimoto similarity score (0–1). Only present for similarity-mode results. */
+  similarity?: number;
 }
 
 /** Statistics returned alongside a substructure-search response. */

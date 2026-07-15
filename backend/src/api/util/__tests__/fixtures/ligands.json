@@ -1,0 +1,182 @@
+[
+  {
+    "code": "SO4",
+    "name": "SULFATE ION",
+    "mf": "O4S",
+    "mw": 96.062,
+    "idCode": "gJPXhlPD[ct^m@@",
+    "coordinates": "#q??x@@AZd??y??qZd@@C??fe[_????fe[|Uh@@@@@@@@",
+    "nbPdbs": 26788
+  },
+  {
+    "code": "GOL",
+    "name": "GLYCEROL",
+    "mf": "C3H8O3",
+    "mw": 92.09352,
+    "idCode": "gGQ`@ZdruT@@",
+    "coordinates": "#q??x@@CtZxJ|A_AeM{u@A_AeMbK\\T[WpRmt`T[WpR??yoT\\~[??xMwj~X\\bFvtTZgG}x~NDRVXBD~NDRVC]zvtTZgn{LgVloYaDpgVloYE|h@@L`@P@@",
+    "nbPdbs": 24711
+  },
+  {
+    "code": "EDO",
+    "name": "1,2-ETHANEDIOL",
+    "mf": "C2H6O2",
+    "mw": 62.06764,
+    "idCode": "gC``Adej@@",
+    "coordinates": "#qivaazofB??zkSP@@fI]azofBwcx`^hPKX?SK^^gu??{}nFp~X?STanXJ??xTQqOAwcy_a[ot|lhP@D@@r@@",
+    "nbPdbs": 16351
+  },
+  {
+    "code": "NAG",
+    "name": "2-acetamido-2-deoxy-beta-D-glucopyranose",
+    "mf": "C8H15NO6",
+    "mw": 221.2081,
+    "idCode": "do~F@DCadwrJKQQQEY]ZjjjjhiTZKM`@",
+    "coordinates": "#qWMGt`fFdAKcDtcrrzc}WMfXR~N@NR]AmpqJ{[vkrlSQtjBfzc~Cd|_tMmUMMIwpeaoWabDMM@@CKzQCMOSRoAIsz?_SPAOuZ{d@xv[mmmoJzMuARcqFMliglZ@Foa]YDVBM^cYrmEzgO^F`A~AGLh[CG@mzTOmTx]myo{h|xud[V\\wpfN_HvGKvvM|Gnp\\kGVQxTwilxcKP\\dVryoTJisM^vVqE{L]qGL`s]ZReyRJkd@M@@\\@@",
+    "nbPdbs": 14709
+  },
+  {
+    "code": "MSE",
+    "name": "SELENOMETHIONINE",
+    "mf": "C5H11NO2Se",
+    "mw": 196.10734,
+    "idCode": "diFD`JxPQDivzjihI@@",
+    "coordinates": "#q{COn\\`@@bN\\VpiNgFtJ`q]wX{mvzfk@x^C_^]Pi~W\\IQQXJxglgZj{MjJRrG?M^jg@mnQTU~fzDGEJFACFZEbVfKybDNe@|nKWMtq[ANh?PnncjAbEyxzyy~fzDsEIfAldUGmk]csVyrBwE~diiLZYdBKZj`@\\@@v@@",
+    "nbPdbs": 10200
+  },
+  {
+    "code": "PO4",
+    "name": "PHOSPHATE ION",
+    "mf": "O4P",
+    "mw": 94.97,
+    "idCode": "gJPYhlQxKmqzOZ`@",
+    "coordinates": "#q??x@@Nzd??y??~zd@@C??nE[_????nE[Esh@@@@@@@@",
+    "nbPdbs": 8060
+  },
+  {
+    "code": "ACT",
+    "name": "ACETATE ION",
+    "mf": "C2H3O2",
+    "mw": 59.04382,
+    "idCode": "gC`a@erSM@@",
+    "coordinates": "#q\\|urYO?~CCIrYO?~_????o?~Uwg??oKkUwdVKNhjUweit~hjh|jP@W@@@@@",
+    "nbPdbs": 7408
+  },
+  {
+    "code": "HEM",
+    "name": "PROTOPORPHYRIN IX CONTAINING FE",
+    "mf": "C34H32N4O4Fe",
+    "mw": 616.49708,
+    "idCode": "emTrBH@HDLBNQYUPEcIIEEEEEEEEDdemldlmceEIBe@mDcGKOHljfnajjYjijZiZjjYjYeiV@@@",
+    "coordinates": "#q_?}GRH]I\\JShVpjYGP|f~q^AH|qwl@}Y{rziQLSa{]nmjPs^AJRluoCqlcD~n??~DuZC^pD^M@\\yKfAnPobuT]PaJBe}AOi~hEnhJfOa[URelmo~xZvCYOhqtiTBFuJNCsHQFqeIbZjCYLE~wjSgMPHYwLm?cTpvDjmSCS]VFAVKFzlvlNkjiHO^^iRm\\bA~\\tgPFINqF^_oKegAIq`xT[TYR{ZrEz@qryEtY~~v_N]]r[Qvc^cZUdg~PbxlZJm^iETs_F}ReJHLPRJdDNWx^R@LrCiUob~XRq`xT[TYc^cZU`G~K~YOH\\^KLwqnpWc\\\\VkCsoVSTHjVWoVtrtD?SJpAgSN|HWA^hlqQwhza{}ziL}l^RvTfklNCTyUjil|bxKsOfdkAJYVkMWVu`EY|Hk{U?Jzq`sSeZhLPyZoNvUHcZ]JrIv[IlTWcx^[VS^_M|~VT_I`aeaDk^Yn\\wEgZcQBmOEki[Wsej|z^wNbELwsqujwEi}vcnkiEBs{HUmQlZnhkzmJrQuMLsdWaozdCwXDj?UFN_DlZKKd]loyrydE}TpxNPzV^d`LZwCGiH~]zWWrAX[KIuKpwc`KA[Vhp@D@@`@D",
+    "nbPdbs": 6110
+  },
+  {
+    "code": "PEG",
+    "name": "DI(HYDROXYETHYL)ETHER",
+    "mf": "C4H10O3",
+    "mw": 106.1204,
+    "idCode": "gNq`AVeJmUP@",
+    "coordinates": "#qQXAYJwpFNg}YJpOy@@BeVOOz_?~eVOPEJcir}D_?U\\Ur}@@@OrefH?zDTzYfHxr{KEefHq]DPMYRH}e{`dPb@zYzt{eHkO|To[lT@zvEsDYHkL]kQ_RjoK{NN`njoHDqzBh@@H@@@@@",
+    "nbPdbs": 5809
+  },
+  {
+    "code": "BMA",
+    "name": "beta-D-mannopyranose",
+    "mf": "C6H12O6",
+    "mw": 180.15528,
+    "idCode": "dcLF@@siWTify^ajjjjjHdJTaP@",
+    "coordinates": "#qWBXNOKHXzx?TVjrUVACCzVlz{bntQRuXs?oUI]EdrEgCgRD_WJzBOtwf_?~vqmJeSD|DNf]UGVRqnhOKbpovuP_dsYD^aBgIp`EA~ENQk[JOEknCLiZZljhLRWyrA{Xnw_x~A}In~vlgQfOyvGSp\\XfV@UGPAAjQZYw`FWLbu\\etY_ySYCZlFcIlCJip@T@@D@@",
+    "nbPdbs": 5086
+  },
+  {
+    "code": "DMS",
+    "name": "DIMETHYL SULFOXIDE",
+    "mf": "C2H6OS",
+    "mw": 78.13464,
+    "idCode": "gCaHH@bNt@@",
+    "coordinates": "#qBx|e@~`A`dRlKV_?CdRlKP@@gcU\\yfyk@Zz]qzs^UZPEJgc^bSVJyofTUZPEJhtaEjz]qyLa\\Fi@@J@A@@@",
+    "nbPdbs": 4925
+  },
+  {
+    "code": "MAN",
+    "name": "alpha-D-mannopyranose",
+    "mf": "C6H12O6",
+    "mw": 180.15528,
+    "idCode": "dcLF@@siWTify^ajjjjjDdJTaP@",
+    "coordinates": "#qcIKCPehxkp?RXi_iVC{?@BxYwYOzZVLp@^l}ZTChrFvtsX|oZfEh?~tV_??NlnnIKx}LDlzY|WSaUhqGryLHA]EXlBQMaYsN}Xxg^LiQC`kUkctSarjyRiwLhsELa|?N|gELa|NnrfmGreyIE[PhNQAnpCymnKpQ_|tPBS[\\bjUYa[wcBej[NiR\\CJip@^@@T@@",
+    "nbPdbs": 4431
+  },
+  {
+    "code": "ADP",
+    "name": "ADENOSINE-5'-DIPHOSPHATE",
+    "mf": "C10H15N5O10P2",
+    "mw": 427.2021,
+    "idCode": "fmwhi@@e[M\\DXIpTmNbCpixYIIeiEXeEeMDee[uVcfuTuUUU@`UE@QTMKKr@@",
+    "coordinates": "#qYtwZ[~nqOEmKmOF\\^NXnDbs?MvCXdQP\\PrgyO^I@R_Q^Lq^]Rhuy[q\\IuJBndS{\\|ElOcHdlrRZ?|d~_Ii\\fWa^chWSmJ}cCgAi~Oj@_NI@Effx^BCTMgg??U{lmIQKs?jRcjbGSBkD_^lMOOElAd~JfsrHJwFRSXj_`gSHU^lLCl_][J|UXcmDwaLUgMgXoAwmjsSfUFl\\NkUXu}XX|cK|^wvVKZq?aioSch_Rret[GCL]nOyG|y^Fl~~jyeLF^uQE}Frnz~DXDEIeiqhi_{VKUOgfujzby\\`JE{RK^U[D}E^wT|GHixbr]ANgVSidKcWWsSYYrgVj@@P@@U@D",
+    "nbPdbs": 4303
+  },
+  {
+    "code": "FAD",
+    "name": "FLAVIN-ADENINE DINUCLEOTIDE",
+    "mf": "C27H33N9O15P2",
+    "mw": 785.555,
+    "idCode": "ejuyOD@BcgobZV]PxDLBNAIC@djfeoXpOBcprRSKRKZIJJKZJFJKIZIJJEQISIWrJyzDdWTtMuMjijjjjjjhFBbXI`YJhhd@UDTed\\gbbVTz`@",
+    "coordinates": "#qBu@\\fj@iIIWOt{\\WgbEkd}npsxlxJA[NEizBcCUwoUktGHydHuNgN@RN[ATpx}tw@@@wjiQIxdGF`?DH|az?kJ}{LX~_Q^]ftQjxsMUx`jUY_RuWUcGNOkU`o[cNmRERtj\\V?klthasn~~VI{^yUCAvgAn~\\GnTFiykVXUfpI^NNANiv`jWu_RuWY?TRyW~xW|lXBee}hasn~~VI{^xiCAvg|yjek^bdr\\~_iika\\?lOx_URb\\VHORQghJOSvWjt~fMA~WVdT|sMgR?}}o^H?`^EyK]Xeb}Agd~BEnIAH\\c_H[FfDnUrwWAgdXWxW[UGF`nShntBJVs[G^K}^U]Poe|yeeRCoY]Cgd}GohtEfo]}?`^Ebkck@\\EFk]gvG\\q{FieLsRjk[SLFXcDBFVoG@is\\?E?D_m{ECMLgNTcNeEQaqfRIm~uh{E^^KDi?PpZQjIKUd|naeVuh{@eNWqPyqcNQho[WUHCy}vnrNTqnQIhwd{JZFWXh|a|B{Rw^kHLqk|rbqnHQWqPyqcNQ{qjogDpNdCN]N^wn}vnrNTqnzRx\\fnNKk|rbqnHQrVwT{EyNWqRMqcNQKGiju]SlXPT\\fjxCi_UDZ\\RBrNZ^rdXlxufXMPsSsZJQy]vUilUtGVpB?LLtQm[mdAh`GBMjXbdgl}du|Zu^GmzlSWFXGDOmoFhh@Q@AE@D",
+    "nbPdbs": 3163
+  },
+  {
+    "code": "ATP",
+    "name": "ADENOSINE-5'-TRIPHOSPHATE",
+    "mf": "C10H16N5O13P3",
+    "mw": 507.181,
+    "idCode": "eohZKL@BaekghDLBNAIEMCODj`OBcpX|LddrtbdsTRbrfbRrbrfVNnZjZZjjjhDBhX@UD\\`TbVR@@",
+    "coordinates": "#qtoW\\Ky`qb]y~pkC_F?Mm[L_TnhCJxW_R[OPFlzks]PEX`ws`DsCFXYBr|^ytDdB?jrtl_vvQpGWfKuSq@@BVxVkryWL_WIKdB^rtDr~CRbyA|gx_z{_HOl[mInp`B|cSKnZEWaX_KsCzF`^apiwYgaEohL^gISICXDrzJguKjUeX~k|wETlEd{Lz^Pi\\wJDsRj^tgQ@yEMOGl]hKAoWTclTgL_U?MipwvonqsW~yk|^YkZpEgbYySMf^wUL?{dfEoJZQSB[ndGzCe[\\\\WRVDjqhaICRvHYHZeEhluIb~gTFkZrCz^nYCeLpYMvihkQwuVOeurzVYVpK}KQ[AgTG]ETFtpnjixop}^?dQSlcS]fW{S][RFNk@@D@Ak@D",
+    "nbPdbs": 3020
+  },
+  {
+    "code": "TRS",
+    "name": "2-AMINO-2-HYDROXYMETHYL-PROPANE-1,3-DIOL",
+    "mf": "C4H12NO3",
+    "mw": 122.14328,
+    "idCode": "dazLBLAnrTekZjh@@",
+    "coordinates": "#qqrE_\\CmkojD@@MttzJDStHJ[Ls}?`VodF\\Al{fodeb|AOkiKwmBX_kiKVS{z\\wH]EQnRXSM}qNRY_cM}W[SM_ma]bDnSh]a]z\\FEuJbRYox|eKI|FPDCV~`bKCyBZ{N|I|GkIHtbmCNf`XtbHBpVWhtb[\\j@@S`@@@D",
+    "nbPdbs": 2255
+  },
+  {
+    "code": "ACE",
+    "name": "ACETYL GROUP",
+    "mf": "C2H4O",
+    "mw": 44.05276,
+    "idCode": "eMHAIX@",
+    "coordinates": "#qTmlu`??~_?~|Xo?~xF{DI??~jMFvXa]KjMFvXfbtOFOrd??~\\Lkp@\\@A@@@",
+    "nbPdbs": 2246
+  },
+  {
+    "code": "FUC",
+    "name": "alpha-L-fucopyranose",
+    "mf": "C6H12O5",
+    "mw": 164.15628,
+    "idCode": "dmtJ@@siWIEEMDZFjjjjbHbeHX@",
+    "coordinates": "#q^qgjUl@pk?suQBvU@TtSRCZn^tasp_i\\m]Bp_msbxhxutW??{YdEMhGPt_S{qAuUQFImy|aiYJ`~TUXRKevP@ttFJSV~cNrvvRLb`RduOAhIRyzQpwKagEZEbtlb`ZDU?lkV\\{mIhoJYGI?ymLuFwXlVs|TwMCyvtAzkhVrKTGDR{d_taJip@I@@L@@",
+    "nbPdbs": 2239
+  },
+  {
+    "code": "MPD",
+    "name": "(4S)-2-METHYL-2,4-PENTANEDIOL",
+    "mf": "C6H14O2",
+    "mw": 118.17516,
+    "idCode": "daxD@@[HiDYUUQT@",
+    "coordinates": "#qTM{BHNrnsp}{To~u{Ia^bgYc]`zr~`@@xv]Y]Uz\\AMGjW{mIi_]{PhueRyEPvUCsTMGFzPS[MC{eaCwnMC{eaCwnTMFrzVs[WoQKi[KzWoQKi^szMC{eaCwn[ILDa[vr{Hy^}loDqkDDjXHKWnxyQ@fN[ILDa[vrxwDaBZ`{~Bip@T`@P@@",
+    "nbPdbs": 2203
+  },
+  {
+    "code": "GLC",
+    "name": "alpha-D-glucopyranose",
+    "mf": "C6H12O6",
+    "mw": 180.15528,
+    "idCode": "dcLF@@siWTify^ajjjjjDdITaP@",
+    "coordinates": "#qeYCyy\\LEUAWqzF`CHKx?VTA?oRSHNM`fYMPrZJzf_??i~fWjaeAziZzepBVblBhcUrWKFG@ciHl|^sIE^ORJAGJFWqZMB}Drb?zcRSTGc^w]_^HYt_y[mmsxQtDGUkox^]e{uAMUlxETkkqxgl[^D{DZXCxGBUlG|{KigOONstmqciRV@SRvBZgIkJjP@G@@D@D",
+    "nbPdbs": 2187
+  }
+]

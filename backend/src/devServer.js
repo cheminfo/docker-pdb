@@ -3,15 +3,16 @@
 //
 // Unlike the production `server.js`, this file:
 //   1. Creates a fresh in-memory SQLite database (no disk writes).
-//   2. Seeds it from the 21 committed fixture files under `backend/fixtures/pdb/`.
-//   3. Falls back to the local rsync tree (`data/pdb/`) when a fixture is absent.
-//   4. Starts the Fastify API on port 3000 with the seeded in-memory DB.
+//   2. Seeds ligands from the 20-entry fixture at fixtures/ligands.json.
+//   3. Seeds PDB entries from the 21 committed fixture files under `backend/fixtures/pdb/`.
+//   4. Falls back to the local rsync tree (`data/pdb/`) when a fixture is absent.
+//   5. Starts the Fastify API on port 3000 with the seeded in-memory DB.
 //
 // `node --watch` re-runs the whole file on each source change, producing a
 // clean, reproducible database on every restart — no stale rows, no leftover
 // renders, no manual `rm -rf data/sqlite`.
 
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { resolveStaticDir } from './api/registerStatic.js';
@@ -23,12 +24,38 @@ import { SEED_IDS } from './seed.js';
 
 const config = /** @type {any} */ (getConfig());
 const FIXTURES_DIR = join(import.meta.dirname, '../fixtures/pdb');
+const LIGANDS_FIXTURE = join(
+  import.meta.dirname,
+  'api/util/__tests__/fixtures/ligands.json',
+);
 
 console.log('dev — initializing in-memory SQLite…');
 const db = await getInMemoryLigandsDB();
 // Make the singleton return this instance so that route handlers and
 // common.processPdbs() all share the same in-memory DB.
 setLigandsDB(db);
+
+const ligands =
+  /** @type {Array<{code:string,name:string,idCode:string,coordinates:string,mf:string,mw:number}>} */ (
+    JSON.parse(readFileSync(LIGANDS_FIXTURE, 'utf8'))
+  );
+db.db.exec('BEGIN');
+for (const ligand of ligands) {
+  const row = db.upsertLigand.get(
+    ligand.code,
+    ligand.name,
+    '',
+    '',
+    ligand.idCode,
+    ligand.coordinates,
+    ligand.mf,
+    ligand.mw,
+    0,
+  );
+  db.molecules.insert(row.id, ligand.idCode);
+}
+db.db.exec('COMMIT');
+console.log(`dev — seeded ${ligands.length} ligands from fixture…`);
 
 const files = [];
 const missing = [];
