@@ -6,12 +6,13 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { createGunzip } from 'node:zlib';
 
+import { moleculeFromCif } from 'cif-to-json';
+import OCL from 'openchemlib';
 import { pino } from 'pino';
 
 import { getLigandsDB } from '../db/getDB.js';
 
-import { buildMoleculeFromCcdBlock } from './buildMolecule.js';
-import { parseCcdMmcif } from './parseCcdMmcif.js';
+import { splitCifBlocks } from './splitCifBlocks.js';
 
 const logger = pino({ name: 'seed-ccd' });
 
@@ -38,12 +39,12 @@ export const ccdGzPath = join(ccdDir, 'components.cif.gz');
  * Steps:
  * 1. Download `components.cif.gz` to `data/ccd/` if it does not exist
  * (or always, when `force = true`).
- * 2. Stream-gunzip + line-parse the file, yielding one chem_comp block
- * at a time.
- * 3. For each block, build an OCL Molecule from the atoms+bonds, derive
- * idCode + coordinates + MF + MW, UPSERT into `ligands`, and let
- * `db.molecules.insert(id, molecule)` compute and persist the
- * 512-bit fingerprint into `ocl_ss_index`.
+ * 2. Stream-gunzip the file line by line, accumulating each `data_XXX`
+ * block into a string and calling `moleculeFromCif` (cif-to-json)
+ * once per block.
+ * 3. For each block, derive idCode + coordinates + MF + MW, UPSERT into
+ * `ligands`, and let `db.molecules.insert(id, molecule)` compute and
+ * persist the 512-bit fingerprint into `ocl_ss_index`.
  *
  * Single-atom entries (ions like NA, CL, ZN) and entries OCL cannot
  * encode (unknown elements, malformed bonds) are skipped — they cannot
@@ -78,58 +79,23 @@ export async function seedCCD({ force = false, onProgress } = {}) {
     logger.info({ path: ccdGzPath }, 'Reusing cached CCD archive');
   }
 
-  // Insert in small transactions (200 rows each). One big transaction
-  // gave better raw throughput, but it holds an exclusive write lock for
-  // the full 5–30 min run, blocking the cron container's writes to
-  // `pdb_ligands` for `busy_timeout` (5 s) per PDB. Batching at 200
-  // keeps each lock window under ~10 ms — 5× shorter than the old 1000-
-  // row batches — so concurrent writers slip through more easily.
-  const BATCH_SIZE = 200;
-  // Yield the event loop every N entries within a batch so other async
-  // tasks (heartbeat callbacks, timers) are not starved by the
-  // synchronous OCL molecule-building loop.
-  const YIELD_EVERY = 50;
   let imported = 0;
   let skipped = 0;
   let inBatch = 0;
+  const { Molecule } = OCL;
   db.db.exec('BEGIN');
   try {
     const fileHandle = await open(ccdGzPath, 'r');
     const stream = fileHandle.createReadStream().pipe(createGunzip());
     const lines = createInterface({ input: stream, crlfDelay: Infinity });
 
-    for await (const block of parseCcdMmcif(lines)) {
-      const result = importBlock(block, db);
-      if (result === 'imported') imported++;
-      else skipped++;
-      inBatch++;
-
-      if ((imported + skipped) % YIELD_EVERY === 0) {
-        await new Promise((resolve) => {
-          setImmediate(resolve);
-        });
-      }
-
-      if (inBatch >= BATCH_SIZE) {
-        db.db.exec('COMMIT');
-        logger.info(
-          { imported, skipped, total: imported + skipped },
-          'CCD import progress',
-        );
-        // Heartbeat after each commit, when the write lock is briefly free,
-        // so concurrent `pdb_ligands` writers in the rsync container are not
-        // stalled by a long held BEGIN…COMMIT envelope.
-        try {
-          await onProgress?.({ imported, skipped });
-        } catch (heartbeatError) {
-          logger.warn(
-            { error: String(heartbeatError) },
-            'CCD heartbeat failed',
-          );
-        }
-        db.db.exec('BEGIN');
-        inBatch = 0;
-      }
+    for await (const cifText of splitCifBlocks(lines)) {
+      ({ imported, skipped, inBatch } = await processBlock(
+        cifText,
+        db,
+        Molecule,
+        { imported, skipped, inBatch, onProgress },
+      ));
     }
 
     db.db.exec('COMMIT');
@@ -140,6 +106,53 @@ export async function seedCCD({ force = false, onProgress } = {}) {
 
   logger.info({ imported, skipped }, 'CCD import complete');
   return { imported, skipped };
+}
+
+/**
+ * Process one accumulated CDD CIF block: build the molecule, upsert into
+ * SQLite, commit a batch if needed, and yield to the event loop periodically.
+ * @param {string} cifText - Raw CIF text for one `data_XXX` block.
+ * @param {import('../db/getDB.js').LigandsDB} db
+ * @param {Function} Molecule - OCL Molecule class.
+ * @param {{ imported: number, skipped: number, inBatch: number, onProgress?: Function }} counters
+ * @returns {Promise<{ imported: number, skipped: number, inBatch: number }>}
+ */
+async function processBlock(cifText, db, Molecule, counters) {
+  let { imported, skipped, inBatch } = counters;
+  const { onProgress } = counters;
+  const BATCH_SIZE = 200;
+  const YIELD_EVERY = 50;
+
+  const outcome = importBlock(cifText, db, Molecule);
+  if (outcome === 'imported') imported++;
+  else skipped++;
+  inBatch++;
+
+  if ((imported + skipped) % YIELD_EVERY === 0) {
+    await new Promise((resolve) => {
+      setImmediate(resolve);
+    });
+  }
+
+  if (inBatch >= BATCH_SIZE) {
+    db.db.exec('COMMIT');
+    logger.info(
+      { imported, skipped, total: imported + skipped },
+      'CCD import progress',
+    );
+    // Heartbeat after each commit, when the write lock is briefly free,
+    // so concurrent `pdb_ligands` writers in the rsync container are not
+    // stalled by a long held BEGIN…COMMIT envelope.
+    try {
+      await onProgress?.({ imported, skipped });
+    } catch (heartbeatError) {
+      logger.warn({ error: String(heartbeatError) }, 'CCD heartbeat failed');
+    }
+    db.db.exec('BEGIN');
+    inBatch = 0;
+  }
+
+  return { imported, skipped, inBatch };
 }
 
 /**
@@ -166,40 +179,43 @@ async function downloadCcd() {
 }
 
 /**
- * Build a molecule from one CCD block and INSERT into SQLite. Returns
- * `'imported'` on success or `'skipped'` for blocks we cannot handle
- * (single-atom ions, unknown elements, OCL encoding failure).
- * @param {object} block - One parsed CCD chem_comp block.
+ * Build a molecule from one CCD CIF block string and UPSERT into SQLite.
+ * Returns `'imported'` on success or `'skipped'` for blocks that cannot
+ * be represented as a small molecule (single-atom ions, unknown elements,
+ * OCL encoding failure).
+ * @param {string} cifText - Raw CIF text for one `data_XXX` block.
  * @param {import('../db/getDB.js').LigandsDB} db - Open ligands database.
+ * @param {Function} Molecule - OCL Molecule class.
  * @returns {'imported' | 'skipped'} Whether the block produced a row.
  */
-function importBlock(block, db) {
-  const molecule = buildMoleculeFromCcdBlock(block);
-  if (!molecule) return 'skipped';
+function importBlock(cifText, db, Molecule) {
+  const parsed = moleculeFromCif(cifText, Molecule);
+  if (!parsed) return 'skipped';
+  const { molecule, code, name, formula, type, nbAtoms } = parsed;
   let idCode;
   let coordinates;
   let mf;
   let mw;
   try {
     ({ idCode, coordinates } = molecule.getIDCodeAndCoordinates());
-    const formula = molecule.getMolecularFormula();
-    mf = formula.formula;
-    mw = formula.relativeWeight;
+    const molFormula = molecule.getMolecularFormula();
+    mf = molFormula.formula;
+    mw = molFormula.relativeWeight;
   } catch {
     return 'skipped';
   }
   if (!idCode) return 'skipped';
 
   const row = db.upsertLigand.get(
-    block.code,
-    block.name,
-    block.formula,
-    block.type,
+    code,
+    name,
+    formula,
+    type,
     idCode,
     coordinates,
     mf,
     mw,
-    block.atoms.length,
+    nbAtoms,
   );
   // openchemlib-sqlite computes the 512-bit fingerprint and writes the
   // matching row to the runtime-managed `ocl_ss_index` table.
