@@ -33,7 +33,11 @@ export async function ligandSearch({
   const response = await db.molecules.search(queryIdCode, {
     mode,
     format: 'idCode',
+    // `limit` only slices the finished result set; `maxResults` is what stops
+    // the substructure scan early. Without it a common fragment (benzene)
+    // verifies all ~32k matches before slicing — 1.4s instead of 0.2s.
     limit: maxResults,
+    maxResults,
     ...(mode === 'similarity' ? { similarityThreshold: minSimilarity } : {}),
   });
   const elapsedMs = Math.round(performance.now() - start);
