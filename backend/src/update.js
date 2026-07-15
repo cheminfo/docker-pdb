@@ -24,6 +24,10 @@ const execFileAsync = promisify(execFile);
 const debug = createDebug('update');
 const config = getConfig();
 
+// Trace of every .gz rsync touched. Lives under the data bind mount because
+// the container root filesystem is read-only.
+const rsyncChangesLogPath = join(config.dataDir, 'logs', 'rsyncChanges.log');
+
 // Time chokidar waits with no size change before considering a file fully
 // written. rsync writes via temp+rename, so 2s is comfortably safe.
 const STABILITY_THRESHOLD_MS = 2000;
@@ -350,7 +354,7 @@ async function doRsync(
             continue;
           }
           if (line.match(/\.gz$/)) {
-            appendFileSync('./rsyncChanges', `${destination + line}\n`);
+            appendFileSync(rsyncChangesLogPath, `${destination + line}\n`);
             const pdbId = common.getIdFromFileName(line).toUpperCase();
             if (pdbId.length === 4) {
               changed.updated.push(pdbId);

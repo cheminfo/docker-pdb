@@ -45,8 +45,6 @@ COPY --from=frontend-build /app/backend/public ./backend/public
 COPY docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-VOLUME /app/data
-
 RUN useradd --system --create-home --uid 10001 app \
     && mkdir -p /app/data \
     && chown -R app:app /app

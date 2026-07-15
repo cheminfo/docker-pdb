@@ -11,7 +11,27 @@ services:
     environment:
       DEBUG: '*'
     restart: unless-stopped
+    stop_grace_period: 30s
     init: true
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      # docker-entrypoint.sh runs as root to fix ownership of the bind-mounted
+      # /app/data (CHOWN + DAC_OVERRIDE + FOWNER), then drops to the `app` user
+      # via gosu (SETUID + SETGID). Everything else stays dropped.
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    tmpfs:
+      # Required by read_only: pymol writes the source .pdb and the rendered
+      # .png under /tmp, and npm needs a writable HOME for its cache.
+      - /tmp:mode=1777,size=1g
+      - /home/app:mode=0777,size=64m
     # PyMol hard-caps concurrent processes at min(PYMOL_CONCURRENCY, 8).
     # Each child spawns ~15 OS threads (Python + OpenMP), so the worst case
     # is 8 × 15 = 120 PyMol threads + ~30 Node threads ≈ 150 total PIDs —
@@ -21,6 +41,7 @@ services:
     # headroom for Node, rsync, and chokidar.
     mem_limit: ${PYMOL_MEMORY_LIMIT:-16g}
     memswap_limit: ${PYMOL_MEMORY_LIMIT:-16g}
+    cpus: ${PYMOL_CPU_LIMIT:-8}
     ulimits:
       core: 0
     logging:
@@ -52,8 +73,30 @@ services:
       DEBUG: '*'
       PORT: '31015'
     restart: unless-stopped
+    stop_grace_period: 30s
     init: true
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      # Same root-then-gosu entrypoint as node-pdb-sync (see above).
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    tmpfs:
+      # The on-demand repair endpoint renders through pymol, which writes to
+      # /tmp; npm needs a writable HOME.
+      - /tmp:mode=1777,size=512m
+      - /home/app:mode=0777,size=64m
     pids_limit: 1024
+    # SQLite substructure search over the CCD holds the result set in memory.
+    mem_limit: 2g
+    memswap_limit: 2g
+    cpus: '2'
     ulimits:
       core: 0
     logging:
@@ -84,10 +127,27 @@ services:
       # so the OCL parse never aborts before the OOM-killer can intervene.
       NODE_OPTIONS: '--max-old-space-size=6144'
     restart: unless-stopped
+    stop_grace_period: 30s
     init: true
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      # Same root-then-gosu entrypoint as node-pdb-sync (see above).
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    tmpfs:
+      - /tmp:mode=1777,size=256m
+      - /home/app:mode=0777,size=64m
     pids_limit: 1024
     mem_limit: 8g
     memswap_limit: 8g
+    cpus: '2'
     ulimits:
       core: 0
     logging:
