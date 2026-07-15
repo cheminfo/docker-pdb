@@ -5,6 +5,7 @@
 .env
 .env.*
 !.env.example
+compose*.yaml
 coverage
 data
 node_modules

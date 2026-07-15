@@ -21,7 +21,7 @@ upstream lookup.
   assemblies are kept on disk, kept up-to-date by a daily `rsync` against
   `rsync.wwpdb.org`. The raw `.gz` files are the single source of truth:
   the sqlite index can be wiped and rebuilt from them with `npm run
-  rebuild`, no re-download required.
+rebuild`, no re-download required.
 - **Small React dashboard** — homepage at `/` with database statistics
   and a thumbnail gallery, built from [`frontend/`](./frontend) and baked
   into the `pdb-api` image at build time.
@@ -31,25 +31,27 @@ upstream lookup.
 Two core containers, plus a CCD-refresh sidecar, wired together by
 `docker compose`:
 
-| Container       | Role                                                                                                                       |
-| --------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Container       | Role                                                                                                                                                                          |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `pdb-api`       | Fastify server: HTTP API (parsed metadata, stats aggregates, raw file streaming, substructure search) **and** the React/Vite homepage SPA, baked into the image at build time |
-| `node-pdb-sync` | Daily cron: `rsync` the wwPDB tree, parse new files, render PyMol images, write to sqlite                                  |
-| `pdb-api-cron`  | Weekly cron: refreshes `data/sqlite/db.sqlite` from the wwPDB Chemical Component Dictionary                               |
+| `node-pdb-sync` | Daily cron: `rsync` the wwPDB tree, parse new files, render PyMol images, write to sqlite                                                                                     |
+| `pdb-api-cron`  | Weekly cron: refreshes `data/sqlite/db.sqlite` from the wwPDB Chemical Component Dictionary                                                                                   |
 
 All persistent state lives in `data/sqlite/db.sqlite` (parsed metadata,
 ligand fingerprints, rsync history) plus the rsynced `.gz` archives.
 
 ## Deployment
 
-Three example compose files are provided. Copy whichever matches your
-deployment to `compose.yaml`, then start the stack.
+Three compose files are committed, one per deployment mode. Pick one by
+setting `COMPOSE_FILE` in `.env` — never by copying files around. With no
+`COMPOSE_FILE` set, `docker compose` uses `compose.yaml` (port-published).
 
 ```sh
 cp .env.example .env
+# then uncomment exactly one COMPOSE_FILE=... line in .env
 ```
 
-By default, every example pulls the released image
+By default, every mode pulls the released image
 `ghcr.io/cheminfo/pdb-quickview:latest`. To build the image locally instead,
 add `--build`:
 
@@ -58,18 +60,18 @@ docker compose pull && docker compose up -d        # released image
 docker compose up -d --build                       # local build
 ```
 
-### 1. Local / port-published — `compose.example.yaml`
+### 1. Local / port-published — `compose.yaml`
 
 Publishes `pdb-api` on `127.0.0.1:${PUBLIC_PORT}`. Open
 `http://localhost:${PUBLIC_PORT}` once the database has finished its first
-build.
+build. This is the default when `COMPOSE_FILE` is unset.
 
 ```sh
-cp compose.example.yaml compose.yaml
+# .env: COMPOSE_FILE=compose.yaml   (or leave every mode commented out)
 docker compose pull && docker compose up -d
 ```
 
-### 2. Public via Cloudflare Tunnel — `compose.example.cloudflared.yaml`
+### 2. Public via Cloudflare Tunnel — `compose.cloudflared.yaml`
 
 No port published on the host; traffic enters via a `cloudflared` sidecar.
 
@@ -77,15 +79,15 @@ In the Cloudflare dashboard (https://dash.cloudflare.com):
 **Networking → Tunnels → Create a tunnel → Cloudflared connector** → copy
 the token into `.env` as `TUNNEL_TOKEN=...` → open the tunnel →
 **Published applications** → add an application with **Service = HTTP**,
-**URL = `pdb-api:3000`**, **Public hostname = `pdb.lactame.com`** (or
+**URL = `pdb-api:31015`**, **Public hostname = `pdb.lactame.com`** (or
 your chosen hostname).
 
 ```sh
-cp compose.example.cloudflared.yaml compose.yaml
+# .env: COMPOSE_FILE=compose.cloudflared.yaml
 docker compose pull && docker compose up -d
 ```
 
-### 3. Public via Traefik — `compose.example.traefik.yaml`
+### 3. Public via Traefik — `compose.traefik.yaml`
 
 Requires the host to already run a Traefik instance attached to an external
 Docker network named `traefik`, with a `websecure` entrypoint and a
@@ -93,7 +95,7 @@ Docker network named `traefik`, with a `websecure` entrypoint and a
 (default `pdb.cheminfo.org`).
 
 ```sh
-cp compose.example.traefik.yaml compose.yaml
+# .env: COMPOSE_FILE=compose.traefik.yaml
 docker compose pull && docker compose up -d
 ```
 
@@ -102,17 +104,17 @@ docker compose pull && docker compose up -d
 All endpoints are read-only (`GET`/`HEAD`) and served by the Fastify
 backend. Common ones:
 
-| Path                                            | What it returns                                            |
-| ----------------------------------------------- | ---------------------------------------------------------- |
-| `/v1/database/info`                             | Entry counts and decompressed bytes per archive            |
-| `/v1/pdbs/{id}`                                 | Parsed metadata for entry `{id}` (chains, helices, …)      |
-| `/v1/pdbs/{id}/raw`                             | Raw `.pdb` text for entry `{id}` (gunzipped on the fly)    |
-| `/v1/assemblies/{id}/raw`                       | Raw `.pdb1` text for the bio-assembly                      |
-| `/v1/assemblies/{id}/image/{size}`              | Rendered PyMol thumbnail (`100x100`, `200x200`, `400x400`) |
-| `/v1/pdbs?q=...&methods=...&yearMin=...`        | Search parsed metadata (FTS5 title + range filters)        |
-| `/v1/stats/{view}`                              | Aggregated statistics (e.g. `byYear`, `aminoAcidFreq`, …)  |
-| `/v1/ligands?substructure={idCode}`             | OpenChemLib substructure search over the CCD               |
-| `/v1/rsync-history?type=asymUnit&limit=10`      | Recent rsync runs                                          |
+| Path                                       | What it returns                                            |
+| ------------------------------------------ | ---------------------------------------------------------- |
+| `/v1/database/info`                        | Entry counts and decompressed bytes per archive            |
+| `/v1/pdbs/{id}`                            | Parsed metadata for entry `{id}` (chains, helices, …)      |
+| `/v1/pdbs/{id}/raw`                        | Raw `.pdb` text for entry `{id}` (gunzipped on the fly)    |
+| `/v1/assemblies/{id}/raw`                  | Raw `.pdb1` text for the bio-assembly                      |
+| `/v1/assemblies/{id}/image/{size}`         | Rendered PyMol thumbnail (`100x100`, `200x200`, `400x400`) |
+| `/v1/pdbs?q=...&methods=...&yearMin=...`   | Search parsed metadata (FTS5 title + range filters)        |
+| `/v1/stats/{view}`                         | Aggregated statistics (e.g. `byYear`, `aminoAcidFreq`, …)  |
+| `/v1/ligands?substructure={idCode}`        | OpenChemLib substructure search over the CCD               |
+| `/v1/rsync-history?type=asymUnit&limit=10` | Recent rsync runs                                          |
 
 ## Persistent data
 
@@ -158,29 +160,25 @@ on any machine with Node ≥ 22 installed.
 
 ```sh
 npm install
-cp .env.example .env   # required: dev/test refuse to start without it
-npm run dev            # seed sqlite, then run the Fastify API + Vite dev server
+cp .env.example .env   # optional for `npm run dev`, which seeds in memory
+npm run dev            # in-memory sqlite + Fastify API + Vite dev server
 ```
-
-Both `npm run dev` and `npm run test` start with a `check-env` step that
-exits immediately with `ERROR: .env is required.` if `.env` is missing —
-better than the silent half-broken state you get otherwise.
 
 Under the hood it:
 
-1. Runs [`backend/src/dev.js`](./backend/src/dev.js) once to apply migrations
-   on `data/sqlite/db.sqlite` and seed a deterministic set of PDB entries
-   from [`backend/fixtures/pdb/`](./backend/fixtures/pdb) (or from your
-   local rsync tree under `data/pdb/`, if you have one).
-2. Starts the Fastify API on `http://localhost:3000` under `node --watch`,
-   so backend file changes restart the server.
+1. Runs [`backend/src/devServer.js`](./backend/src/devServer.js), which
+   creates a fresh **in-memory** sqlite database on every restart — no disk
+   writes — and seeds it from [`backend/fixtures/`](./backend/fixtures)
+   (falling back to your local rsync tree under `data/pdb/` when present).
+2. Starts the Fastify API on `http://localhost:31015` under `node --watch`,
+   so backend file changes restart the server with a clean database.
 3. Starts the Vite dev server (frontend), which proxies every `/v1/...`
    call to the API:
 
 ```sh
-curl http://localhost:3000/v1/database/info
-curl http://localhost:3000/v1/pdbs/100D
-curl 'http://localhost:3000/v1/pdbs?methods=X-RAY+DIFFRACTION&limit=3'
+curl http://localhost:31015/v1/database/info
+curl http://localhost:31015/v1/pdbs/100D
+curl 'http://localhost:31015/v1/pdbs?methods=X-RAY+DIFFRACTION&limit=3'
 ```
 
 The full rsync pipeline and pymol-rendered biological assemblies are
@@ -190,22 +188,25 @@ and `rsync`, and should run `npm run cron` (or `npm run rebuild` /
 unless `HAS_PYMOL=1` is set.
 
 ```sh
-npm run test       # seed sqlite + tests + lint + format
-npm run test-only  # vitest with coverage
+npm run test       # tests + type-check + lint + format, for the whole repo
+npm run test-only  # vitest with coverage, both workspaces
+npm run test-e2e -w frontend  # playwright (needs the API on :31015)
 ```
 
-`npm run test` runs `npm run dev:seed` first, so a fresh clone is left with
-a populated `data/sqlite/db.sqlite` (including `8ZXR` for the scripting
-playground) — open `/scripting` and load right away, no extra setup. The
-seed is idempotent and reuses fixtures from `backend/fixtures/pdb/`.
+To populate `data/sqlite/db.sqlite` on a fresh clone (including `8ZXR` for
+the scripting playground), run `npm run dev:seed`. It is idempotent and
+reuses the fixtures from `backend/fixtures/pdb/`.
 
 ### Frontend-only commands
 
 ```sh
 cd frontend
 npm run build      # type-check + vite build → ../backend/public
-npm run test       # check-types + eslint + prettier
+npm run test       # vitest with coverage + check-types
 ```
+
+Lint and format are repo-wide, driven from the root (`npm run eslint`,
+`npm run prettier`) by the single [`eslint.config.js`](./eslint.config.js).
 
 `npm run build` writes to `backend/public/` (gitignored — rebuilt by
 Docker). The `pdb-api` image is built from [`Dockerfile`](./Dockerfile),
@@ -224,7 +225,7 @@ To point the Vite dev server at a different backend (e.g. a production
 stack on the local network):
 
 ```sh
-PDB_API_URL=http://127.0.0.1:12345 npm run dev -w frontend
+PDB_API_URL=http://127.0.0.1:31015 npm run dev -w frontend
 ```
 
 Or at a remote stack:

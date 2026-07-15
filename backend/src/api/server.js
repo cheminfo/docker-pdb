@@ -73,7 +73,7 @@ export async function buildApp({ db, logger = false, staticDir }) {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const port = Number(process.env.PORT) || 3000;
+  const port = Number(process.env.PORT) || 31015;
   const host = process.env.HOST || '0.0.0.0';
   const db = await getLigandsDB();
   const staticDir = resolveStaticDir();

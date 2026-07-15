@@ -1,8 +1,3 @@
-# Traefik reverse-proxy deployment — requires an external Docker network
-# named `traefik` with a `websecure` entrypoint and `letsencrypt` cert resolver.
-#
-# Adjust the Host(...) label to your hostname (default: pdb.cheminfo.org).
-# Copy this file to compose.yaml and run: docker compose up -d
 services:
   node-pdb-sync:
     # Use the released image by default. To build locally instead, run:
@@ -38,21 +33,24 @@ services:
   pdb-api:
     # Fastify server: HTTP API (substructure search, parsed PDB metadata,
     # stats aggregates, raw file streaming) AND the React/Vite bundle baked
-    # into the image at /app/backend/public. Traefik routes everything
-    # straight here — no separate nginx hop. On first start it seeds
+    # into the image at /app/backend/public. On first start it seeds
     # data/sqlite/db.sqlite from the wwPDB Chemical Component Dictionary
     # if the `ligands` table is empty.
     # Use the released image by default. To build locally instead, run:
     #   docker compose up -d --build
     image: ghcr.io/cheminfo/pdb-quickview:latest
     build: .
+    ports:
+      # Falls back to the in-container port so an .env without PUBLIC_PORT
+      # publishes on a predictable host port instead of a random one.
+      - '127.0.0.1:${PUBLIC_PORT:-31015}:31015'
     volumes:
       - ./data:/app/data:z
     env_file:
       - .env
     environment:
       DEBUG: '*'
-      PORT: '3000'
+      PORT: '31015'
     restart: unless-stopped
     init: true
     pids_limit: 1024
@@ -63,21 +61,8 @@ services:
       options:
         max-size: '10m'
         max-file: '3'
-    networks:
-      - default
-      - traefik
-    labels:
-      - 'traefik.enable=true'
-      - 'traefik.http.routers.pdb.rule=Host(`pdb.cheminfo.org`)'
-      - 'traefik.http.routers.pdb.entrypoints=websecure'
-      - 'traefik.http.routers.pdb.tls.certresolver=letsencrypt'
-      - 'traefik.http.services.pdb.loadbalancer.server.port=3000'
-      - 'traefik.http.routers.pdb.middlewares=pdb-cors'
-      - 'traefik.http.middlewares.pdb-cors.headers.accesscontrolalloworiginlist=*'
-      - 'traefik.http.middlewares.pdb-cors.headers.accesscontrolallowheaders=Content-Type'
-      - 'traefik.http.middlewares.pdb-cors.headers.accesscontrolmaxage=86400'
     # The CCD seed is owned by pdb-api-cron — pdb-api starts the API
-    # immediately so Traefik never returns 502 during the first boot.
+    # immediately so the homepage never 502s during the first boot.
     command: npm run api
 
   pdb-api-cron:
@@ -85,7 +70,8 @@ services:
     # Chemical Component Dictionary (weekly upstream cadence). Idle most
     # of the time, but the import phase synchronously parses ~40k CCD
     # entries through openchemlib and can briefly use >1 GiB of heap —
-    # the generous mem_limit keeps it well clear of the OOM-killer.
+    # under tight cgroup limits the kernel OOM-killed it silently, which
+    # is why we set a generous `mem_limit` here.
     image: ghcr.io/cheminfo/pdb-quickview:latest
     build: .
     volumes:
@@ -94,6 +80,8 @@ services:
       - .env
     environment:
       DEBUG: '*'
+      # `--max-old-space-size` lifts the v8 heap cap above the default 4 GiB
+      # so the OCL parse never aborts before the OOM-killer can intervene.
       NODE_OPTIONS: '--max-old-space-size=6144'
     restart: unless-stopped
     init: true
@@ -108,7 +96,3 @@ services:
         max-size: '10m'
         max-file: '3'
     command: npm run cron-ccd
-
-networks:
-  traefik:
-    external: true

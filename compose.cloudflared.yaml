@@ -4,7 +4,7 @@
 #   Networking → Tunnels → Create a tunnel → Cloudflared connector →
 #   copy the token into .env as TUNNEL_TOKEN=... → open the tunnel →
 #   Published applications tab → add application with
-#   Service = HTTP, URL = pdb-api:3000, Public hostname = pdb.lactame.com.
+#   Service = HTTP, URL = pdb-api:31015, Public hostname = pdb.lactame.com.
 #
 # Copy this file to compose.yaml and run: docker compose up -d
 services:
@@ -56,7 +56,7 @@ services:
       - .env
     environment:
       DEBUG: '*'
-      PORT: '3000'
+      PORT: '31015'
     restart: unless-stopped
     init: true
     pids_limit: 1024

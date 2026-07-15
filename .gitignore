@@ -2,7 +2,7 @@
 .DS_Store
 .env
 docs/
-compose.yaml
+compose.yaml.local.bak
 coverage/
 data/
 backend/public/

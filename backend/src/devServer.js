@@ -6,7 +6,7 @@
 //   2. Seeds ligands from the 20-entry fixture at fixtures/ligands.json.
 //   3. Seeds PDB entries from the 21 committed fixture files under `backend/fixtures/pdb/`.
 //   4. Falls back to the local rsync tree (`data/pdb/`) when a fixture is absent.
-//   5. Starts the Fastify API on port 3000 with the seeded in-memory DB.
+//   5. Starts the Fastify API on port 31015 with the seeded in-memory DB.
 //
 // `node --watch` re-runs the whole file on each source change, producing a
 // clean, reproducible database on every restart — no stale rows, no leftover
@@ -109,7 +109,7 @@ if (files.length > 0) {
   }
 }
 
-const port = Number(process.env.PORT) || 3000;
+const port = Number(process.env.PORT) || 31015;
 const host = process.env.HOST || '127.0.0.1';
 const staticDir = resolveStaticDir();
 const app = await buildApp({ db, logger: true, staticDir });

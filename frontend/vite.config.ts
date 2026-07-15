@@ -1,7 +1,7 @@
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
-const apiTarget = process.env.PDB_API_URL ?? 'http://localhost:3000';
+const apiTarget = process.env.PDB_API_URL ?? 'http://localhost:31015';
 const apiPaths = [
   '/pdb',
   '/assembly',
