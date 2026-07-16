@@ -1,4 +1,10 @@
-import { Button, ButtonGroup, Card } from '@blueprintjs/core';
+import {
+  Button,
+  ButtonGroup,
+  Card,
+  ProgressBar,
+  Spinner,
+} from '@blueprintjs/core';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { OnChangeMoleculeCallback } from 'react-ocl';
 import { CanvasMoleculeEditor } from 'react-ocl';
@@ -68,9 +74,14 @@ export default function MoleculesPage() {
   // candidates, so a filtered search is also a faster one.
   const smart = useMemo(() => toSmartQuery(debouncedDraft), [debouncedDraft]);
 
-  // Run the search whenever the query, mode, filters or page change.
+  // Run the search whenever the query, mode, filters or page change. Each run
+  // aborts the previous one, so a structure the user has already moved past
+  // never holds up (or overwrites) the current result — a substructure scan can
+  // take seconds, and without this the responses could land out of order. The
+  // `searching` flag is raised at the user-action points below, not here, so an
+  // effect never sets state synchronously.
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
     fetchLigandSearch({
       idCode: queryIdCode,
       mode: searchMode,
@@ -78,23 +89,23 @@ export default function MoleculesPage() {
       sort,
       limit: PAGE_SIZE,
       offset,
+      signal: controller.signal,
     })
       .then((result) => {
-        if (cancelled) return;
         setSearch(result);
         setSearchError(null);
         setSearching(false);
       })
       .catch((error: unknown) => {
-        if (cancelled) return;
+        // The cleanup below aborted this request because a newer one started;
+        // the newer request owns the UI, so leave `searching` on for it.
+        if (controller.signal.aborted) return;
         setSearchError(
           error instanceof Error ? error.message : 'Search failed',
         );
         setSearching(false);
       });
-    return () => {
-      cancelled = true;
-    };
+    return () => controller.abort();
   }, [queryIdCode, searchMode, smart, sort, offset]);
 
   // When the user types/draws a new query, mark the page as loading via an
@@ -123,6 +134,8 @@ export default function MoleculesPage() {
     };
   }, [selectedCode]);
 
+  // Each handler raises `searching` as it changes what to search for, so the
+  // indicator appears the instant the user acts rather than a frame later.
   const handleEditorChange = useCallback<OnChangeMoleculeCallback>((event) => {
     const idCode = event.getIdcode();
     // OCL emits an empty-molecule idCode (`d@`) when the canvas is cleared.
@@ -151,6 +164,11 @@ export default function MoleculesPage() {
   const handleSortChange = useCallback((next: LigandSort | null) => {
     setSort(next);
     setOffset(0);
+    setSearching(true);
+  }, []);
+
+  const handleOffsetChange = useCallback((next: number) => {
+    setOffset(next);
     setSearching(true);
   }, []);
 
@@ -230,29 +248,52 @@ export default function MoleculesPage() {
         </Card>
 
         <Card className="panel molecules-results-panel">
-          <h2>
-            {queryIdCode === null
-              ? 'Most-referenced ligands'
-              : searchMode === 'similarity'
-                ? 'Similar ligands'
-                : searchMode === 'exact'
-                  ? 'Exact matches'
-                  : 'Substructure matches'}
-          </h2>
-          <LigandResultsTable
-            ligands={search?.ligands ?? []}
-            selectedCode={selectedCode}
-            onSelect={handleSelectLigand}
-            searchMode={queryIdCode !== null ? searchMode : undefined}
-            sort={sort}
-            onSortChange={handleSortChange}
-          />
+          <div className="molecules-results-header">
+            <h2>
+              {queryIdCode === null
+                ? 'Most-referenced ligands'
+                : searchMode === 'similarity'
+                  ? 'Similar ligands'
+                  : searchMode === 'exact'
+                    ? 'Exact matches'
+                    : 'Substructure matches'}
+            </h2>
+            {searching && (
+              <span className="molecules-searching-badge">
+                <Spinner size={14} />
+                Searching the database…
+              </span>
+            )}
+          </div>
+          <div
+            className="molecules-search-progress"
+            aria-hidden={!searching}
+            data-active={searching ? 'true' : undefined}
+          >
+            {searching && <ProgressBar intent="primary" />}
+          </div>
+          <div
+            className={
+              searching
+                ? 'molecules-results-body is-searching'
+                : 'molecules-results-body'
+            }
+          >
+            <LigandResultsTable
+              ligands={search?.ligands ?? []}
+              selectedCode={selectedCode}
+              onSelect={handleSelectLigand}
+              searchMode={queryIdCode !== null ? searchMode : undefined}
+              sort={sort}
+              onSortChange={handleSortChange}
+            />
+          </div>
           <LigandPagination
             total={search?.total ?? 0}
             limit={PAGE_SIZE}
             offset={offset}
             pageSize={search?.ligands.length ?? 0}
-            onOffsetChange={setOffset}
+            onOffsetChange={handleOffsetChange}
           />
         </Card>
 

@@ -1643,6 +1643,58 @@ code {
   height: 100%;
 }
 
+.molecules-results-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 24px;
+}
+
+.molecules-results-header h2 {
+  margin: 0;
+}
+
+/* Prominent "we're working" cue: an animated bar under the results header,
+   plus a spinner + label in the header, plus dimming of the stale rows. */
+.molecules-searching-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent, #2563eb);
+  white-space: nowrap;
+}
+
+.molecules-search-progress {
+  height: 4px;
+  margin: 6px -16px 0;
+}
+
+.molecules-search-progress[data-active='true'] {
+  /* The bar owns its own height; keep the reserved 4px slot from collapsing. */
+  margin-bottom: 0;
+}
+
+.molecules-search-progress .bp6-progress-bar {
+  height: 4px;
+  border-radius: 0;
+}
+
+.molecules-results-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin-top: 8px;
+  transition: opacity 0.15s ease-out;
+}
+
+.molecules-results-body.is-searching {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
 .molecules-results-table-wrapper {
   flex: 1;
   min-height: 0;

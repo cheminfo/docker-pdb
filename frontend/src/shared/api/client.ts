@@ -43,10 +43,14 @@ function assertOk(response: Response): void {
 /**
  * Fetch a JSON resource from the same origin and throw on a non-2xx response.
  * @param url - Relative URL to fetch.
+ * @param signal - Optional `AbortSignal` to cancel the request in flight.
  * @returns Parsed JSON body of the response.
  */
-async function fetchJson<TResponse>(url: string): Promise<TResponse> {
-  const response = await fetch(url);
+async function fetchJson<TResponse>(
+  url: string,
+  signal?: AbortSignal,
+): Promise<TResponse> {
+  const response = await fetch(url, signal ? { signal } : undefined);
   assertOk(response);
   return response.json() as Promise<TResponse>;
 }
@@ -688,6 +692,11 @@ export interface LigandSearchParams {
    * @default 0
    */
   offset?: number;
+  /**
+   * Cancels the request when the caller supersedes it — e.g. the structure
+   * query changed before this one came back.
+   */
+  signal?: AbortSignal;
 }
 
 /**
@@ -707,6 +716,7 @@ export function fetchLigandSearch(
     sort = null,
     limit = 50,
     offset = 0,
+    signal,
   } = params;
   const query = new URLSearchParams({
     limit: String(limit),
@@ -724,7 +734,10 @@ export function fetchLigandSearch(
     query.set('sort', sort.column);
     query.set('direction', sort.direction);
   }
-  return fetchJson<LigandSearchResponse>(`/v1/ligands?${query.toString()}`);
+  return fetchJson<LigandSearchResponse>(
+    `/v1/ligands?${query.toString()}`,
+    signal,
+  );
 }
 
 /**
