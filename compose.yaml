@@ -93,10 +93,18 @@ services:
       - /tmp:mode=1777,size=512m
       - /home/app:mode=0777,size=64m
     pids_limit: 1024
-    # SQLite substructure search over the CCD holds the result set in memory.
-    mem_limit: 2g
-    memswap_limit: 2g
-    cpus: '2'
+    # Substructure search over the CCD holds the result set in memory, and each
+    # verifier thread carries its own OpenChemLib instance.
+    mem_limit: ${PDB_API_MEMORY_LIMIT:-4g}
+    memswap_limit: ${PDB_API_MEMORY_LIMIT:-4g}
+    # Substructure search is CPU-bound: it parses and graph-matches every
+    # candidate molecule, and openchemlib-sqlite sizes its verifier pool to the
+    # cores this limit grants (availableParallelism() reads the cgroup quota).
+    # Measured on 45k ligands: 1 core 28k candidates/s, 2 cores 61k/s, 4 cores
+    # 99k/s, 8 cores 106k/s — so a low limit here directly shows up as a slow,
+    # or timed-out, search. Lower it on a host that shares cores with the PyMOL
+    # sync container.
+    cpus: ${PDB_API_CPU_LIMIT:-8}
     ulimits:
       core: 0
     logging:
