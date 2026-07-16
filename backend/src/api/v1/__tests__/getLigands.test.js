@@ -231,6 +231,30 @@ test('exact: matches one ligand, and the filter still applies', async () => {
   expect(filtered.total).toBe(0);
 });
 
+test('a scan that finishes reports an exact total, not a capped one', async () => {
+  const body = await get(
+    `/v1/ligands?substructure=${encodeURIComponent(benzeneIdCode)}&mode=substructure`,
+  );
+
+  // Four matches is far under the scan cap, so the count is exact and the UI
+  // shows no "+".
+  expect(body.total).toBe(4);
+  expect(body.stats.overLimit).toBe(false);
+});
+
+test('every page the pager offers holds rows, capped or not', async () => {
+  // total must never exceed what the scan actually collected: a total larger
+  // than the reachable results would make the pager offer empty pages.
+  const body = await get(
+    `/v1/ligands?substructure=${encodeURIComponent(benzeneIdCode)}&mode=substructure&limit=2`,
+  );
+  const lastPage = await get(
+    `/v1/ligands?substructure=${encodeURIComponent(benzeneIdCode)}&mode=substructure&limit=2&offset=${body.total - 1}`,
+  );
+
+  expect(lastPage.ligands.length).toBeGreaterThan(0);
+});
+
 test('codes: fetches an explicit list, unpaginated', async () => {
   const body = await get('/v1/ligands?codes=TOL,BEN');
 

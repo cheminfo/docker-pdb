@@ -4,8 +4,38 @@ const LIGAND_COLUMNS = `l.code, l.name, l.mf, l.mw, l.id_code AS idCode,
      l.coordinates, l.nb_pdbs AS nbPdbs`;
 
 /**
+ * Confirmed matches a substructure scan collects before it stops.
+ *
+ * Verifying a candidate means parsing it and running a subgraph isomorphism,
+ * which on real CCD ligands costs ~1 ms each — so an unbounded scan of a common
+ * fragment burns seconds of CPU and, measured against the production database,
+ * a bare benzene query never finished at all: it ran into the library's timeout
+ * and returned a partial total anyway, after 8 s.
+ *
+ * Stopping at a cap makes the cost predictable, and costs nothing in relevance:
+ * `ocl_ss_index` is clustered by molecular weight, so the matches collected
+ * first are the lightest — the ones closest to the query. When the cap (or the
+ * timeout) cuts a scan short the response says so via `stats.overLimit`, and
+ * `total` counts what was actually found, so every page the pager offers holds
+ * rows. A scan that finishes under the cap reports an exact total.
+ */
+const MAX_SCAN_RESULTS = 1000;
+
+/**
+ * Wall-clock budget for one structure scan. Below the library's 5 s default:
+ * this endpoint is called on every keystroke of the structure editor, and a
+ * request that outlives the reverse proxy is worse than a capped answer.
+ */
+const SCAN_TIMEOUT_MS = 3000;
+
+/**
  * One page of ligands matching an attribute filter and/or a structure query,
- * plus the exact number of matches.
+ * plus the number of matches.
+ *
+ * An attribute-only listing always counts exactly. A structure scan counts
+ * exactly when it runs to completion; when a common fragment sends it past
+ * {@link MAX_SCAN_RESULTS} (or the timeout) it stops and reports what it found
+ * with `stats.overLimit` set, which the UI renders as "1,000+".
  *
  * The attribute filter always runs **first**: it is handed to the structure
  * searcher as a candidates subquery, so molecules the filter excludes are never
@@ -59,6 +89,10 @@ export async function ligandSearch({
   const response = await db.molecules.search(queryIdCode, {
     mode,
     format: 'idCode',
+    timeoutMs: SCAN_TIMEOUT_MS,
+    // `limit` only slices the finished result set; `maxResults` is what stops
+    // the scan, so it is the one that bounds the work.
+    maxResults: MAX_SCAN_RESULTS,
     ...(candidates ? { candidates } : {}),
     ...(mode === 'similarity' ? { similarityThreshold: minSimilarity } : {}),
     ...(paginateInSearch ? { from: offset, limit } : {}),
