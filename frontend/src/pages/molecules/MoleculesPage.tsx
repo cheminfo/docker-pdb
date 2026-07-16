@@ -5,10 +5,10 @@ import { CanvasMoleculeEditor } from 'react-ocl';
 
 import { fetchLigandPdbs, fetchLigandSearch } from '../../shared/api/client.ts';
 import type {
-  LigandFilters,
   LigandPdbReference,
   LigandSearchMode,
   LigandSearchResponse,
+  LigandSort,
   LigandSummary,
 } from '../../shared/api/types.ts';
 import { formatNumber } from '../../shared/format.ts';
@@ -18,7 +18,7 @@ import LigandPagination from './LigandPagination.tsx';
 import LigandPdbsPanel from './LigandPdbsPanel.tsx';
 import LigandResultsTable from './LigandResultsTable.tsx';
 import type { LigandFilterDraft } from './ligandFilters.ts';
-import { EMPTY_FILTER_DRAFT, toLigandFilters } from './ligandFilters.ts';
+import { EMPTY_FILTER_DRAFT, toSmartQuery } from './ligandFilters.ts';
 
 const PAGE_SIZE = 50;
 
@@ -45,6 +45,7 @@ export default function MoleculesPage() {
     useState<LigandFilterDraft>(EMPTY_FILTER_DRAFT);
   const [debouncedDraft, setDebouncedDraft] =
     useState<LigandFilterDraft>(EMPTY_FILTER_DRAFT);
+  const [sort, setSort] = useState<LigandSort | null>(null);
   const [offset, setOffset] = useState(0);
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
   const [pdbs, setPdbs] = useState<LigandPdbReference[] | null>(null);
@@ -62,10 +63,10 @@ export default function MoleculesPage() {
     return () => clearTimeout(timeout);
   }, [filterDraft, debouncedDraft]);
 
-  const filters: LigandFilters = useMemo(
-    () => toLigandFilters(debouncedDraft),
-    [debouncedDraft],
-  );
+  // The filter fields become one smart-sqlite3-filter expression; the server
+  // compiles it to SQL and uses it to restrict the structure search's
+  // candidates, so a filtered search is also a faster one.
+  const smart = useMemo(() => toSmartQuery(debouncedDraft), [debouncedDraft]);
 
   // Run the search whenever the query, mode, filters or page change.
   useEffect(() => {
@@ -73,7 +74,8 @@ export default function MoleculesPage() {
     fetchLigandSearch({
       idCode: queryIdCode,
       mode: searchMode,
-      filters,
+      smart,
+      sort,
       limit: PAGE_SIZE,
       offset,
     })
@@ -93,7 +95,7 @@ export default function MoleculesPage() {
     return () => {
       cancelled = true;
     };
-  }, [queryIdCode, searchMode, filters, offset]);
+  }, [queryIdCode, searchMode, smart, sort, offset]);
 
   // When the user types/draws a new query, mark the page as loading via an
   // event handler instead of an effect setter so React 19 stops complaining
@@ -145,6 +147,12 @@ export default function MoleculesPage() {
     },
     [searchMode, queryIdCode],
   );
+
+  const handleSortChange = useCallback((next: LigandSort | null) => {
+    setSort(next);
+    setOffset(0);
+    setSearching(true);
+  }, []);
 
   const handleSelectLigand = useCallback((ligand: LigandSummary | null) => {
     setSelectedCode(ligand?.code ?? null);
@@ -236,6 +244,8 @@ export default function MoleculesPage() {
             selectedCode={selectedCode}
             onSelect={handleSelectLigand}
             searchMode={queryIdCode !== null ? searchMode : undefined}
+            sort={sort}
+            onSortChange={handleSortChange}
           />
           <LigandPagination
             total={search?.total ?? 0}

@@ -6,6 +6,12 @@ import { afterAll, beforeAll, expect, test } from 'vitest';
 import { getInMemoryLigandsDB } from '../../../db/getDB.js';
 import { ligandSearch } from '../ligandSearch.js';
 
+/** No attribute filter: the shape `buildWhere` returns for an empty query. */
+const NO_FILTER = { where: '', values: {} };
+
+/** Defaults for the paging/sorting the route normally supplies. */
+const PAGE = { filter: NO_FILTER, sort: null, limit: 100, offset: 0 };
+
 /**
  * 20 most-cited ligands from pdb.cheminfo.org, stored as a static fixture so
  * the tests run offline. Sourced via `GET /v1/ligands?limit=20`.
@@ -45,6 +51,7 @@ test('substructure: EDO query matches EDO and GOL, results sorted by MW ascendin
     db,
     queryIdCode: edo.idCode,
     mode: 'substructure',
+    ...PAGE,
   });
 
   const codes = result.ligands.map((l) => l.code);
@@ -70,6 +77,7 @@ test('substructure: stats include screened count and no overLimit for a small DB
     db,
     queryIdCode: gol.idCode,
     mode: 'substructure',
+    ...PAGE,
   });
 
   expect(result.stats.screened).toBeGreaterThanOrEqual(result.ligands.length);
@@ -85,6 +93,7 @@ test('similarity: BMA query finds the three C6H12O6 hexose stereoisomers with sc
     queryIdCode: bma.idCode,
     mode: 'similarity',
     minSimilarity: 0.8,
+    ...PAGE,
   });
 
   const codes = result.ligands.map((l) => l.code);
@@ -113,6 +122,7 @@ test('similarity: BMA matches itself with score 1.0 as the top result', async ()
     queryIdCode: bma.idCode,
     mode: 'similarity',
     minSimilarity: 0.8,
+    ...PAGE,
   });
 
   expect(result.ligands[0].code).toBe('BMA');
@@ -125,10 +135,14 @@ test('similarity: without a threshold every ligand is returned, ranked', async (
     db,
     queryIdCode: bma.idCode,
     mode: 'similarity',
+    ...PAGE,
   });
 
-  // Ranked by descending similarity, then ascending MW on ties: MPD (118 Da)
-  // precedes HEM (616 Da) and ACE (44 Da) precedes DMS (78 Da), both tied.
+  // Ranked by descending similarity. Ties keep the scan's order rather than
+  // being re-sorted by MW: DMS and ACE both score 0.017, and since
+  // openchemlib-sqlite 3 ranks on score alone, DMS now precedes ACE (before the
+  // upgrade this module re-sorted equal scores by ascending MW, putting ACE at
+  // 44 Da first). Paging is stable either way — the order is deterministic.
   expect(result.ligands.map((l) => l.code)).toStrictEqual([
     'BMA',
     'MAN',
@@ -148,8 +162,8 @@ test('similarity: without a threshold every ligand is returned, ranked', async (
     'ACT',
     'PO4',
     'SO4',
-    'ACE',
     'DMS',
+    'ACE',
   ]);
   expect(result.ligands).toHaveLength(LIGANDS.length);
 });
@@ -160,6 +174,7 @@ test('exact: ATP query returns exactly one match', async () => {
     db,
     queryIdCode: atp.idCode,
     mode: 'exact',
+    ...PAGE,
   });
 
   expect(result.ligands).toHaveLength(1);
@@ -173,6 +188,7 @@ test('exact: ADP and ATP do not match each other', async () => {
     db,
     queryIdCode: adp.idCode,
     mode: 'exact',
+    ...PAGE,
   });
 
   expect(result.ligands.every((l) => l.code !== 'ATP')).toBe(true);

@@ -4,9 +4,12 @@ import { MF } from 'react-mf';
 import LigandStructure from '../../shared/LigandStructure.tsx';
 import type {
   LigandSearchMode,
+  LigandSort,
   LigandSummary,
 } from '../../shared/api/types.ts';
 import { formatNumber } from '../../shared/format.ts';
+
+import LigandSortableHeader from './LigandSortableHeader.tsx';
 
 interface LigandResultsTableProps {
   /** Matching ligand rows. */
@@ -17,7 +20,23 @@ interface LigandResultsTableProps {
   onSelect: (ligand: LigandSummary | null) => void;
   /** Active search mode — controls which extra columns are shown. */
   searchMode?: LigandSearchMode;
+  /** Active column sort, or `null` for the default ranking. */
+  sort: LigandSort | null;
+  /** Called with the next sort state, or `null` to restore the default. */
+  onSortChange: (sort: LigandSort | null) => void;
 }
+
+const SORTABLE_COLUMNS: Array<{
+  column: 'code' | 'name' | 'mf' | 'mw' | 'nbPdbs';
+  label: string;
+  numeric?: boolean;
+}> = [
+  { column: 'code', label: 'Code' },
+  { column: 'name', label: 'Name' },
+  { column: 'mf', label: 'MF' },
+  { column: 'mw', label: 'MW', numeric: true },
+  { column: 'nbPdbs', label: '#PDBs', numeric: true },
+];
 
 /**
  * Tabular view of ligand search results. Each row shows the canonical 2D
@@ -29,6 +48,8 @@ interface LigandResultsTableProps {
  * @param props.selectedCode - Currently-selected ligand code, or `null`.
  * @param props.onSelect - Selection-change handler.
  * @param props.searchMode - Active search mode.
+ * @param props.sort - Active column sort, or `null`.
+ * @param props.onSortChange - Sort-change handler.
  * @returns Results table React element.
  */
 export default function LigandResultsTable({
@@ -36,6 +57,8 @@ export default function LigandResultsTable({
   selectedCode,
   onSelect,
   searchMode,
+  sort,
+  onSortChange,
 }: LigandResultsTableProps) {
   if (ligands.length === 0) {
     return <p className="placeholder">No matches.</p>;
@@ -47,11 +70,16 @@ export default function LigandResultsTable({
         <thead>
           <tr>
             <th>Structure</th>
-            <th>Code</th>
-            <th>Name</th>
-            <th>MF</th>
-            <th className="num">MW</th>
-            <th className="num">#PDBs</th>
+            {SORTABLE_COLUMNS.map(({ column, label, numeric }) => (
+              <LigandSortableHeader
+                key={column}
+                column={column}
+                label={label}
+                numeric={numeric}
+                sort={sort}
+                onSortChange={onSortChange}
+              />
+            ))}
             {showSimilarity && <th className="num">Sim.</th>}
           </tr>
         </thead>

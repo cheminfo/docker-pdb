@@ -1766,6 +1766,45 @@ code {
   white-space: nowrap;
 }
 
+.ligand-results-table th.sortable {
+  padding: 0;
+}
+
+.ligand-sort {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: var(--muted, #64748b);
+  cursor: pointer;
+}
+
+.ligand-results-table th.num .ligand-sort {
+  justify-content: flex-end;
+}
+
+.ligand-sort:hover {
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--text, #0f172a);
+}
+
+.ligand-sort .bp6-icon {
+  opacity: 0.35;
+}
+
+.ligand-sort.is-active {
+  color: var(--accent, #2563eb);
+}
+
+.ligand-sort.is-active .bp6-icon {
+  opacity: 1;
+}
+
 .ligand-results-table tbody tr {
   cursor: pointer;
 }

@@ -28,12 +28,12 @@
     "glob": "^13.0.6",
     "gm": "^1.25.1",
     "openchemlib": "^9.24.0",
-    "openchemlib-sqlite": "^2.3.0",
+    "openchemlib-sqlite": "^3.0.0",
     "openchemlib-utils": "^8.17.1",
     "pino": "^10.3.1",
     "postgrator": "^8.0.0",
     "rsync": "^0.6.1",
-    "smart-sqlite3-filter": "^0.8.0"
+    "smart-sqlite3-filter": "^1.0.0"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^4.1.10",

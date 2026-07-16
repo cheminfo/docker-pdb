@@ -5,10 +5,10 @@ import type {
   DiagnosticsResponse,
   GroupedStatsResponse,
   LigandDetailResponse,
-  LigandFilters,
   LigandPdbsResponse,
   LigandSearchMode,
   LigandSearchResponse,
+  LigandSort,
   OmegaByYearResponse,
   OmegaSummaryResponse,
   PairFrequencyByYearResponse,
@@ -665,10 +665,19 @@ export interface LigandSearchParams {
    */
   minSimilarity?: number;
   /**
-   * Attribute filters applied on top of the structure query.
-   * @default {}
+   * Attribute filter in `smart-sqlite3-filter` syntax (e.g.
+   * `code:~AT name:~adenosine mw:100..500`), applied on top of the structure
+   * query. The server compiles it to SQL and uses it to restrict the structure
+   * search's candidates, so filtering also makes the search faster.
+   * @default ''
    */
-  filters?: LigandFilters;
+  smart?: string;
+  /**
+   * Explicit column sort. Omit for the default most-referenced ranking (or,
+   * with a structure query, the searcher's own relevance ranking).
+   * @default null
+   */
+  sort?: LigandSort | null;
   /**
    * Page size.
    * @default 50
@@ -694,7 +703,8 @@ export function fetchLigandSearch(
     idCode = null,
     mode = 'substructure',
     minSimilarity = 0,
-    filters = {},
+    smart = '',
+    sort = null,
     limit = 50,
     offset = 0,
   } = params;
@@ -709,11 +719,11 @@ export function fetchLigandSearch(
       query.set('minSimilarity', String(minSimilarity));
     }
   }
-  if (filters.code) query.set('code', filters.code);
-  if (filters.name) query.set('name', filters.name);
-  if (filters.mf) query.set('mf', filters.mf);
-  if (filters.mwMin != null) query.set('mwMin', String(filters.mwMin));
-  if (filters.mwMax != null) query.set('mwMax', String(filters.mwMax));
+  if (smart) query.set('smart', smart);
+  if (sort) {
+    query.set('sort', sort.column);
+    query.set('direction', sort.direction);
+  }
   return fetchJson<LigandSearchResponse>(`/v1/ligands?${query.toString()}`);
 }
 

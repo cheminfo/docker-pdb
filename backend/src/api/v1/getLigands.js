@@ -1,19 +1,10 @@
+import { buildWhere } from 'smart-sqlite3-filter';
+
 import { clampLimit } from '../util/clampLimit.js';
-import {
-  buildLigandFilterWhere,
-  parseLigandFilters,
-} from '../util/ligandFilters.js';
 import { ligandSearch } from '../util/ligandSearch.js';
+import { parseLigandSort } from '../util/ligandSort.js';
 
 const DEFAULT_LIMIT = 50;
-
-/**
- * Number of structural hits hydrated before the attribute filter and the page
- * slice are applied. Bounds the work a single structure query can trigger.
- */
-const SEARCH_CAP = 1000;
-
-const LIGAND_COLUMNS = `l.code, l.name, l.mf, l.mw, l.id_code AS idCode, l.coordinates`;
 
 const VALID_MODES = new Set(['substructure', 'similarity', 'exact']);
 
@@ -26,11 +17,13 @@ const EMPTY_STATS = {
 };
 
 /**
- * Register `GET /v1/ligands` — paginated ligand listing with optional
- * structure search (substructure, similarity, or exact), attribute filters
- * (`code`, `name`, `mf`, `mwMin`, `mwMax`) and an explicit-codes filter.
- * The response carries `total` (matches before pagination) alongside the
- * `limit` / `offset` that produced the page.
+ * Register `GET /v1/ligands` — the ligand browser.
+ *
+ * Combines three things, any of which may be absent: a `smart` attribute filter
+ * (smart-sqlite3-filter syntax, e.g. `code:~AT name:~adenosine mw:100..500`), a
+ * structure query (`substructure` + `mode`), and an explicit column `sort`.
+ * The response always carries the exact `total` before pagination, alongside
+ * the `limit` / `offset` that produced the page.
  * @param {import('fastify').FastifyInstance} fastify - Fastify instance.
  * @param {import('../../db/getDB.js').LigandsDB} db - Open ligands database.
  */
@@ -39,24 +32,6 @@ export function registerGetLigandsRoute(fastify, db) {
     const query = request.query ?? {};
     const limit = clampLimit(query.limit, DEFAULT_LIMIT, 1, 1000);
     const offset = parseOffset(query.offset);
-    const queryIdCode =
-      typeof query.substructure === 'string' && query.substructure.length > 0
-        ? query.substructure
-        : null;
-
-    const rawMode =
-      typeof query.mode === 'string' ? query.mode : 'substructure';
-    const mode = VALID_MODES.has(rawMode) ? rawMode : 'substructure';
-
-    const rawMinSimilarity = Number.parseFloat(query.minSimilarity);
-    const minSimilarity =
-      Number.isFinite(rawMinSimilarity) &&
-      rawMinSimilarity >= 0 &&
-      rawMinSimilarity <= 1
-        ? rawMinSimilarity
-        : 0;
-
-    const filter = buildLigandFilterWhere(parseLigandFilters(query));
 
     const codes =
       typeof query.codes === 'string' && query.codes.length > 0
@@ -65,61 +40,43 @@ export function registerGetLigandsRoute(fastify, db) {
             .map((code) => code.trim().toUpperCase())
             .filter(Boolean)
         : null;
-
     if (codes && codes.length > 0) {
-      // Dynamic IN-list size: SQL is built per-request.
-      const placeholders = codes.map(() => '?').join(',');
-      const ligands = db
-        .statement(
-          `SELECT ${LIGAND_COLUMNS},
-                  COALESCE((SELECT COUNT(*) FROM pdb_ligands p WHERE p.ligand_code = l.code), 0) AS nbPdbs
-           FROM ligands l
-           WHERE l.code IN (${placeholders})`,
-        )
-        .all(...codes);
-      return reply.send({
-        ligands,
-        total: ligands.length,
-        limit,
-        offset: 0,
-        stats: EMPTY_STATS,
-      });
+      return reply.send(selectByCodes(db, codes, limit));
     }
 
-    if (queryIdCode === null) {
-      const { n: total } = db
-        .statement(
-          `SELECT COUNT(*) AS n FROM ligands l WHERE 1 = 1${filter.clause}`,
-        )
-        .get(...filter.params);
-      const ligands = db
-        .statement(
-          `SELECT ${LIGAND_COLUMNS}, l.nb_pdbs AS nbPdbs
-           FROM ligands l
-           WHERE 1 = 1${filter.clause}
-           ORDER BY l.nb_pdbs DESC, l.code
-           LIMIT ? OFFSET ?`,
-        )
-        .all(...filter.params, limit, offset);
-      return reply.send({ ligands, total, limit, offset, stats: EMPTY_STATS });
+    let filter;
+    try {
+      filter = buildFilter(db, query.smart);
+    } catch (error) {
+      request.log.warn({ error: error.message }, 'Invalid ligand filter');
+      return reply.code(400).send({ error: 'invalid_filter' });
     }
+
+    const queryIdCode =
+      typeof query.substructure === 'string' && query.substructure.length > 0
+        ? query.substructure
+        : null;
+    const rawMode =
+      typeof query.mode === 'string' ? query.mode : 'substructure';
+    const rawMinSimilarity = Number.parseFloat(query.minSimilarity);
 
     try {
       const result = await ligandSearch({
         db,
         queryIdCode,
-        mode,
-        maxResults: SEARCH_CAP,
-        minSimilarity,
+        mode: VALID_MODES.has(rawMode) ? rawMode : 'substructure',
+        minSimilarity:
+          Number.isFinite(rawMinSimilarity) &&
+          rawMinSimilarity >= 0 &&
+          rawMinSimilarity <= 1
+            ? rawMinSimilarity
+            : 0,
         filter,
-      });
-      return reply.send({
-        ligands: result.ligands.slice(offset, offset + limit),
-        total: result.ligands.length,
+        sort: parseLigandSort(query),
         limit,
         offset,
-        stats: result.stats,
       });
+      return reply.send({ ...result, limit, offset });
     } catch (error) {
       request.log.warn({ error: error.message }, 'Structure search failed');
       return reply.code(400).send({ error: 'invalid_query' });
@@ -127,6 +84,50 @@ export function registerGetLigandsRoute(fastify, db) {
   });
 }
 
+/**
+ * Translate the `smart` query param into a WHERE condition over `ligands`.
+ * An absent or blank filter yields an empty condition, which the search reads
+ * as "no attribute filter".
+ * @param {import('../../db/getDB.js').LigandsDB} db - Open ligands database.
+ * @param {unknown} smart - The raw `smart` query param.
+ * @returns {{ where: string, values: Record<string, unknown> }} The filter.
+ */
+function buildFilter(db, smart) {
+  const expression = typeof smart === 'string' ? smart.trim() : '';
+  if (expression === '') return { where: '', values: {} };
+  return buildWhere(expression, db.db, { tableName: 'ligands' });
+}
+
+/**
+ * Fetch the canonical rows for an explicit list of ligand codes. Used to render
+ * the ligands of one PDB entry, so it never paginates.
+ * @param {import('../../db/getDB.js').LigandsDB} db - Open ligands database.
+ * @param {string[]} codes - Chemical-component codes.
+ * @param {number} limit - Echoed back to the caller.
+ * @returns {object} A ligands response covering exactly those codes.
+ */
+function selectByCodes(db, codes, limit) {
+  const ligands = db
+    .statement(
+      `SELECT l.code, l.name, l.mf, l.mw, l.id_code AS idCode, l.coordinates,
+              l.nb_pdbs AS nbPdbs
+       FROM json_each(:codes) wanted JOIN ligands l ON l.code = wanted.value`,
+    )
+    .all({ codes: JSON.stringify(codes) });
+  return {
+    ligands,
+    total: ligands.length,
+    limit,
+    offset: 0,
+    stats: EMPTY_STATS,
+  };
+}
+
+/**
+ * Parse the `offset` query param, clamping anything invalid to 0.
+ * @param {unknown} value - The raw `offset` query param.
+ * @returns {number} A non-negative offset.
+ */
 function parseOffset(value) {
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;

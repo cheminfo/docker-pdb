@@ -131,7 +131,8 @@ async function initDB() {
 /**
  * Instantiate the openchemlib-sqlite molecules wrapper against the `ligands`
  * table and apply its `migrate()` so the runtime-managed `ocl_ss_index`
- * fingerprint table exists. Called once per `DatabaseSync` connection.
+ * fingerprint table exists, and is upgraded in place when the library's schema
+ * version moved on. Called once per `DatabaseSync` connection.
  * @param {DatabaseSync} db - Open database connection to wrap.
  * @returns {MoleculesDBSQLite} The configured molecules-db instance.
  */
@@ -140,8 +141,34 @@ function buildMoleculesDB(db) {
     entriesTable: 'ligands',
     pkColumn: 'id',
     idCodeColumn: 'id_code',
+    // The index is clustered by molecular weight, so a substructure scan yields
+    // the lightest matches first and ranks results by mass proximity.
+    mwColumn: 'mw',
   });
-  molecules.migrate();
+  // Upgrading an existing index rewrites every row, which takes seconds on the
+  // full CCD — log it, or a startup that is working looks like one that hung.
+  molecules.migrate({
+    onMigration: ({
+      version,
+      description,
+      phase,
+      done,
+      total,
+      elapsedMs,
+      dropped,
+    }) => {
+      if (phase === 'progress') {
+        logger.info({ version, done, total }, 'Upgrading structure index');
+      } else if (phase === 'done') {
+        logger.info(
+          { version, description, elapsedMs, dropped },
+          'Structure index upgraded',
+        );
+      } else {
+        logger.info({ version, description }, 'Upgrading structure index');
+      }
+    },
+  });
   return molecules;
 }
 

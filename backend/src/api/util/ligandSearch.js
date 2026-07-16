@@ -1,112 +1,199 @@
+import { buildLigandOrderBy, usesSearchRanking } from './ligandSort.js';
+
+const LIGAND_COLUMNS = `l.code, l.name, l.mf, l.mw, l.id_code AS idCode,
+     l.coordinates, l.nb_pdbs AS nbPdbs`;
+
 /**
- * Unified chemical-structure search over the `ligands` table, powered by
- * `openchemlib-sqlite`. Three modes are supported:
+ * One page of ligands matching an attribute filter and/or a structure query,
+ * plus the exact number of matches.
  *
- * - `substructure`: 512-bit fingerprint prefilter + OCL SSSearcher verification.
- *   Results are sorted by ascending MW so the smallest matching fragments come first.
- * - `similarity`: Tanimoto fingerprint similarity. Results carry a `similarity` field
- *   (0–1) and are sorted by descending similarity score, then by ascending MW for
- *   equal scores. No threshold is applied by default, so the query always returns a
- *   ranked list rather than an empty one.
- * - `exact`: Exact structural match (ignoring H-count but not stereo). Results are
- *   sorted by descending PDB occurrence count.
+ * The attribute filter always runs **first**: it is handed to the structure
+ * searcher as a candidates subquery, so molecules the filter excludes are never
+ * parsed or graph-matched. That ordering is the whole performance story here —
+ * the filter costs a few milliseconds while the structure scan costs ~30 µs per
+ * candidate, so every ligand the filter removes is work the scan never does.
  * @param {{
  *   db: import('../../db/getDB.js').LigandsDB,
- *   queryIdCode: string,
+ *   queryIdCode: string | null,
  *   mode?: 'substructure' | 'similarity' | 'exact',
- *   maxResults?: number,
  *   minSimilarity?: number,
- *   filter?: { clause: string, params: Array<string | number> },
- * }} params - Search parameters. `minSimilarity` defaults to 0 (no threshold).
- *   `filter` is the attribute filter built by `buildLigandFilterWhere`; it is
- *   applied while hydrating the structural hits, so filtered-out ligands never
- *   reach the caller.
+ *   filter: { where: string, values: Record<string, unknown> },
+ *   sort: { column: string, direction: 'asc' | 'desc' } | null,
+ *   limit: number,
+ *   offset: number,
+ * }} params - Search parameters. `filter` comes from smart-sqlite3-filter's
+ *   `buildWhere`; an empty `where` means no attribute filter. `queryIdCode`
+ *   `null` lists ligands by attribute filter alone.
  * @returns {Promise<{
  *   ligands: Array<{ code: string, name: string, mf: string, mw: number, idCode: string, coordinates: string, nbPdbs: number, similarity?: number }>,
+ *   total: number,
  *   stats: { screened: number, verified: number, screeningMs: number, verificationMs: number, overLimit: boolean },
- * }>} Matching ligands and timing stats.
+ * }>} The requested page, the exact total, and search stats.
  */
 export async function ligandSearch({
   db,
   queryIdCode,
   mode = 'substructure',
-  maxResults = 200,
   minSimilarity = 0,
-  filter = { clause: '', params: [] },
+  filter,
+  sort,
+  limit,
+  offset,
 }) {
+  if (queryIdCode === null) {
+    return listLigands({ db, filter, sort, limit, offset });
+  }
+
   const start = performance.now();
+  const candidates = filter.where
+    ? {
+        sql: `SELECT id AS entry_id FROM ligands WHERE ${filter.where}`,
+        params: filter.values,
+      }
+    : undefined;
+
+  // With the searcher's own ranking, let it paginate: only the page's rows are
+  // hydrated. With an explicit sort, every hit is needed before they can be
+  // ordered, so ask for all of them and sort in SQL.
+  const paginateInSearch = usesSearchRanking(sort);
   const response = await db.molecules.search(queryIdCode, {
     mode,
     format: 'idCode',
-    // `limit` only slices the finished result set; `maxResults` is what stops
-    // the substructure scan early. Without it a common fragment (benzene)
-    // verifies all ~32k matches before slicing — 1.4s instead of 0.2s.
-    limit: maxResults,
-    maxResults,
+    ...(candidates ? { candidates } : {}),
     ...(mode === 'similarity' ? { similarityThreshold: minSimilarity } : {}),
+    ...(paginateInSearch ? { from: offset, limit } : {}),
   });
-  const elapsedMs = Math.round(performance.now() - start);
+  const screeningMs = Math.round(performance.now() - start);
 
-  // entryId is BigInt from openchemlib-sqlite; convert to Number for SQL.
-  const ids = response.results.map((result) => Number(result.entryId));
-  // True when the structural search itself was truncated to `maxResults` —
-  // computed before the attribute filter so it reports the search, not the
-  // filtered subset.
-  const overLimit = response.total > response.results.length;
-  if (ids.length === 0) {
-    return {
-      ligands: [],
-      stats: {
-        screened: response.screened ?? 0,
-        verified: 0,
-        screeningMs: elapsedMs,
-        verificationMs: 0,
-        overLimit,
-      },
-    };
-  }
-
-  // Map entryId → similarity score (only populated for similarity mode).
-  // entryId is a BigInt from openchemlib-sqlite; convert to Number so it
-  // matches the regular integer returned by node:sqlite for l.id.
-  const similarityById = new Map(
-    response.results
-      .filter((r) => r.similarity != null)
-      .map((r) => [Number(r.entryId), r.similarity]),
-  );
-
-  const placeholders = ids.map(() => '?').join(',');
-  const rows = db
-    .statement(
-      `SELECT l.id, l.code, l.name, l.mf, l.mw, l.id_code AS idCode, l.coordinates,
-              COALESCE((SELECT COUNT(*) FROM pdb_ligands p WHERE p.ligand_code = l.code), 0) AS nbPdbs
-       FROM ligands l WHERE l.id IN (${placeholders})${filter.clause}`,
-    )
-    .all(...ids, ...filter.params)
-    .map(({ id, ...rest }) => {
-      const sim = similarityById.get(id);
-      return sim != null ? { ...rest, similarity: sim } : rest;
-    });
-
-  let ligands;
-  if (mode === 'similarity') {
-    ligands = rows.toSorted(
-      (a, b) => (b.similarity ?? 0) - (a.similarity ?? 0) || a.mw - b.mw,
-    );
-  } else if (mode === 'substructure') {
-    ligands = rows.toSorted((a, b) => a.mw - b.mw);
-  } else {
-    ligands = rows.toSorted((a, b) => b.nbPdbs - a.nbPdbs);
-  }
+  const hydrationStart = performance.now();
+  const ligands = paginateInSearch
+    ? hydrateRanked(db, response.results)
+    : hydrateSorted(db, response.results, sort, limit, offset);
+  const verificationMs = Math.round(performance.now() - hydrationStart);
 
   return {
     ligands,
+    total: response.total,
     stats: {
       screened: response.screened ?? 0,
-      verified: ligands.length,
-      screeningMs: elapsedMs,
-      verificationMs: 0,
-      overLimit,
+      verified: response.total,
+      screeningMs,
+      verificationMs,
+      // `partial` means the scan stopped early (timeout / maxCandidates), so
+      // `total` is a floor rather than the exact count.
+      overLimit: response.partial ?? false,
     },
   };
+}
+
+/**
+ * List ligands by attribute filter alone — no structure query. One indexed
+ * statement for the page, one for the exact total.
+ * @param {{ db: import('../../db/getDB.js').LigandsDB, filter: object, sort: object | null, limit: number, offset: number }} params - Listing parameters.
+ * @returns {Promise<object>} The page, the exact total, and zeroed search stats.
+ */
+function listLigands({ db, filter, sort, limit, offset }) {
+  const where = filter.where || '1 = 1';
+  const { n: total } = db
+    .statement(`SELECT COUNT(*) AS n FROM ligands l WHERE ${where}`)
+    .get(filter.values);
+  const ligands = db
+    .statement(
+      `SELECT ${LIGAND_COLUMNS} FROM ligands l WHERE ${where}
+       ORDER BY ${buildLigandOrderBy(sort)} LIMIT :limit OFFSET :offset`,
+    )
+    .all({ ...filter.values, limit, offset });
+  return Promise.resolve({
+    ligands,
+    total,
+    stats: {
+      screened: 0,
+      verified: total,
+      screeningMs: 0,
+      verificationMs: 0,
+      overLimit: false,
+    },
+  });
+}
+
+/**
+ * Hydrate one page of structure hits, preserving the searcher's own ranking
+ * (mass proximity for substructure, score for similarity).
+ * @param {import('../../db/getDB.js').LigandsDB} db - Open ligands database.
+ * @param {Array<{ entryId: number, similarity?: number }>} results - The page's hits, in order.
+ * @returns {object[]} Hydrated ligand rows, in the same order.
+ */
+function hydrateRanked(db, results) {
+  if (results.length === 0) return [];
+  const ids = new Array(results.length);
+  for (let i = 0; i < results.length; i++) ids[i] = results[i].entryId;
+
+  const rows = db
+    .statement(
+      `SELECT l.id, ${LIGAND_COLUMNS}
+       FROM json_each(:ids) hit JOIN ligands l ON l.id = hit.value`,
+    )
+    .all({ ids: JSON.stringify(ids) });
+
+  const byId = new Map();
+  for (const row of rows) byId.set(row.id, row);
+  const ligands = [];
+  for (const result of results) {
+    const row = byId.get(result.entryId);
+    if (row === undefined) continue;
+    ligands.push(withSimilarity(row, result.similarity));
+  }
+  return ligands;
+}
+
+/**
+ * Sort every structure hit by a ligand column and return one page of it.
+ * The hit ids are handed to SQLite as a JSON array, so the statement text is
+ * fixed — and stays cached — however many hits there are.
+ * @param {import('../../db/getDB.js').LigandsDB} db - Open ligands database.
+ * @param {Array<{ entryId: number, similarity?: number }>} results - Every hit.
+ * @param {{ column: string, direction: 'asc' | 'desc' }} sort - The requested sort.
+ * @param {number} limit - Page size.
+ * @param {number} offset - Rows to skip.
+ * @returns {object[]} Hydrated ligand rows for the requested page.
+ */
+function hydrateSorted(db, results, sort, limit, offset) {
+  if (results.length === 0) return [];
+  const similarityById = new Map();
+  const ids = new Array(results.length);
+  for (let i = 0; i < results.length; i++) {
+    const result = results[i];
+    ids[i] = result.entryId;
+    if (result.similarity != null) {
+      similarityById.set(result.entryId, result.similarity);
+    }
+  }
+
+  const rows = db
+    .statement(
+      `SELECT l.id, ${LIGAND_COLUMNS}
+       FROM json_each(:ids) hit JOIN ligands l ON l.id = hit.value
+       ORDER BY ${buildLigandOrderBy(sort)} LIMIT :limit OFFSET :offset`,
+    )
+    .all({ ids: JSON.stringify(ids), limit, offset });
+
+  const ligands = new Array(rows.length);
+  for (let i = 0; i < rows.length; i++) {
+    ligands[i] = withSimilarity(rows[i], similarityById.get(rows[i].id));
+  }
+  return ligands;
+}
+
+/**
+ * Drop the internal `id` — it is only needed to join the searcher's hits back
+ * to their rows — and attach a similarity score when there is one.
+ * @param {object} row - A hydrated ligand row including its `id`.
+ * @param {number | undefined} similarity - Tanimoto score, in similarity mode.
+ * @returns {object} The API-shaped ligand row.
+ */
+function withSimilarity(row, similarity) {
+  const ligand = { ...row };
+  delete ligand.id;
+  if (similarity != null) ligand.similarity = similarity;
+  return ligand;
 }

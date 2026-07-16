@@ -488,22 +488,13 @@ export interface LigandSearchStats {
   overLimit: boolean;
 }
 
-/**
- * Attribute filters accepted by `GET /v1/ligands`, applied on top of the
- * optional structure query. `code`, `name` and `mf` match as case-insensitive
- * substrings.
- */
-export interface LigandFilters {
-  /** Substring of the 3-letter chemical-component code. */
-  code?: string;
-  /** Substring of the chemical name. */
-  name?: string;
-  /** Substring of the molecular formula. */
-  mf?: string;
-  /** Lower bound on the molecular weight, in g/mol. */
-  mwMin?: number;
-  /** Upper bound on the molecular weight, in g/mol. */
-  mwMax?: number;
+/** Ligand columns the server can sort on. */
+export type LigandSortColumn = 'code' | 'name' | 'mf' | 'mw' | 'nbPdbs';
+
+/** An explicit column sort. Absent means the default most-referenced ranking. */
+export interface LigandSort {
+  column: LigandSortColumn;
+  direction: 'asc' | 'desc';
 }
 
 /** Response of `GET /v1/ligands?substructure=...`. */
