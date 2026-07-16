@@ -255,6 +255,24 @@ test('every page the pager offers holds rows, capped or not', async () => {
   expect(lastPage.ligands.length).toBeGreaterThan(0);
 });
 
+test('an empty fragment is not a query — it lists, it does not scan', async () => {
+  // `dH` is the idCode of an empty fragment. It must be treated as "no query",
+  // not as a substructure that matches every ligand.
+  const body = await get('/v1/ligands?substructure=dH&mode=substructure');
+
+  expect(codesOf(body)).toStrictEqual(['HEX', 'TOL', 'ANI', 'PHE', 'BEN']);
+  expect(body.total).toBe(5);
+  // A real scan would have screened candidates; listing screens none.
+  expect(body.stats.screened).toBe(0);
+});
+
+test('an empty plain molecule (d@) is not a query either', async () => {
+  const body = await get('/v1/ligands?substructure=d@&mode=substructure');
+
+  expect(body.total).toBe(5);
+  expect(body.stats.screened).toBe(0);
+});
+
 test('codes: fetches an explicit list, unpaginated', async () => {
   const body = await get('/v1/ligands?codes=TOL,BEN');
 

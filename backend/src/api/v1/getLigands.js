@@ -1,3 +1,4 @@
+import OCL from 'openchemlib';
 import { buildWhere } from 'smart-sqlite3-filter';
 
 import { clampLimit } from '../util/clampLimit.js';
@@ -52,10 +53,7 @@ export function registerGetLigandsRoute(fastify, db) {
       return reply.code(400).send({ error: 'invalid_filter' });
     }
 
-    const queryIdCode =
-      typeof query.substructure === 'string' && query.substructure.length > 0
-        ? query.substructure
-        : null;
+    const queryIdCode = resolveStructureQuery(query.substructure);
     const rawMode =
       typeof query.mode === 'string' ? query.mode : 'substructure';
     const rawMinSimilarity = Number.parseFloat(query.minSimilarity);
@@ -82,6 +80,31 @@ export function registerGetLigandsRoute(fastify, db) {
       return reply.code(400).send({ error: 'invalid_query' });
     }
   });
+}
+
+/**
+ * Resolve the `substructure` query param to a usable query idCode, or `null`.
+ *
+ * An empty structure is treated as no query. An empty fragment is contained in
+ * every molecule, so passing one to the searcher would scan the whole CCD and
+ * bill it as "substructure matches" — the guard the frontend also applies, kept
+ * here so a third-party caller cannot trip it. The empty-molecule idCode varies
+ * (`d@`, `dH`, more with coordinates), so the atom count decides, not the code.
+ * A non-empty but unparseable idCode is passed through unchanged for the search
+ * to reject with a 400.
+ * @param {unknown} substructure - The raw `substructure` query param.
+ * @returns {string | null} The query idCode, or `null` for no structure query.
+ */
+function resolveStructureQuery(substructure) {
+  if (typeof substructure !== 'string' || substructure.length === 0) {
+    return null;
+  }
+  try {
+    if (OCL.Molecule.fromIDCode(substructure).getAllAtoms() === 0) return null;
+  } catch {
+    // Unparseable: let the search path surface a 400 rather than silently list.
+  }
+  return substructure;
 }
 
 /**

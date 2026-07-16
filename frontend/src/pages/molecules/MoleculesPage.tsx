@@ -137,10 +137,12 @@ export default function MoleculesPage() {
   // Each handler raises `searching` as it changes what to search for, so the
   // indicator appears the instant the user acts rather than a frame later.
   const handleEditorChange = useCallback<OnChangeMoleculeCallback>((event) => {
-    const idCode = event.getIdcode();
-    // OCL emits an empty-molecule idCode (`d@`) when the canvas is cleared.
-    const next = idCode && idCode !== 'd@' && idCode !== 'd@@' ? idCode : null;
-    setQueryIdCode(next);
+    // An empty canvas must NOT become a query: an empty fragment is contained in
+    // every molecule, so it would run a substructure scan over the whole CCD.
+    // The empty-molecule idCode varies (`d@` for a plain molecule, `dH` for a
+    // fragment, more with coordinates), so gate on the atom count, not the code.
+    const hasAtoms = event.getMolecule().getAllAtoms() > 0;
+    setQueryIdCode(hasAtoms ? event.getIdcode() : null);
     setOffset(0);
     setSearching(true);
   }, []);
