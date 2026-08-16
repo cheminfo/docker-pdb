@@ -1,0 +1,13 @@
+User-agent: *
+Allow: /
+# The JSON API is a set of endpoints, not pages.
+Disallow: /v1/
+Disallow: /pdb/
+Disallow: /pdbs
+Disallow: /assembly/
+Disallow: /assemblies/
+Disallow: /stats/
+Disallow: /view/
+Disallow: /find/
+
+Sitemap: https://pdb.cheminfo.org/sitemap.xml

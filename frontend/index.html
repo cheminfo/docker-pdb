@@ -4,10 +4,74 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <title>pdb.cheminfo — a fast look at any Protein Data Bank entry</title>
+    <meta name="theme-color" content="#2563eb" />
+    <!-- The title, the description, the canonical address and the social card
+         are rewritten per page by the server; these are what a build served on
+         its own carries. -->
+    <title>A fast look at any Protein Data Bank entry</title>
+    <meta
+      name="description"
+      content="Open any Protein Data Bank entry by its identifier and see its chains, its ligands and its assemblies at once — from a local mirror, in the browser."
+    />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "pdb.cheminfo.org",
+        "url": "https://pdb.cheminfo.org/",
+        "applicationCategory": "ScienceApplication",
+        "operatingSystem": "Any",
+        "browserRequirements": "Requires JavaScript",
+        "description": "Open any Protein Data Bank entry by its identifier and see its chains, its ligands and its assemblies at once, from a local mirror kept in step with the archive.",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
+        "isAccessibleForFree": true,
+        "publisher": { "@type": "Organization", "name": "cheminfo" }
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <h1>pdb.cheminfo.org — a fast look at any Protein Data Bank entry</h1>
+      <p>
+        Open any Protein Data Bank entry by its identifier and see its chains,
+        its ligands and its assemblies at once, from a mirror kept in step with
+        the archive. The site itself needs JavaScript; the JSON API does not.
+      </p>
+      <ul>
+        <li><a href="/browse">Browse — search and filter every entry</a></li>
+        <li><a href="/molecules">Ligands — every chemical component</a></li>
+        <li><a href="/scripting">Scripting — run code over a structure</a></li>
+        <li><a href="/stats">Statistics — what the archive holds</a></li>
+        <li><a href="/api">API — every entry as JSON</a></li>
+        <li><a href="/about">About, and what to cite</a></li>
+      </ul>
+      <h2>Our other tools</h2>
+      <ul>
+        <li><a href="https://inchi.cheminfo.org/">inchi.cheminfo.org</a></li>
+        <li><a href="https://vcl.cheminfo.org/">vcl.cheminfo.org</a></li>
+        <li><a href="https://smiles.cheminfo.org/">smiles.cheminfo.org</a></li>
+        <li><a href="https://www.chemcalc.org/">www.chemcalc.org</a></li>
+        <li><a href="https://www.nmrium.org/">www.nmrium.org</a></li>
+        <li><a href="https://surge.cheminfo.org/">surge.cheminfo.org</a></li>
+        <li><a href="https://tex.cheminfo.org/">tex.cheminfo.org</a></li>
+        <li><a href="https://lcao.cheminfo.org/">lcao.cheminfo.org</a></li>
+        <li><a href="https://regexp.cheminfo.org/">regexp.cheminfo.org</a></li>
+        <li>
+          <a href="https://elucidation.cheminfo.org/"
+            >elucidation.cheminfo.org</a
+          >
+        </li>
+        <li>
+          <a href="https://equilibrium.cheminfo.org/"
+            >equilibrium.cheminfo.org</a
+          >
+        </li>
+        <li>
+          <a href="https://polycarp.cheminfo.org/">polycarp.cheminfo.org</a>
+        </li>
+      </ul>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

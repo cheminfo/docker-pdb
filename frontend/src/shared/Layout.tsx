@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { CiteButton, EcosystemButton } from 'react-cheminfo/ui';
+import { CiteButton, EcosystemButton, EcosystemLinks } from 'react-cheminfo/ui';
 import { Link, NavLink } from 'react-router';
 
 import { BrandMark, Wordmark } from './Brand.tsx';
@@ -60,6 +60,11 @@ export default function Layout({ children }: LayoutProps) {
       </header>
       <SeedingBanner />
       <main className="app-main">{children}</main>
+      <footer className="app-footer no-print">
+        <div className="app-footer__inner">
+          <EcosystemLinks currentSiteId="pdb" />
+        </div>
+      </footer>
     </div>
   );
 }
