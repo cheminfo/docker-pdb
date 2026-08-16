@@ -1,6 +1,9 @@
 .claude
 .DS_Store
 .env
+
+# State the server's deploy script keeps inside the checkout it deploys.
+.deploy
 docs/
 compose.yaml.local.bak
 coverage/

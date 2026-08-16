@@ -2,7 +2,7 @@ services:
   node-pdb-sync:
     # Use the released image by default. To build locally instead, run:
     #   docker compose up -d --build
-    image: ghcr.io/cheminfo/pdb-quickview:latest
+    image: ${IMAGE_NAME:-ghcr.io/cheminfo/pdb-quickview}:${IMAGE_TAG:-latest}
     build: .
     volumes:
       - ./data:/app/data:z
@@ -59,7 +59,7 @@ services:
     # if the `ligands` table is empty.
     # Use the released image by default. To build locally instead, run:
     #   docker compose up -d --build
-    image: ghcr.io/cheminfo/pdb-quickview:latest
+    image: ${IMAGE_NAME:-ghcr.io/cheminfo/pdb-quickview}:${IMAGE_TAG:-latest}
     build: .
     ports:
       # Falls back to the in-container port so an .env without PUBLIC_PORT
@@ -123,7 +123,7 @@ services:
     # entries through openchemlib and can briefly use >1 GiB of heap —
     # under tight cgroup limits the kernel OOM-killed it silently, which
     # is why we set a generous `mem_limit` here.
-    image: ghcr.io/cheminfo/pdb-quickview:latest
+    image: ${IMAGE_NAME:-ghcr.io/cheminfo/pdb-quickview}:${IMAGE_TAG:-latest}
     build: .
     volumes:
       - ./data:/app/data:z
@@ -155,7 +155,7 @@ services:
     pids_limit: 1024
     mem_limit: 8g
     memswap_limit: 8g
-    cpus: '2'
+    cpus: 2
     ulimits:
       core: 0
     logging:
