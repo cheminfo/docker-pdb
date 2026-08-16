@@ -1,7 +1,7 @@
 import { Card } from '@blueprintjs/core';
 
 /**
- * About page mounted at `/about`. Explains what `pdb-quickview` is, links
+ * About page mounted at `/about`. Explains what pdb.cheminfo.org is, links
  * to the upstream wwPDB resources it mirrors, and lists the citations the
  * wwPDB asks downstream consumers to use when publishing work that relies
  * on PDB data.
@@ -11,9 +11,7 @@ export default function AboutPage() {
   return (
     <div className="container about-page">
       <header>
-        <h1>
-          About PDB <em>quick</em> View
-        </h1>
+        <h1>About pdb.cheminfo.org</h1>
         <p>
           A self-hosted, fast, read-only mirror of the worldwide Protein Data
           Bank. Every entry is parsed once into SQLite and rendered once into
@@ -58,10 +56,10 @@ export default function AboutPage() {
       <h2>Acknowledgements</h2>
       <Card className="panel about-panel">
         <p>
-          PDB <em>quick</em> View would not exist without the decades of work
-          done by the wwPDB partner organizations, who curate, validate, and
-          freely distribute every entry in the archive. We are deeply grateful
-          for that ongoing effort. Please visit and support them directly:
+          pdb.cheminfo.org would not exist without the decades of work done by
+          the wwPDB partner organizations, who curate, validate, and freely
+          distribute every entry in the archive. We are deeply grateful for that
+          ongoing effort. Please visit and support them directly:
         </p>
         <ul className="about-links">
           <li>
@@ -156,9 +154,9 @@ export default function AboutPage() {
       <h2>How to cite</h2>
       <Card className="panel about-panel">
         <p>
-          If you use data obtained through PDB <em>quick</em> View in a
-          publication, you must cite the underlying wwPDB archive — not this
-          site. The wwPDB asks that the following references be used:
+          If you use data obtained through pdb.cheminfo.org in a publication,
+          you must cite the underlying wwPDB archive — not this site. The wwPDB
+          asks that the following references be used:
         </p>
         <ol className="about-citations">
           <li>

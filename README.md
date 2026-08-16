@@ -172,8 +172,8 @@ Under the hood it:
    (falling back to your local rsync tree under `data/pdb/` when present).
 2. Starts the Fastify API on `http://localhost:31015` under `node --watch`,
    so backend file changes restart the server with a clean database.
-3. Starts the Vite dev server (frontend), which proxies every `/v1/...`
-   call to the API:
+3. Starts the Vite dev server (frontend) on `http://localhost:31016`, which
+   proxies every `/v1/...` call to the API:
 
 ```sh
 curl http://localhost:31015/v1/database/info

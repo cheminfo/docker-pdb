@@ -1,63 +1,63 @@
-import { Navbar, Tab, Tabs } from '@blueprintjs/core';
 import type { ReactNode } from 'react';
-import { useLocation, useNavigate } from 'react-router';
+import { CiteButton, EcosystemButton } from 'react-cheminfo/ui';
+import { Link, NavLink } from 'react-router';
 
+import { BrandMark, Wordmark } from './Brand.tsx';
 import SeedingBanner from './SeedingBanner.tsx';
+import { PAPER } from './paper.ts';
 
 interface LayoutProps {
   children: ReactNode;
 }
 
-const NAV_TABS = [
-  { id: '/', label: 'Home' },
-  { id: '/browse', label: 'Browse' },
-  { id: '/scripting', label: 'Scripting' },
-  { id: '/molecules', label: 'Molecules' },
-  { id: '/stats', label: 'Stats' },
-  { id: '/api', label: 'API' },
-  { id: '/settings', label: 'Settings' },
-  { id: '/about', label: 'About' },
+const PAGES = [
+  { to: '/', label: 'Home' },
+  { to: '/browse', label: 'Browse' },
+  { to: '/scripting', label: 'Scripting' },
+  { to: '/molecules', label: 'Molecules' },
+  { to: '/stats', label: 'Stats' },
+  { to: '/api', label: 'API' },
+  { to: '/settings', label: 'Settings' },
+  { to: '/about', label: 'About' },
 ] as const;
 
 /**
- * Application shell with a Blueprint Navbar (brand + tabs) and the routed page below it.
+ * Application shell: the header every *.cheminfo.org site carries — the brand
+ * linking home, the pages next to it, and the utilities pushed right — with
+ * the routed page below it.
  * @param props - Component props.
- * @param props.children - Page content rendered below the nav bar.
+ * @param props.children - Page content rendered below the header.
  * @returns The shell element wrapping the active route.
  */
 export default function Layout({ children }: LayoutProps) {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const activeTab =
-    NAV_TABS.find(
-      (tab) => tab.id !== '/' && location.pathname.startsWith(tab.id),
-    )?.id ?? '/';
-
   return (
     <div className="app-shell">
-      <Navbar className="topnav">
-        <Navbar.Group>
-          <Navbar.Heading className="topnav-brand">
-            <img src="/logo.svg" alt="" className="topnav-logo" />
-            <span>
-              PDB <em>quick</em> View
-            </span>
-          </Navbar.Heading>
-          <Navbar.Divider />
-          <Tabs
-            id="topnav-tabs"
-            selectedTabId={activeTab}
-            onChange={(tabId) => {
-              void navigate(tabId as string);
-            }}
-            size="large"
-          >
-            {NAV_TABS.map((tab) => (
-              <Tab key={tab.id} id={tab.id} title={tab.label} />
+      <header className="app-header">
+        <div className="app-header__inner">
+          <Link to="/" className="brand" title="pdb.cheminfo.org">
+            <BrandMark />
+            <Wordmark />
+          </Link>
+          <nav className="app-header-nav">
+            {PAGES.map((page) => (
+              <NavLink
+                key={page.to}
+                to={page.to}
+                end={page.to === '/'}
+                className={({ isActive }) =>
+                  isActive ? 'nav-link nav-link--active' : 'nav-link'
+                }
+              >
+                {page.label}
+              </NavLink>
             ))}
-          </Tabs>
-        </Navbar.Group>
-      </Navbar>
+          </nav>
+          <div className="app-header-actions">
+            <CiteButton reference={PAPER} />
+            <EcosystemButton currentSiteId="pdb" />
+          </div>
+        </div>
+      </header>
       <SeedingBanner />
       <main className="app-main">{children}</main>
     </div>

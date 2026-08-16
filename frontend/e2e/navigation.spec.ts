@@ -6,31 +6,53 @@ test.beforeEach(async ({ page }) => {
   await mockApi(page);
 });
 
-test('top nav exposes Home, Browse and API tabs', async ({ page }) => {
+test('site header exposes Home, Browse and API pages', async ({ page }) => {
   await page.goto('/');
-  const nav = page.locator('.topnav');
-  await expect(nav.getByRole('tab', { name: 'Home' })).toBeVisible();
-  await expect(nav.getByRole('tab', { name: 'Browse' })).toBeVisible();
-  await expect(nav.getByRole('tab', { name: 'API' })).toBeVisible();
+  const nav = page.locator('.app-header-nav');
+  await expect(
+    nav.getByRole('link', { name: 'Home', exact: true }),
+  ).toBeVisible();
+  await expect(
+    nav.getByRole('link', { name: 'Browse', exact: true }),
+  ).toBeVisible();
+  await expect(
+    nav.getByRole('link', { name: 'API', exact: true }),
+  ).toBeVisible();
 });
 
-test('clicking the Browse tab navigates to /browse', async ({ page }) => {
+test('the header carries the Cite and Tools utilities', async ({ page }) => {
   await page.goto('/');
-  await page.locator('.topnav').getByRole('tab', { name: 'Browse' }).click();
+  const actions = page.locator('.app-header-actions');
+  await expect(actions.getByRole('button', { name: 'Cite' })).toBeVisible();
+  await expect(actions.getByRole('button', { name: 'Tools' })).toBeVisible();
+});
+
+test('clicking Browse navigates to /browse', async ({ page }) => {
+  await page.goto('/');
+  await page
+    .locator('.app-header-nav')
+    .getByRole('link', { name: 'Browse', exact: true })
+    .click();
   await expect(page).toHaveURL(/\/browse/);
   await expect(page.getByPlaceholder('Search titles…')).toBeVisible();
 });
 
-test('clicking the API tab navigates to /api', async ({ page }) => {
+test('clicking API navigates to /api', async ({ page }) => {
   await page.goto('/');
-  await page.locator('.topnav').getByRole('tab', { name: 'API' }).click();
+  await page
+    .locator('.app-header-nav')
+    .getByRole('link', { name: 'API', exact: true })
+    .click();
   await expect(page).toHaveURL(/\/api/);
   await expect(page.getByRole('heading', { name: 'HTTP API' })).toBeVisible();
 });
 
-test('clicking the Home tab returns to /', async ({ page }) => {
+test('clicking Home returns to /', async ({ page }) => {
   await page.goto('/api');
-  await page.locator('.topnav').getByRole('tab', { name: 'Home' }).click();
+  await page
+    .locator('.app-header-nav')
+    .getByRole('link', { name: 'Home', exact: true })
+    .click();
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole('heading', { name: 'Statistics' })).toBeVisible();
 });

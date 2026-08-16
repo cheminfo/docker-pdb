@@ -85,9 +85,7 @@ export default function HomePage() {
   return (
     <div className="container">
       <header>
-        <h1>
-          PDB <em>quick</em> View
-        </h1>
+        <h1>A fast look at any Protein Data Bank entry</h1>
         <p>
           A self-hosted, fast read-only mirror of the worldwide Protein Data
           Bank. Every entry is parsed once into SQLite and rendered once with
