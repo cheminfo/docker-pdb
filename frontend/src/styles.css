@@ -16,6 +16,7 @@
   --shadow-lg: 0 12px 32px rgb(16 32 48 / 16%);
 
   --header-height: 3.5rem;
+  --page-max: 84rem;
 
   /* The two colours this site owns: the residues of a binding site, and the
      ligand they hold. */
@@ -51,7 +52,6 @@ html,
 body,
 #root {
   margin: 0;
-  height: 100%;
 }
 
 body {
@@ -75,8 +75,7 @@ button {
 .app-shell {
   display: flex;
   flex-direction: column;
-  height: 100%;
-  overflow: hidden;
+  min-height: 100dvh;
 }
 
 .app-main {
@@ -84,17 +83,26 @@ button {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  overflow: auto;
+}
+
+/* Browse and Scripting size a viewer and their splitters to the window, so
+   they take one screenful and scroll inside it. Every other page — and the
+   footer on all of them — stays in the document flow. */
+.app-main:has(.browse-container),
+.app-main:has(.scripting-page) {
+  /* `flex: 1` resolves to a zero basis, which would win over the height. */
+  flex: 0 0 auto;
+  height: calc(100dvh - var(--header-height));
+  overflow: hidden;
 }
 
 /* On phones, let the page scroll naturally so a long entry isn't cramped
    inside two stacked overflow regions. */
 @media (max-width: 720px) {
-  .app-shell {
+  .app-main:has(.browse-container),
+  .app-main:has(.scripting-page) {
+    flex: 1;
     height: auto;
-    overflow: visible;
-  }
-  .app-main {
     overflow: visible;
   }
 }
@@ -2031,10 +2039,6 @@ code {
 }
 
 /* --- Scripting page --------------------------------------------------- */
-
-.app-main:has(.scripting-page) {
-  overflow: hidden;
-}
 
 .scripting-page {
   display: flex;
