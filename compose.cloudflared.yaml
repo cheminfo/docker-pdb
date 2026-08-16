@@ -12,7 +12,7 @@ services:
   node-pdb-sync:
     # Use the released image by default. To build locally instead, run:
     #   docker compose up -d --build
-    image: ${IMAGE_NAME:-ghcr.io/cheminfo/pdb-quickview}:${IMAGE_TAG:-latest}
+    image: ${IMAGE_NAME:-ghcr.io/cheminfo/pdb.cheminfo.org}:${IMAGE_TAG:-latest}
     build: .
     volumes:
       - ./data:/app/data:z
@@ -70,7 +70,7 @@ services:
     # if the `ligands` table is empty.
     # Use the released image by default. To build locally instead, run:
     #   docker compose up -d --build
-    image: ${IMAGE_NAME:-ghcr.io/cheminfo/pdb-quickview}:${IMAGE_TAG:-latest}
+    image: ${IMAGE_NAME:-ghcr.io/cheminfo/pdb.cheminfo.org}:${IMAGE_TAG:-latest}
     build: .
     volumes:
       - ./data:/app/data:z
@@ -129,7 +129,7 @@ services:
     # of the time, but the import phase synchronously parses ~40k CCD
     # entries through openchemlib and can briefly use >1 GiB of heap —
     # the generous mem_limit keeps it well clear of the OOM-killer.
-    image: ${IMAGE_NAME:-ghcr.io/cheminfo/pdb-quickview}:${IMAGE_TAG:-latest}
+    image: ${IMAGE_NAME:-ghcr.io/cheminfo/pdb.cheminfo.org}:${IMAGE_TAG:-latest}
     build: .
     volumes:
       - ./data:/app/data:z

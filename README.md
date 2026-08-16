@@ -1,4 +1,4 @@
-# pdb-quickview
+# pdb.cheminfo.org
 
 A self-hosted, **fast** read-only mirror of the [worldwide Protein Data
 Bank](https://www.wwpdb.org/). Every entry is parsed once into SQLite and
@@ -52,7 +52,7 @@ cp .env.example .env
 ```
 
 By default, every mode pulls the released image
-`ghcr.io/cheminfo/pdb-quickview:latest`. To build the image locally instead,
+`ghcr.io/cheminfo/pdb.cheminfo.org:latest`. To build the image locally instead,
 add `--build`:
 
 ```sh

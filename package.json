@@ -10,11 +10,11 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/cheminfo/pdb-quickview.git"
+    "url": "git+https://github.com/cheminfo/pdb.cheminfo.org.git"
   },
-  "homepage": "https://github.com/cheminfo/pdb-quickview#readme",
+  "homepage": "https://github.com/cheminfo/pdb.cheminfo.org#readme",
   "bugs": {
-    "url": "https://github.com/cheminfo/pdb-quickview/issues"
+    "url": "https://github.com/cheminfo/pdb.cheminfo.org/issues"
   },
   "keywords": [
     "pdb",
