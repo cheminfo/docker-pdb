@@ -1,4 +1,4 @@
-import { Button, HTMLTable, InputGroup, Popover } from '@blueprintjs/core';
+import { Button, HTMLTable, InputGroup, PopoverNext } from '@blueprintjs/core';
 import type { Ref } from 'react';
 
 interface SearchBoxProps {
@@ -48,7 +48,7 @@ export default function SearchBox({ value, onChange }: SearchBoxProps) {
       spellCheck={false}
       autoComplete="off"
       rightElement={
-        <Popover
+        <PopoverNext
           placement="bottom-end"
           content={<HelpContent />}
           renderTarget={({ isOpen, ref, ...targetProps }) => (

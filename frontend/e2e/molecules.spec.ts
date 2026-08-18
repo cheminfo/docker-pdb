@@ -9,7 +9,9 @@ test.beforeEach(async ({ page }) => {
 test('the Molecules nav tab is exposed', async ({ page }) => {
   await page.goto('/');
   await expect(
-    page.locator('.topnav').getByRole('tab', { name: 'Molecules' }),
+    page
+      .locator('.app-header-nav')
+      .getByRole('link', { name: 'Molecules', exact: true }),
   ).toBeVisible();
 });
 
