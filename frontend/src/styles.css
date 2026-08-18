@@ -1,23 +1,7 @@
+/* The neutrals, the geometry, the type, the bar and the footer of the family. */
+@import 'react-cheminfo/styles/chrome.css';
+
 :root {
-  /* Neutrals, geometry and type shared by every *.cheminfo.org site. */
-  --surface: #ffffff;
-  --surface-sunken: #f5f7fa;
-  --surface-raised: #ffffff;
-  --border: #dfe3e8;
-  --border-strong: #c3cad3;
-  --text: #16202c;
-  --text-muted: #5b6875;
-  --text-faint: #8a96a3;
-
-  --radius: 10px;
-  --radius-lg: 16px;
-  --shadow-sm: 0 1px 2px rgb(16 32 48 / 8%);
-  --shadow-md: 0 4px 14px rgb(16 32 48 / 10%);
-  --shadow-lg: 0 12px 32px rgb(16 32 48 / 16%);
-
-  --header-height: 3.5rem;
-  --page-max: 84rem;
-
   /* The two colours this site owns: the residues of a binding site, and the
      ligand they hold. */
   --brand: #2563eb;
@@ -55,21 +39,8 @@ body,
 }
 
 body {
-  font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial,
-    sans-serif;
-  font-size: 15px;
   color: var(--text);
   background: var(--surface-sunken);
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
-}
-
-input,
-textarea,
-select,
-button {
-  font-family: inherit;
 }
 
 .app-shell {
@@ -652,108 +623,6 @@ code {
 }
 
 /* --- Site header ------------------------------------------------------ */
-
-.app-header {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  flex-shrink: 0;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-}
-
-.app-header__inner {
-  display: flex;
-  height: var(--header-height);
-  align-items: center;
-  gap: 1rem;
-  padding: 0 1.25rem;
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 0.55rem;
-  color: var(--text);
-  font-weight: 700;
-}
-
-.brand:hover {
-  color: var(--text);
-  text-decoration: none;
-}
-
-.brand-mark {
-  display: block;
-  flex: none;
-}
-
-.wordmark {
-  font-size: 1.0625rem;
-  letter-spacing: -0.01em;
-  white-space: nowrap;
-}
-
-.wordmark__lead {
-  color: var(--brand);
-}
-
-.wordmark__dot {
-  color: var(--text-faint);
-}
-
-.wordmark__alt {
-  color: var(--brand-alt-text);
-}
-
-/* The pages sit next to the brand and scroll on a narrow window; the utilities
-   keep the right edge, so Cite and Tools are where they are on every site. */
-.app-header-nav {
-  display: flex;
-  flex: 1 1 auto;
-  min-width: 0;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 0.15rem;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: thin;
-}
-
-.app-header-actions {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 0.15rem;
-}
-
-.nav-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.4rem 0.7rem;
-  border: 0;
-  border-radius: 8px;
-  background: none;
-  color: var(--text-muted);
-  font-size: 0.875rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.nav-link:hover {
-  background: var(--surface-sunken);
-  color: var(--text);
-  text-decoration: none;
-}
-
-/* The brand colour is what says "you are here", so hovering never impersonates
-   the page you are on. */
-.nav-link--active,
-.nav-link--active:hover {
-  background: color-mix(in oklab, var(--accent) 12%, white);
-  color: var(--accent);
-}
 
 /* --- Browse page ------------------------------------------------------ */
 
@@ -3012,16 +2881,8 @@ code {
   gap: 6px;
 }
 
-/* The family, in the page rather than only behind the Tools button: this is
-   what lets a crawler — and a reader — walk from one of our tools to the next. */
+/* The family strip is drawn by the shared chrome; the page only sets it off
+   from the content above it. */
 .app-footer {
-  border-top: 1px solid var(--border);
   margin-top: 2rem;
-  background: var(--surface);
-}
-
-.app-footer__inner {
-  max-width: var(--page-max);
-  padding: 1.25rem;
-  margin: 0 auto;
 }

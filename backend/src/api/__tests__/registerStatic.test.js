@@ -58,7 +58,8 @@ test('the page is never served as a raw file, /index.html included', async () =>
 
   expect(response.statusCode).toBe(200);
   expect(response.body).toContain('<link rel="canonical"');
-  expect(response.body).not.toContain("the build's own");
+  expect(response.body).not.toContain('<!--cheminfo:head-->');
+  expect(response.body).not.toContain('<!--cheminfo:body-->');
 });
 
 test('the sitemap answers with every page of the site', async () => {
@@ -71,6 +72,15 @@ test('the sitemap answers with every page of the site', async () => {
   );
   expect(response.body).toContain('<loc>http://localhost:80/browse</loc>');
   expect(response.body.match(/<loc>/g)).toHaveLength(7);
+});
+
+test('the policy is written per request, not served from the bundle', async () => {
+  const app = await testApp();
+  const response = await app.inject({ method: 'GET', url: '/robots.txt' });
+
+  expect(response.statusCode).toBe(200);
+  expect(response.body).toContain('Disallow: /v1/');
+  expect(response.body).toContain('Sitemap: http://localhost:80/sitemap.xml');
 });
 
 test('an asset is still served as itself', async () => {

@@ -5,7 +5,7 @@ import fastifyStatic from '@fastify/static';
 
 import { injectTrackingScript } from './injectTrackingScript.js';
 import { injectPageMeta } from './pageMeta.js';
-import { buildSitemap } from './sitemap.js';
+import { buildRobots, buildSitemap } from './sitemap.js';
 
 // URL prefixes that belong to the JSON API. A 404 inside any of these must
 // stay a JSON 404 instead of falling through to the SPA index. Includes
@@ -45,15 +45,18 @@ export async function registerStatic(fastify, { staticDir }) {
     root: staticDir,
     index: false,
     wildcard: false,
-    // The page itself is never served as a file: it is answered below, with the
-    // head of the route that asked for it.
+    // Neither the page nor the policy is served as a file. The page is answered
+    // below with the head of the route that asked for it, and `robots.txt` is
+    // written from the route table at the origin the request arrived on, so a
+    // stale copy left in a bundle must not claim the address first.
+    globIgnore: ['robots.txt'],
     allowedPath: (pathName) => pathName !== '/index.html',
   });
 
-  // Read once and rewritten per request: every address the frontend routes
-  // itself is a page of its own, and must be titled and canonicalised as one.
-  // The analytics snippet goes in at startup, so it is in the page whichever
-  // address the visitor arrived at.
+  // Read once as the template it is: every address the frontend routes itself
+  // is a page of its own, and its head and crawl path are written into the
+  // markers the build left, per request. The analytics snippet goes in at
+  // startup, so it is in the page whichever address the visitor arrived at.
   const index = injectTrackingScript(
     readFileSync(join(staticDir, 'index.html'), 'utf8'),
     process.env.TRACKING_SCRIPT,
@@ -70,6 +73,11 @@ export async function registerStatic(fastify, { staticDir }) {
     reply
       .type('application/xml; charset=utf-8')
       .send(buildSitemap(originOf(request))),
+  );
+  fastify.get('/robots.txt', (request, reply) =>
+    reply
+      .type('text/plain; charset=utf-8')
+      .send(buildRobots(originOf(request))),
   );
 
   fastify.setNotFoundHandler((request, reply) => {

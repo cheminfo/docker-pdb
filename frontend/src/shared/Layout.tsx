@@ -1,8 +1,12 @@
 import type { ReactNode } from 'react';
-import { CiteButton, EcosystemButton, EcosystemLinks } from 'react-cheminfo/ui';
-import { Link, NavLink } from 'react-router';
+import {
+  CiteButton,
+  EcosystemButton,
+  SiteFooter,
+  SiteHeader,
+} from 'react-cheminfo/ui';
+import { NavLink, useNavigate } from 'react-router';
 
-import { BrandMark, Wordmark } from './Brand.tsx';
 import SeedingBanner from './SeedingBanner.tsx';
 import { PAPER } from './paper.ts';
 
@@ -30,41 +34,35 @@ const PAGES = [
  * @returns The shell element wrapping the active route.
  */
 export default function Layout({ children }: LayoutProps) {
+  const navigate = useNavigate();
+
   return (
     <div className="app-shell">
-      <header className="app-header">
-        <div className="app-header__inner">
-          <Link to="/" className="brand" title="pdb.cheminfo.org">
-            <BrandMark />
-            <Wordmark />
-          </Link>
-          <nav className="app-header-nav">
-            {PAGES.map((page) => (
-              <NavLink
-                key={page.to}
-                to={page.to}
-                end={page.to === '/'}
-                className={({ isActive }) =>
-                  isActive ? 'nav-link nav-link--active' : 'nav-link'
-                }
-              >
-                {page.label}
-              </NavLink>
-            ))}
-          </nav>
-          <div className="app-header-actions">
+      <SiteHeader
+        siteId="pdb"
+        nav={PAGES.map((page) => ({ id: page.to, label: page.label }))}
+        onHome={() => void navigate('/')}
+        renderNavItem={(item) => (
+          <NavLink
+            to={item.id}
+            end={item.id === '/'}
+            className={({ isActive }) =>
+              isActive ? 'nav-link nav-link--active' : 'nav-link'
+            }
+          >
+            {item.label}
+          </NavLink>
+        )}
+        actions={
+          <>
             <CiteButton reference={PAPER} />
             <EcosystemButton currentSiteId="pdb" />
-          </div>
-        </div>
-      </header>
+          </>
+        }
+      />
       <SeedingBanner />
       <main className="app-main">{children}</main>
-      <footer className="app-footer no-print">
-        <div className="app-footer__inner">
-          <EcosystemLinks currentSiteId="pdb" />
-        </div>
-      </footer>
+      <SiteFooter siteId="pdb" />
     </div>
   );
 }
